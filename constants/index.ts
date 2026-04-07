@@ -20,24 +20,49 @@ import {
 
 export { Navbar, Hero, Footer, AdminNavbar, AdminSidebar };
 
-// Sidebar links for the hostel owners dashboard
 export const AdminSidebarLinks = [
-  { id: 1, url: "/dashboard", title: "Dashboard", icon: Home },
-  { id: 2, url: "/dashboard/cases", title: "Cases", icon: FileText },
-  { id: 3, url: "/dashboard/personnel", title: "Personnel", icon: Users },
-  { id: 4, url: "/dashboard/prisoners", title: "Prisoners", icon: UserCheck },
-  { id: 5, url: "/dashboard/evidence", title: "Evidence", icon: Package },
-  { id: 6, url: "/dashboard/vehicles", title: "Vehicles", icon: Car },
-  { id: 7, url: "/dashboard/schedule", title: "Schedule", icon: Calendar },
-  { id: 8, url: "/dashboard/rifle", title: "Rifle Booking", icon: Calendar },
-  { id: 9, url: "/dashboard/reports", title: "Reports", icon: BarChart3 },
+  { id: 1, url: "/admin-dashboard", title: "Dashboard", icon: Home },
+  { id: 2, url: "/admin-dashboard/users", title: "Users", icon: Users },
+  { id: 12, url: "/", title: "Home", icon: HomeIcon },
+];
+
+export const NcoLinks = [
+  { id: 1, url: "/nco-dashboard", title: "Dashboard", icon: Home },
+  { id: 2, url: "/nco-dashboard/cases", title: "Cases", icon: FileText },
+  { id: 3, url: "/nco-dashboard/personnel", title: "Personnel", icon: Users },
+  {
+    id: 4,
+    url: "/nco-dashboard/prisoners",
+    title: "Prisoners",
+    icon: UserCheck,
+  },
+  { id: 5, url: "/nco-dashboard/evidence", title: "Evidence", icon: Package },
+  { id: 6, url: "/nco-dashboard/vehicles", title: "Vehicles", icon: Car },
+  {
+    id: 7,
+    url: "/nco-dashboard/schedule",
+    title: "Schedule",
+    icon: Calendar,
+  },
+  {
+    id: 8,
+    url: "/nco-dashboard/rifle",
+    title: "Rifle Booking",
+    icon: Calendar,
+  },
+  { id: 9, url: "/nco-dashboard/reports", title: "Reports", icon: BarChart3 },
   {
     id: 10,
-    url: "/dashboard/messages",
+    url: "/nco-dashboard/messages",
     title: "Messages",
     icon: MessageSquare,
   },
-  { id: 11, url: "/dashboard/contact", title: "Contacts", icon: Contact2Icon },
+  {
+    id: 11,
+    url: "/nco-dashboard/contact",
+    title: "Contacts",
+    icon: Contact2Icon,
+  },
   { id: 12, url: "/", title: "Home", icon: HomeIcon },
 ];
 

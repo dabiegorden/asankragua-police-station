@@ -1,20 +1,37 @@
 import mongoose from "mongoose";
 
+// ─── Sub-schemas ───────────────────────────────────────────────────────────────
+
+const NoteSchema = new mongoose.Schema({
+  content: { type: String, required: true },
+  addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  roleSnapshot: { type: String }, // e.g. "nco", "cid"
+  addedAt: { type: Date, default: Date.now },
+});
+
+/**
+ * progressMessages — bidirectional thread between any roles on the case.
+ * CID sends progress to NCO. SO sends instructions to CID. DC responds to SO. etc.
+ */
+const ProgressMessageSchema = new mongoose.Schema({
+  content: { type: String, required: true },
+  fromUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  fromRole: { type: String, required: true },
+  toRole: { type: String, required: true }, // target role: "nco" | "cid" | "so" | "dc"
+  toUser: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // optional specific target
+  sentAt: { type: Date, default: Date.now },
+  readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+});
+
 const CaseSchema = new mongoose.Schema(
   {
-    caseNumber: {
-      type: String,
-      unique: true,
-      // Don't mark as required since we generate it automatically
-    },
-    title: {
-      type: String,
-      required: true,
-    },
-    description: {
-      type: String,
-      required: true,
-    },
+    caseNumber: { type: String, unique: true },
+    title: { type: String, required: true },
+    description: { type: String, required: true },
     category: {
       type: String,
       enum: [
@@ -33,93 +50,88 @@ const CaseSchema = new mongoose.Schema(
       enum: ["Felony", "Misdemeanour", "Summary Offence"],
       default: "Summary Offence",
     },
+
+    // ── Workflow ─────────────────────────────────────────────────────────────
     status: {
       type: String,
-      enum: ["open", "investigating", "closed", "suspended"],
+      enum: [
+        "open", // NCO logged, not referred
+        "referred", // NCO → CID
+        "investigating", // CID working
+        "under_review", // CID → SO
+        "commander_review", // SO → DC
+        "closed",
+        "suspended",
+      ],
       default: "open",
     },
+    currentStage: {
+      type: String,
+      enum: ["nco", "cid", "so", "dc"],
+      default: "nco",
+    },
+
+    // ── People ────────────────────────────────────────────────────────────────
     reportedBy: {
       name: { type: String, required: true },
-      phone: { type: String },
-      email: { type: String },
-      address: { type: String },
+      phone: String,
+      email: String,
+      address: String,
     },
-    assignedOfficer: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-    location: {
-      type: String,
-      required: true,
-    },
-    dateReported: {
-      type: Date,
-      default: Date.now,
-    },
-    dateOccurred: {
-      type: Date,
-      required: true,
-    },
-    evidence: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Evidence",
-      },
-    ],
+    loggedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    assignedOfficer: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // CID
+    assignedSO: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    assignedDC: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    // ── Location / dates ──────────────────────────────────────────────────────
+    location: { type: String, required: true },
+    dateReported: { type: Date, default: Date.now },
+    dateOccurred: { type: Date, required: true },
+
+    // ── Related records ───────────────────────────────────────────────────────
+    evidence: [{ type: mongoose.Schema.Types.ObjectId, ref: "Evidence" }],
     suspects: [
-      {
-        name: String,
-        age: Number,
-        description: String,
-        address: String,
-      },
+      { name: String, age: Number, description: String, address: String },
     ],
-    witnesses: [
-      {
-        name: String,
-        phone: String,
-        statement: String,
-      },
-    ],
-    notes: [
-      {
-        content: String,
-        addedBy: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-        },
-        addedAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
+    witnesses: [{ name: String, phone: String, statement: String }],
+
+    // ── Internal notes (any role can add) ─────────────────────────────────────
+    notes: [NoteSchema],
+
+    // ── Cross-role progress messages ──────────────────────────────────────────
+    progressMessages: [ProgressMessageSchema],
+
+    // ── Phase handoff notes ───────────────────────────────────────────────────
+    ncoReferralNote: String, // NCO → CID
+    cidSubmissionNote: String, // CID → SO
+    soReviewNote: String, // SO → DC
+    soDirective: String, // SO back → CID
+    dcNote: String, // DC final
+
+    // ── Timestamps ────────────────────────────────────────────────────────────
+    referredAt: Date,
+    investigationStartedAt: Date,
+    submittedForReviewAt: Date,
+    soReviewedAt: Date,
+    dcReviewedAt: Date,
+    closedAt: Date,
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
-// Generate case number before saving
-CaseSchema.pre("save", async function (next) {
+// Auto-generate case number
+CaseSchema.pre("save", async function () {
   if (this.isNew && !this.caseNumber) {
     try {
       const year = new Date().getFullYear();
-
-      // Count existing cases for this year to generate sequential number
       const count = await mongoose.model("Case").countDocuments({
         caseNumber: { $regex: `^RO-${year}-` },
       });
-
       this.caseNumber = `RO-${year}-${String(count + 1).padStart(4, "0")}`;
-    } catch (error) {
-      console.error("Error generating case number:", error);
-      // Fallback: use timestamp
-      const timestamp = Date.now().toString().slice(-4);
-      this.caseNumber = `RO-${new Date().getFullYear()}-${timestamp}`;
+    } catch {
+      this.caseNumber = `RO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     }
   }
-  next();
 });
 
 export default mongoose.models.Case || mongoose.model("Case", CaseSchema);

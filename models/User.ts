@@ -1,48 +1,49 @@
-import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import mongoose, { Document, Model, Schema } from "mongoose";
 
-const UserSchema = new mongoose.Schema(
+export type UserRole = "admin" | "nco" | "cid" | "so" | "dc";
+
+export interface IUser extends Document {
+  fullName: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  stationId?: string;
+  profilePhoto?: string; // Cloudinary URL
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  toSafeObject(): Omit<IUser, "password">;
+}
+
+const UserSchema = new Schema<IUser>(
   {
-    username: {
+    fullName: {
       type: String,
-      required: true,
-      unique: true,
+      required: [true, "Full name is required"],
       trim: true,
     },
     email: {
       type: String,
-      required: true,
+      required: [true, "Email is required"],
       unique: true,
       lowercase: true,
+      trim: true,
     },
     password: {
       type: String,
-      required: true,
+      required: [true, "Password is required"],
       minlength: 6,
-    },
-    firstName: {
-      type: String,
-      required: true,
-    },
-    lastName: {
-      type: String,
-      required: true,
     },
     role: {
       type: String,
-      enum: ["admin", "officer", "clerk"],
-      default: "clerk",
+      enum: ["admin", "nco", "cid", "so", "dc"],
+      required: [true, "Role is required"],
     },
-    badgeNumber: {
+    stationId: {
       type: String,
-      unique: true,
-      sparse: true,
+      default: null,
     },
-    department: {
-      type: String,
-      default: "General",
-    },
-    profileImage: {
+    profilePhoto: {
       type: String,
       default: null,
     },
@@ -51,27 +52,17 @@ const UserSchema = new mongoose.Schema(
       default: true,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true },
 );
 
-// Hash password before saving
-UserSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-
-  try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Compare password method
-UserSchema.methods.comparePassword = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+// Returns user data without the password field
+UserSchema.methods.toSafeObject = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
 };
 
-export default mongoose.models.User || mongoose.model("User", UserSchema);
+const User: Model<IUser> =
+  mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
+
+export default User;

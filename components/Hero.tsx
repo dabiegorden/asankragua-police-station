@@ -174,6 +174,8 @@ const Hero = () => {
                     src="/assets/hero.jpg"
                     alt="Asankrangwa Police Officer"
                     className="w-full h-full object-cover object-center"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    loading="eager"
                     fill
                   />
                 </div>
