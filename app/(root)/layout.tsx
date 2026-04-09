@@ -1,7 +1,7 @@
 import { Footer, Navbar } from "@/constants";
 import React from "react";
 
-const RouteLayout = ({ children }) => {
+const RouteLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div>
       <Navbar />
