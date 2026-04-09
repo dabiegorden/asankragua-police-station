@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Prisoner from "@/models/Prisoner";
+import { requireAuth } from "@/middleware/auth";
+
+const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
 async function getPrisonerById(request, { params }) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
   try {
     await connectDB();
     const prisoner = await Prisoner.findById(id)
       .populate("caseId", "caseNumber title status")
       .populate("releaseDetails.releasedBy", "firstName lastName badgeNumber");
+
     if (!prisoner) {
       return NextResponse.json(
         { error: "Person detained not found" },
@@ -17,21 +27,29 @@ async function getPrisonerById(request, { params }) {
       );
     }
     return NextResponse.json({ prisoner });
-  } catch (error) {
-    console.error("Get prisoner error:", error);
+  } catch (err) {
+    console.error("Get prisoner by ID error:", err);
     return NextResponse.json(
-      { error: "Failed to fetch person detained" },
+      { error: "Failed to fetch prisoner" },
       { status: 500 },
     );
   }
 }
 
 async function updatePrisoner(request, { params }) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
   try {
     await connectDB();
     const body = await request.json();
     const { action, ...updateData } = body;
+
     const prisoner = await Prisoner.findById(id);
     if (!prisoner) {
       return NextResponse.json(
@@ -69,12 +87,17 @@ async function updatePrisoner(request, { params }) {
       );
     }
 
+    // Convert dates if present
+    if (updateData.dateOfBirth) {
+      updateData.dateOfBirth = new Date(updateData.dateOfBirth);
+    }
+
     if (action === "release") {
       prisoner.status = "Bailed";
       prisoner.releaseDetails = {
         releaseDate: new Date(),
         releaseType: updateData.releaseType,
-        releasedBy: request.user._id,
+        releasedBy: user._id,
         bailAmount: updateData.bailAmount,
         notes: updateData.notes,
       };
@@ -130,19 +153,22 @@ async function updatePrisoner(request, { params }) {
         }
       });
     }
+
     await prisoner.save();
+
     const updatedPrisoner = await Prisoner.findById(id)
       .populate("caseId", "caseNumber title status")
       .populate("releaseDetails.releasedBy", "firstName lastName badgeNumber");
+
     return NextResponse.json({
       message: "Person detained updated successfully",
       prisoner: updatedPrisoner,
     });
-  } catch (error) {
-    console.error("Update prisoner error:", error);
-    if (error.name === "ValidationError") {
-      const errors = Object.keys(error.errors).map(
-        (key) => error.errors[key].message,
+  } catch (err) {
+    console.error("Update prisoner error:", err);
+    if (err.name === "ValidationError") {
+      const errors = Object.keys(err.errors).map(
+        (key) => err.errors[key].message,
       );
       return NextResponse.json(
         { error: `Validation failed: ${errors.join(", ")}` },
@@ -157,22 +183,28 @@ async function updatePrisoner(request, { params }) {
 }
 
 async function deletePrisoner(request, { params }) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
   try {
     await connectDB();
-    const prisoner = await Prisoner.findById(id);
+    const prisoner = await Prisoner.findByIdAndDelete(id);
     if (!prisoner) {
       return NextResponse.json(
         { error: "Person detained not found" },
         { status: 404 },
       );
     }
-    await Prisoner.findByIdAndDelete(id);
     return NextResponse.json({
       message: "Person detained record deleted successfully",
     });
-  } catch (error) {
-    console.error("Delete prisoner error:", error);
+  } catch (err) {
+    console.error("Delete prisoner error:", err);
     return NextResponse.json(
       { error: "Failed to delete person detained" },
       { status: 500 },
@@ -180,6 +212,6 @@ async function deletePrisoner(request, { params }) {
   }
 }
 
-export const GET = requireAuth(getPrisonerById);
-export const PUT = requireRole(["admin", "officer"])(updatePrisoner);
-export const DELETE = requireRole(["admin"])(deletePrisoner);
+export const GET = getPrisonerById;
+export const PUT = updatePrisoner;
+export const DELETE = deletePrisoner;

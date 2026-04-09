@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireAuth } from "@/middleware/auth";
 import Vehicle from "@/models/Vehicle";
 
-async function getVehicleById(request, { params }) {
-  const { id } = await params;
+const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
+async function getVehicleById(request, { params }) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
   try {
     await connectDB();
 
@@ -22,8 +30,8 @@ async function getVehicleById(request, { params }) {
     }
 
     return NextResponse.json({ vehicle });
-  } catch (error) {
-    console.error("Get vehicle error:", error);
+  } catch (err) {
+    console.error("Get vehicle by ID error:", err);
     return NextResponse.json(
       { error: "Failed to fetch vehicle" },
       { status: 500 },
@@ -32,8 +40,14 @@ async function getVehicleById(request, { params }) {
 }
 
 async function updateVehicle(request, { params }) {
-  const { id } = await params;
+  const { user, error } = requireAuth(request);
+  if (error) return error;
 
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
   try {
     await connectDB();
 
@@ -41,7 +55,6 @@ async function updateVehicle(request, { params }) {
     const { action, ...updateData } = body;
 
     const vehicle = await Vehicle.findById(id);
-
     if (!vehicle) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
     }
@@ -54,22 +67,27 @@ async function updateVehicle(request, { params }) {
         cost: updateData.cost,
         performedBy: updateData.performedBy,
         mileageAtService: updateData.mileageAtService,
+        nextServiceDue: updateData.nextServiceDue
+          ? new Date(updateData.nextServiceDue)
+          : undefined,
       });
     } else if (action === "add-fuel") {
       vehicle.fuelHistory.push({
         amount: updateData.amount,
         cost: updateData.cost,
         mileage: updateData.mileage,
-        filledBy: request.user._id,
+        filledBy: user._id,
       });
-      vehicle.fuelLevel = updateData.newFuelLevel || vehicle.fuelLevel;
+      if (updateData.newFuelLevel !== undefined) {
+        vehicle.fuelLevel = updateData.newFuelLevel;
+      }
     } else if (action === "assign-driver") {
       vehicle.currentDriver = updateData.driverId;
       vehicle.status = "in-use";
       vehicle.assignmentHistory.push({
         assignedTo: updateData.driverId,
         assignedDate: new Date(),
-        purpose: updateData.purpose,
+        purpose: updateData.purpose || "Patrol duty",
         startMileage: vehicle.mileage,
       });
     } else if (action === "return-vehicle") {
@@ -81,9 +99,22 @@ async function updateVehicle(request, { params }) {
       }
       vehicle.currentDriver = null;
       vehicle.status = "available";
-      vehicle.mileage = updateData.endMileage || vehicle.mileage;
+      if (updateData.endMileage) {
+        vehicle.mileage = updateData.endMileage;
+      }
     } else {
-      // Regular update
+      // Regular field update — mirror Personnel's $set approach
+      if (updateData.insuranceDetails?.expiryDate) {
+        updateData.insuranceDetails.expiryDate = new Date(
+          updateData.insuranceDetails.expiryDate,
+        );
+      }
+      if (updateData.registrationDetails?.expiryDate) {
+        updateData.registrationDetails.expiryDate = new Date(
+          updateData.registrationDetails.expiryDate,
+        );
+      }
+
       Object.keys(updateData).forEach((key) => {
         if (updateData[key] !== undefined) {
           vehicle[key] = updateData[key];
@@ -105,8 +136,8 @@ async function updateVehicle(request, { params }) {
       message: "Vehicle updated successfully",
       vehicle: updatedVehicle,
     });
-  } catch (error) {
-    console.error("Update vehicle error:", error);
+  } catch (err) {
+    console.error("Update vehicle error:", err);
     return NextResponse.json(
       { error: "Failed to update vehicle" },
       { status: 500 },
@@ -115,22 +146,25 @@ async function updateVehicle(request, { params }) {
 }
 
 async function deleteVehicle(request, { params }) {
-  const { id } = await params;
+  const { user, error } = requireAuth(request);
+  if (error) return error;
 
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
   try {
     await connectDB();
 
-    const vehicle = await Vehicle.findById(id);
-
+    const vehicle = await Vehicle.findByIdAndDelete(id);
     if (!vehicle) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
     }
 
-    await Vehicle.findByIdAndDelete(id);
-
     return NextResponse.json({ message: "Vehicle deleted successfully" });
-  } catch (error) {
-    console.error("Delete vehicle error:", error);
+  } catch (err) {
+    console.error("Delete vehicle error:", err);
     return NextResponse.json(
       { error: "Failed to delete vehicle" },
       { status: 500 },
@@ -138,6 +172,6 @@ async function deleteVehicle(request, { params }) {
   }
 }
 
-export const GET = requireAuth(getVehicleById);
-export const PUT = requireRole(["admin", "officer"])(updateVehicle);
-export const DELETE = requireRole(["admin"])(deleteVehicle);
+export const GET = getVehicleById;
+export const PUT = updateVehicle;
+export const DELETE = deleteVehicle;

@@ -1,23 +1,35 @@
 import { NextResponse } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireAuth } from "@/middleware/auth";
 import Evidence from "@/models/Evidence";
 
+// Roles allowed to manage evidence (same as personnel)
+const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
+
 async function getEvidence(request) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     await connectDB();
     const { searchParams } = new URL(request.url);
-    const page = Number.parseInt(searchParams.get("page")) || 1;
-    const limit = Number.parseInt(searchParams.get("limit")) || 10;
+    const page = parseInt(searchParams.get("page")) || 1;
+    const limit = parseInt(searchParams.get("limit")) || 10;
     const type = searchParams.get("type");
     const status = searchParams.get("status");
     const caseId = searchParams.get("caseId");
     const search = searchParams.get("search");
 
     const query = {};
-    if (type) query.type = type;
-    if (status) query.status = status;
-    if (caseId) query.caseId = caseId;
+
+    if (type && type !== "all") query.type = type;
+    if (status && status !== "all") query.status = status;
+    if (caseId && caseId !== "all") query.caseId = caseId;
+
     if (search) {
       query.$or = [
         { evidenceNumber: { $regex: search, $options: "i" } },
@@ -27,16 +39,16 @@ async function getEvidence(request) {
     }
 
     const skip = (page - 1) * limit;
-
-    const evidence = await Evidence.find(query)
-      .populate("caseId", "caseNumber title")
-      .populate("collectedBy", "firstName lastName badgeNumber")
-      .populate("chainOfCustody.handledBy", "firstName lastName")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Evidence.countDocuments(query);
+    const [evidence, total] = await Promise.all([
+      Evidence.find(query)
+        .populate("caseId", "caseNumber title status")
+        .populate("collectedBy", "firstName lastName badgeNumber")
+        .populate("chainOfCustody.handledBy", "firstName lastName badgeNumber")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Evidence.countDocuments(query),
+    ]);
 
     return NextResponse.json({
       evidence,
@@ -47,8 +59,8 @@ async function getEvidence(request) {
         pages: Math.ceil(total / limit),
       },
     });
-  } catch (error) {
-    console.error("Get evidence error:", error);
+  } catch (err) {
+    console.error("Get evidence error:", err);
     return NextResponse.json(
       { error: "Failed to fetch evidence" },
       { status: 500 },
@@ -57,9 +69,15 @@ async function getEvidence(request) {
 }
 
 async function createEvidence(request) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     await connectDB();
-
     const body = await request.json();
     const {
       caseId,
@@ -83,21 +101,18 @@ async function createEvidence(request) {
       !storageLocation
     ) {
       return NextResponse.json(
-        { error: "All required fields must be provided" },
+        {
+          error:
+            "Required fields: caseId, type, description, location, collectionLocation, storageLocation",
+        },
         { status: 400 },
       );
     }
 
-    // ✅ Generate evidenceNumber manually
+    // Generate evidenceNumber manually
     const year = new Date().getFullYear();
     const count = await Evidence.countDocuments();
     const evidenceNumber = `EVD-${year}-${String(count + 1).padStart(4, "0")}`;
-
-    console.log("[v0] Creating evidence with data:", {
-      type,
-      status: status || "collected",
-      evidenceNumber,
-    });
 
     const newEvidence = new Evidence({
       evidenceNumber,
@@ -105,16 +120,16 @@ async function createEvidence(request) {
       type,
       description,
       location,
-      collectedBy: request.user._id,
+      collectedBy: user._id,
       collectionLocation,
       storageLocation,
       status: status || "collected",
       files: files || [],
       tags: tags || [],
-      notes,
+      notes: notes || "",
       chainOfCustody: [
         {
-          handledBy: request.user._id,
+          handledBy: user._id,
           action: "collected",
           location: collectionLocation,
           notes: "Initial collection",
@@ -123,24 +138,23 @@ async function createEvidence(request) {
     });
 
     await newEvidence.save();
-    console.log("[v0] Evidence created successfully");
 
     const populatedEvidence = await Evidence.findById(newEvidence._id)
-      .populate("caseId", "caseNumber title")
+      .populate("caseId", "caseNumber title status")
       .populate("collectedBy", "firstName lastName badgeNumber")
-      .populate("chainOfCustody.handledBy", "firstName lastName");
+      .populate("chainOfCustody.handledBy", "firstName lastName badgeNumber");
 
     return NextResponse.json(
       {
-        message: "Evidence record created successfully",
+        message: "Evidence created successfully",
         evidence: populatedEvidence,
       },
       { status: 201 },
     );
-  } catch (error) {
-    console.error("Create evidence error:", error);
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((e) => e.message);
+  } catch (err) {
+    console.error("Create evidence error:", err);
+    if (err.name === "ValidationError") {
+      const errors = Object.values(err.errors).map((e) => e.message);
       return NextResponse.json(
         { error: `Validation failed: ${errors.join(", ")}` },
         { status: 400 },
@@ -153,5 +167,5 @@ async function createEvidence(request) {
   }
 }
 
-export const GET = requireAuth(getEvidence);
-export const POST = requireRole(["admin", "officer"])(createEvidence);
+export const GET = getEvidence;
+export const POST = createEvidence;

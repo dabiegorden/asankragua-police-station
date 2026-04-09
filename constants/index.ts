@@ -36,7 +36,7 @@ export const NcoLinks = [
     title: "Prisoners",
     icon: UserCheck,
   },
-  { id: 5, url: "/nco-dashboard/evidence", title: "Evidence", icon: Package },
+  // { id: 5, url: "/nco-dashboard/evidence", title: "Evidence", icon: Package },
   { id: 6, url: "/nco-dashboard/vehicles", title: "Vehicles", icon: Car },
   {
     id: 7,
@@ -50,7 +50,6 @@ export const NcoLinks = [
     title: "Rifle Booking",
     icon: Calendar,
   },
-  { id: 9, url: "/nco-dashboard/reports", title: "Reports", icon: BarChart3 },
   {
     id: 10,
     url: "/nco-dashboard/messages",
@@ -63,6 +62,7 @@ export const NcoLinks = [
     title: "Contacts",
     icon: Contact2Icon,
   },
+  { id: 9, url: "/nco-dashboard/reports", title: "Reports", icon: BarChart3 },
   { id: 12, url: "/", title: "Home", icon: HomeIcon },
 ];
 

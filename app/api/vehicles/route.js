@@ -1,24 +1,33 @@
 import { NextResponse } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireAuth } from "@/middleware/auth";
 import Vehicle from "@/models/Vehicle";
 
-// GET /api/vehicles
+const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
+
 async function getVehicles(request) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     await connectDB();
 
     const { searchParams } = new URL(request.url);
-    const page = Number.parseInt(searchParams.get("page")) || 1;
-    const limit = Number.parseInt(searchParams.get("limit")) || 10;
+    const page = parseInt(searchParams.get("page")) || 1;
+    const limit = parseInt(searchParams.get("limit")) || 10;
     const status = searchParams.get("status");
     const type = searchParams.get("type");
     const search = searchParams.get("search");
 
     const query = {};
 
-    if (status) query.status = status;
-    if (type) query.type = type;
+    if (status && status !== "all") query.status = status;
+    if (type && type !== "all") query.type = type;
+
     if (search) {
       query.$or = [
         { vehicleNumber: { $regex: search, $options: "i" } },
@@ -29,14 +38,14 @@ async function getVehicles(request) {
     }
 
     const skip = (page - 1) * limit;
-
-    const vehicles = await Vehicle.find(query)
-      .populate("currentDriver", "firstName lastName badgeNumber")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Vehicle.countDocuments(query);
+    const [vehicles, total] = await Promise.all([
+      Vehicle.find(query)
+        .populate("currentDriver", "firstName lastName badgeNumber")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Vehicle.countDocuments(query),
+    ]);
 
     return NextResponse.json({
       vehicles,
@@ -47,8 +56,8 @@ async function getVehicles(request) {
         pages: Math.ceil(total / limit),
       },
     });
-  } catch (error) {
-    console.error("Get vehicles error:", error);
+  } catch (err) {
+    console.error("Get vehicles error:", err);
     return NextResponse.json(
       { error: "Failed to fetch vehicles" },
       { status: 500 },
@@ -56,8 +65,14 @@ async function getVehicles(request) {
   }
 }
 
-// POST /api/vehicles
 async function createVehicle(request) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     await connectDB();
 
@@ -69,8 +84,10 @@ async function createVehicle(request) {
       year,
       color,
       type,
+      vin,
       mileage,
       fuelLevel,
+      status,
       insuranceDetails,
       registrationDetails,
       equipment,
@@ -79,26 +96,35 @@ async function createVehicle(request) {
 
     if (!licensePlate || !make || !model || !year || !color || !type) {
       return NextResponse.json(
-        { error: "All required fields must be provided" },
+        {
+          error:
+            "Required fields: licensePlate, make, model, year, color, type",
+        },
         { status: 400 },
       );
     }
 
-    const existingVehicle = await Vehicle.findOne({ licensePlate });
-    if (existingVehicle) {
+    const existing = await Vehicle.findOne({ licensePlate });
+    if (existing) {
       return NextResponse.json(
         { error: "Vehicle with this license plate already exists" },
         { status: 400 },
       );
     }
 
-    // ✅ Generate vehicle number manually
+    if (vin) {
+      const vinExists = await Vehicle.findOne({ vin });
+      if (vinExists) {
+        return NextResponse.json(
+          { error: "Vehicle with this VIN already exists" },
+          { status: 400 },
+        );
+      }
+    }
+
     const yearNow = new Date().getFullYear();
     const count = await Vehicle.countDocuments();
-    const vehicleNumber = `VEH-${yearNow}-${String(count + 1).padStart(
-      4,
-      "0",
-    )}`;
+    const vehicleNumber = `VEH-${yearNow}-${String(count + 1).padStart(4, "0")}`;
 
     const newVehicle = new Vehicle({
       vehicleNumber,
@@ -108,28 +134,27 @@ async function createVehicle(request) {
       year,
       color,
       type,
+      vin: vin || undefined,
       mileage: mileage || 0,
-      fuelLevel: fuelLevel || 100,
-      insuranceDetails,
-      registrationDetails,
+      fuelLevel: fuelLevel !== undefined ? fuelLevel : 100,
+      status: status || "available",
+      insuranceDetails: insuranceDetails || {},
+      registrationDetails: registrationDetails || {},
       equipment: equipment || [],
-      notes,
+      notes: notes || "",
     });
 
     await newVehicle.save();
 
     return NextResponse.json(
-      {
-        message: "Vehicle created successfully",
-        vehicle: newVehicle,
-      },
+      { message: "Vehicle created successfully", vehicle: newVehicle },
       { status: 201 },
     );
-  } catch (error) {
-    console.error("Create vehicle error:", error);
+  } catch (err) {
+    console.error("Create vehicle error:", err);
 
-    if (error.name === "ValidationError") {
-      const messages = Object.values(error.errors).map((e) => e.message);
+    if (err.name === "ValidationError") {
+      const messages = Object.values(err.errors).map((e) => e.message);
       return NextResponse.json(
         { error: `Validation failed: ${messages.join(", ")}` },
         { status: 400 },
@@ -143,5 +168,5 @@ async function createVehicle(request) {
   }
 }
 
-export const GET = requireAuth(getVehicles);
-export const POST = requireRole(["admin", "officer"])(createVehicle);
+export const GET = getVehicles;
+export const POST = createVehicle;

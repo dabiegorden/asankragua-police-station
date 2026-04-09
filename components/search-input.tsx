@@ -5,6 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X, Loader2 } from "lucide-react";
 
+interface SearchInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSearch: (value: string) => void;
+  placeholder?: string;
+  isSearching?: boolean;
+  className?: string;
+}
+
 export function SearchInput({
   value,
   onChange,
@@ -12,26 +21,26 @@ export function SearchInput({
   placeholder = "Search...",
   isSearching = false,
   className = "",
-}) {
+}: SearchInputProps) {
   const [localValue, setLocalValue] = useState(value);
 
   const handleInputChange = useCallback(
-    (e) => {
+    (e: any) => {
       const newValue = e.target.value;
       setLocalValue(newValue);
       onChange(newValue);
     },
-    [onChange]
+    [onChange],
   );
 
   const handleKeyPress = useCallback(
-    (e) => {
+    (e: any) => {
       if (e.key === "Enter") {
         e.preventDefault();
         onSearch(localValue);
       }
     },
-    [localValue, onSearch]
+    [localValue, onSearch],
   );
 
   const handleClear = useCallback(() => {

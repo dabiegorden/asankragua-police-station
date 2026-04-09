@@ -12,7 +12,7 @@ type Params = { params: Promise<{ id: string }> };
 // ─── Permission helpers ───────────────────────────────────────────────────────
 
 /** Who can edit / delete cases */
-const CAN_MUTATE = ["nco", "so", "admin"];
+const CAN_MUTATE = ["nco", "so", "admin", "dc"];
 
 // ─── Shared populate ─────────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ import { requireRole } from "@/middleware/auth";
 
 // GET all users with filtering and search
 export async function GET(req: NextRequest) {
-  const { user, error } = requireRole(req, ["admin"]);
+  const { user, error } = requireRole(req, ["admin", "nco", "so", "dc"]);
   if (error) return error;
 
   try {

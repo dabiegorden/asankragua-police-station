@@ -1,38 +1,51 @@
 import { NextResponse } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireAuth } from "@/middleware/auth";
 import Prisoner from "@/models/Prisoner";
 
+// Roles allowed to manage prisoners (same as personnel management)
+const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
+
 async function getPrisoners(request) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     await connectDB();
     const { searchParams } = new URL(request.url);
-    const page = Number.parseInt(searchParams.get("page")) || 1;
-    const limit = Number.parseInt(searchParams.get("limit")) || 10;
+    const page = parseInt(searchParams.get("page")) || 1;
+    const limit = parseInt(searchParams.get("limit")) || 10;
     const status = searchParams.get("status");
+    const cellNumber = searchParams.get("cellNumber");
     const search = searchParams.get("search");
 
     const query = {};
-    if (status && status !== "all") {
-      query.status = status;
-    }
+
+    if (status && status !== "all") query.status = status;
+    if (cellNumber && cellNumber !== "all") query.cellNumber = cellNumber;
+
     if (search) {
       query.$or = [
-        { prisonerNumber: { $regex: search, $options: "i" } },
         { firstName: { $regex: search, $options: "i" } },
         { lastName: { $regex: search, $options: "i" } },
+        { prisonerNumber: { $regex: search, $options: "i" } },
       ];
     }
 
     const skip = (page - 1) * limit;
-    const prisoners = await Prisoner.find(query)
-      .populate("caseId", "caseNumber title")
-      .populate("releaseDetails.releasedBy", "firstName lastName")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Prisoner.countDocuments(query);
+    const [prisoners, total] = await Promise.all([
+      Prisoner.find(query)
+        .populate("caseId", "caseNumber title status")
+        .populate("releaseDetails.releasedBy", "firstName lastName")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Prisoner.countDocuments(query),
+    ]);
 
     return NextResponse.json({
       prisoners,
@@ -43,8 +56,8 @@ async function getPrisoners(request) {
         pages: Math.ceil(total / limit),
       },
     });
-  } catch (error) {
-    console.error("Get prisoners error:", error);
+  } catch (err) {
+    console.error("Get prisoners error:", err);
     return NextResponse.json(
       { error: "Failed to fetch prisoners" },
       { status: 500 },
@@ -53,6 +66,13 @@ async function getPrisoners(request) {
 }
 
 async function createPrisoner(request) {
+  const { user, error } = requireAuth(request);
+  if (error) return error;
+
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     await connectDB();
     const body = await request.json();
@@ -131,12 +151,6 @@ async function createPrisoner(request) {
     const count = await Prisoner.countDocuments();
     const prisonerNumber = `PRS-${year}-${String(count + 1).padStart(4, "0")}`;
 
-    console.log("[v0] Creating prisoner with data:", {
-      arrestingOfficer: arrestDetails.arrestingOfficer,
-      status,
-      cellNumber,
-    });
-
     const newPrisoner = new Prisoner({
       prisonerNumber,
       firstName,
@@ -162,12 +176,10 @@ async function createPrisoner(request) {
     });
 
     await newPrisoner.save();
-    console.log("[v0] Prisoner created successfully");
 
-    const populatedPrisoner = await Prisoner.findById(newPrisoner._id).populate(
-      "caseId",
-      "caseNumber title",
-    );
+    const populatedPrisoner = await Prisoner.findById(newPrisoner._id)
+      .populate("caseId", "caseNumber title")
+      .populate("releaseDetails.releasedBy", "firstName lastName");
 
     return NextResponse.json(
       {
@@ -176,10 +188,10 @@ async function createPrisoner(request) {
       },
       { status: 201 },
     );
-  } catch (error) {
-    console.error("Create prisoner error:", error);
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((e) => e.message);
+  } catch (err) {
+    console.error("Create prisoner error:", err);
+    if (err.name === "ValidationError") {
+      const errors = Object.values(err.errors).map((e) => e.message);
       return NextResponse.json(
         { error: `Validation failed: ${errors.join(", ")}` },
         { status: 400 },
@@ -192,5 +204,5 @@ async function createPrisoner(request) {
   }
 }
 
-export const GET = requireAuth(getPrisoners);
-export const POST = requireRole(["admin", "officer"])(createPrisoner);
+export const GET = getPrisoners;
+export const POST = createPrisoner;

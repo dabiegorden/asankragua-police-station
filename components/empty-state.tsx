@@ -3,6 +3,14 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileX, Search, RefreshCw } from "lucide-react";
+interface EmptyStateProps {
+  type: String;
+  title: String;
+  description: String;
+  actionLabel?: String;
+  onAction?: () => void;
+  searchTerm?: String;
+}
 
 export function EmptyState({
   type,
@@ -11,7 +19,7 @@ export function EmptyState({
   actionLabel,
   onAction,
   searchTerm,
-}) {
+}: EmptyStateProps) {
   const getIcon = () => {
     switch (type) {
       case "no-results":

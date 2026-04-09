@@ -27,8 +27,231 @@ import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
 
+// ==================== Type Definitions ====================
+
+// Enums matching backend schema
+type PersonnelRole = "District Commander" | "Station Officer" | "Counter NCO" | "Counter SO";
+type PersonnelRank = 
+  | "Constable" 
+  | "Lance Corporal" 
+  | "Sergeant" 
+  | "Inspector" 
+  | "Chief Inspector" 
+  | "Aspol" 
+  | "Desupol" 
+  | "Supol" 
+  | "Chief Supol" 
+  | "Acpol" 
+  | "Dipol" 
+  | "Cop" 
+  | "Superintendent";
+type PersonnelSpecialization = "General" | "Traffic" | "Criminal Investigation" | "Cybercrime" | "Narcotics" | "K9 Unit";
+type PersonnelShift = "morning" | "afternoon" | "night";
+type PersonnelStatus = "active" | "on-leave" | "suspended" | "retired";
+
+// Emergency Contact interface
+interface EmergencyContact {
+  name: string;
+  relationship: string;
+  phone: string;
+}
+
+// Address interface
+interface Address {
+  street: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+// Certification interface
+interface Certification {
+  name: string;
+  issuedBy: string;
+  dateIssued: Date;
+  expiryDate: Date;
+}
+
+// Assignment interface
+interface Assignment {
+  caseId: {
+    _id: string;
+    caseNumber: string;
+    title: string;
+    status: string;
+  };
+  assignedDate: Date;
+  status: "active" | "completed";
+}
+
+// Main Personnel interface matching backend model
+interface Personnel {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  username: string;
+  role: PersonnelRole;
+  badgeNumber: string | null;
+  rank: PersonnelRank;
+  specialization: PersonnelSpecialization;
+  phoneNumber: string;
+  emergencyContact: EmergencyContact;
+  address: Address;
+  dateOfBirth: Date;
+  dateJoined: Date;
+  profileImage: string | null;
+  shift: PersonnelShift;
+  status: PersonnelStatus;
+  department: string;
+  certifications: Certification[];
+  assignments: Assignment[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// API Response interfaces
+interface PersonnelListResponse {
+  personnel: Personnel[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+interface PersonnelSingleResponse {
+  personnel: Personnel;
+}
+
+interface PersonnelMutationResponse {
+  message: string;
+  personnel: Personnel;
+}
+
+interface UploadResponse {
+  url?: string;
+  public_id?: string;
+  error?: string;
+}
+
+// Form data interface for create/edit
+interface PersonnelFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  username: string;
+  role: PersonnelRole | "";
+  badgeNumber: string;
+  rank: PersonnelRank | "";
+  specialization: PersonnelSpecialization;
+  phoneNumber: string;
+  emergencyContact: EmergencyContact;
+  address: Address;
+  dateOfBirth: string;
+  dateJoined: string;
+  profileImage: string;
+  shift: PersonnelShift;
+  status: PersonnelStatus;
+  department: string;
+  certifications: Certification[];
+}
+
+// Filter state interface
+interface Filters {
+  status: string;
+  rank: string;
+  role: string;
+}
+
+// ==================== Constants ====================
+
+const RANKS: PersonnelRank[] = [
+  "Constable",
+  "Lance Corporal",
+  "Sergeant",
+  "Inspector",
+  "Chief Inspector",
+  "Aspol",
+  "Desupol",
+  "Supol",
+  "Chief Supol",
+  "Acpol",
+  "Dipol",
+  "Cop",
+  "Superintendent",
+];
+
+const SPECIALIZATIONS: PersonnelSpecialization[] = [
+  "General",
+  "Traffic",
+  "Criminal Investigation",
+  "Cybercrime",
+  "Narcotics",
+  "K9 Unit",
+];
+
+const SHIFTS: PersonnelShift[] = ["morning", "afternoon", "night"];
+const STATUSES: PersonnelStatus[] = ["active", "on-leave", "suspended", "retired"];
+const ROLES: PersonnelRole[] = [
+  "District Commander",
+  "Station Officer",
+  "Counter NCO",
+  "Counter SO",
+];
+
+// ==================== Helper Functions ====================
+
+const getToken = (): string | null => localStorage.getItem("token");
+
+const getStatusColor = (status: PersonnelStatus): string => {
+  const colors: Record<PersonnelStatus, string> = {
+    active: "bg-green-100 text-green-800",
+    "on-leave": "bg-yellow-100 text-yellow-800",
+    suspended: "bg-red-100 text-red-800",
+    retired: "bg-gray-100 text-gray-800",
+  };
+  return colors[status] || "bg-gray-100 text-gray-800";
+};
+
+const getRoleColor = (role: PersonnelRole): string => {
+  const colors: Record<PersonnelRole, string> = {
+    "District Commander": "bg-purple-100 text-purple-800",
+    "Station Officer": "bg-blue-100 text-blue-800",
+    "Counter NCO": "bg-orange-100 text-orange-800",
+    "Counter SO": "bg-indigo-100 text-indigo-800",
+  };
+  return colors[role] || "bg-gray-100 text-gray-800";
+};
+
+// ==================== Initial Form Data ====================
+
+const INITIAL_FORM_DATA: PersonnelFormData = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  username: "",
+  role: "",
+  badgeNumber: "",
+  rank: "",
+  specialization: "General",
+  phoneNumber: "",
+  emergencyContact: { name: "", relationship: "", phone: "" },
+  address: { street: "", city: "", state: "", zipCode: "" },
+  dateOfBirth: "",
+  dateJoined: "",
+  profileImage: "",
+  shift: "morning",
+  status: "active",
+  department: "General",
+  certifications: [],
+};
+
+// ==================== Main Component ====================
+
 const PersonnelContent = () => {
-  const [personnel, setPersonnel] = useState([]);
+  const [personnel, setPersonnel] = useState<Personnel[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,85 +263,33 @@ const PersonnelContent = () => {
   const [totalResults, setTotalResults] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedPersonnel, setSelectedPersonnel] = useState(null);
+  const [selectedPersonnel, setSelectedPersonnel] = useState<Personnel | null>(null);
   const [lastSearchTerm, setLastSearchTerm] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    username: "",
-    role: "",
-    badgeNumber: "",
-    rank: "",
-    specialization: "General",
-    phoneNumber: "",
-    emergencyContact: { name: "", relationship: "", phone: "" },
-    address: { street: "", city: "", state: "", zipCode: "" },
-    dateOfBirth: "",
-    dateJoined: "",
-    profileImage: "",
-    shift: "morning",
-    status: "active",
-    department: "General",
-    certifications: [],
-  });
+  const [formData, setFormData] = useState<PersonnelFormData>(INITIAL_FORM_DATA);
 
   const searchParams = useSearchParams();
-
-  // Debounce search term with 500ms delay
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  const ranks = [
-    "Constable",
-    "Lance Corporal",
-    "Sergeant",
-    "Inspector",
-    "Chief Inspector",
-    "Aspol",
-    "Desupol",
-    "Supol",
-    "Chief Supol",
-    "Acpol",
-    "Dipol",
-    "Cop",
-    "Superintendent",
-  ];
-
-  const specializations = [
-    "General",
-    "Traffic",
-    "Criminal Investigation",
-    "Cybercrime",
-    "Narcotics",
-    "K9 Unit",
-  ];
-
-  const shifts = ["morning", "afternoon", "night"];
-  const statuses = ["active", "on-leave", "suspended", "retired"];
-  const roles = [
-    "District Commander",
-    "Station Officer",
-    "Counter NCO",
-    "Counter SO",
-  ];
-
-  const getToken = () => localStorage.getItem("token");
-
+  // Fetch personnel with filters
   const fetchPersonnel = useCallback(
-    async (searchValue = "", isManualSearch = false) => {
+    async (searchValue: string = "", isManualSearch: boolean = false) => {
       try {
         if (isManualSearch || searchValue !== lastSearchTerm) {
           setSearching(true);
         }
 
         const token = getToken();
+        if (!token) {
+          toast.error("Authentication required");
+          return;
+        }
+
         const params = new URLSearchParams({
           page: currentPage.toString(),
           limit: "10",
           ...(searchValue && { search: searchValue }),
-          ...(statusFilter &&
-            statusFilter !== "all" && { status: statusFilter }),
+          ...(statusFilter && statusFilter !== "all" && { status: statusFilter }),
           ...(rankFilter && rankFilter !== "all" && { rank: rankFilter }),
           ...(roleFilter && roleFilter !== "all" && { role: roleFilter }),
         });
@@ -127,33 +298,34 @@ const PersonnelContent = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          setPersonnel(data.personnel);
-          setTotalPages(data.pagination.pages);
-          setTotalResults(data.pagination.total);
-          setLastSearchTerm(searchValue);
-        } else {
-          throw new Error("Failed to fetch personnel");
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to fetch personnel");
         }
+
+        const data: PersonnelListResponse = await response.json();
+        setPersonnel(data.personnel);
+        setTotalPages(data.pagination.pages);
+        setTotalResults(data.pagination.total);
+        setLastSearchTerm(searchValue);
       } catch (error) {
         console.error("Fetch personnel error:", error);
-        toast.error("Failed to fetch personnel");
+        toast.error(error instanceof Error ? error.message : "Failed to fetch personnel");
       } finally {
         setLoading(false);
         setSearching(false);
       }
     },
-    [currentPage, statusFilter, rankFilter, roleFilter, lastSearchTerm],
+    [currentPage, statusFilter, rankFilter, roleFilter, lastSearchTerm]
   );
 
   // Handle manual search (Enter key or search button)
   const handleManualSearch = useCallback(
-    (searchValue) => {
+    (searchValue: string) => {
       setCurrentPage(1);
       fetchPersonnel(searchValue, true);
     },
-    [fetchPersonnel],
+    [fetchPersonnel]
   );
 
   // Handle debounced search
@@ -180,7 +352,8 @@ const PersonnelContent = () => {
     fetchPersonnel("");
   }, []);
 
-  const handleImageUpload = async (e, isEdit = false) => {
+  // Image upload handler
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -210,10 +383,10 @@ const PersonnelContent = () => {
         throw new Error("Upload failed");
       }
 
-      const data = await response.json();
+      const data: UploadResponse = await response.json();
       setFormData({
         ...formData,
-        profileImage: data.url || data.public_id,
+        profileImage: data.url || data.public_id || "",
       });
       toast.success("Image uploaded successfully");
     } catch (error) {
@@ -224,23 +397,50 @@ const PersonnelContent = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
+  // Create or update personnel
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.firstName || !formData.lastName || !formData.email || 
+        !formData.username || !formData.role || !formData.rank || 
+        !formData.phoneNumber || !formData.dateOfBirth) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
     try {
       const token = getToken();
+      if (!token) {
+        toast.error("Authentication required");
+        return;
+      }
+
       const url = selectedPersonnel
         ? `/api/personnel/${selectedPersonnel._id}`
         : "/api/personnel";
       const method = selectedPersonnel ? "PUT" : "POST";
 
+      // Prepare payload matching backend expectations
       const payload = {
-        ...formData,
-        dateOfBirth: formData.dateOfBirth
-          ? new Date(formData.dateOfBirth).toISOString()
-          : undefined,
-        dateJoined: formData.dateJoined
-          ? new Date(formData.dateJoined).toISOString()
-          : undefined,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        username: formData.username,
+        role: formData.role,
+        rank: formData.rank,
+        specialization: formData.specialization,
+        phoneNumber: formData.phoneNumber,
+        badgeNumber: formData.badgeNumber || null,
+        dateOfBirth: new Date(formData.dateOfBirth).toISOString(),
+        dateJoined: formData.dateJoined ? new Date(formData.dateJoined).toISOString() : undefined,
+        shift: formData.shift,
+        status: formData.status,
+        department: formData.department,
+        profileImage: formData.profileImage || null,
+        emergencyContact: formData.emergencyContact,
+        address: formData.address,
+        certifications: formData.certifications,
       };
 
       const response = await fetch(url, {
@@ -252,17 +452,18 @@ const PersonnelContent = () => {
         body: JSON.stringify(payload),
       });
 
+      const responseData = await response.json();
+
       if (response.ok) {
         toast.success(
-          `Personnel ${selectedPersonnel ? "updated" : "created"} successfully`,
+          `Personnel ${selectedPersonnel ? "updated" : "created"} successfully`
         );
         setIsCreateModalOpen(false);
         setIsEditModalOpen(false);
         resetForm();
         fetchPersonnel(searchTerm);
       } else {
-        const errorData = await response.json();
-        toast.error(errorData.error || "Operation failed");
+        toast.error(responseData.error || "Operation failed");
       }
     } catch (error) {
       console.error("Personnel operation error:", error);
@@ -270,12 +471,17 @@ const PersonnelContent = () => {
     }
   };
 
-  const handleDelete = async (personnelId) => {
-    if (!confirm("Are you sure you want to delete this personnel record?"))
-      return;
+  // Delete personnel
+  const handleDelete = async (personnelId: string) => {
+    if (!confirm("Are you sure you want to delete this personnel record?")) return;
 
     try {
       const token = getToken();
+      if (!token) {
+        toast.error("Authentication required");
+        return;
+      }
+
       const response = await fetch(`/api/personnel/${personnelId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -285,38 +491,23 @@ const PersonnelContent = () => {
         toast.success("Personnel record deleted successfully");
         fetchPersonnel(searchTerm);
       } else {
-        toast.error("Failed to delete personnel record");
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to delete personnel record");
       }
     } catch (error) {
+      console.error("Delete error:", error);
       toast.error("Failed to delete personnel record");
     }
   };
 
+  // Reset form to initial state
   const resetForm = () => {
-    setFormData({
-      firstName: "",
-      lastName: "",
-      email: "",
-      username: "",
-      role: "",
-      badgeNumber: "",
-      rank: "",
-      specialization: "General",
-      phoneNumber: "",
-      emergencyContact: { name: "", relationship: "", phone: "" },
-      address: { street: "", city: "", state: "", zipCode: "" },
-      dateOfBirth: "",
-      dateJoined: "",
-      profileImage: "",
-      shift: "morning",
-      status: "active",
-      department: "General",
-      certifications: [],
-    });
+    setFormData(INITIAL_FORM_DATA);
     setSelectedPersonnel(null);
   };
 
-  const openEditModal = (personnelItem) => {
+  // Open edit modal with personnel data
+  const openEditModal = (personnelItem: Personnel) => {
     setSelectedPersonnel(personnelItem);
     setFormData({
       firstName: personnelItem.firstName,
@@ -328,17 +519,8 @@ const PersonnelContent = () => {
       rank: personnelItem.rank,
       specialization: personnelItem.specialization,
       phoneNumber: personnelItem.phoneNumber,
-      emergencyContact: personnelItem.emergencyContact || {
-        name: "",
-        relationship: "",
-        phone: "",
-      },
-      address: personnelItem.address || {
-        street: "",
-        city: "",
-        state: "",
-        zipCode: "",
-      },
+      emergencyContact: personnelItem.emergencyContact || { name: "", relationship: "", phone: "" },
+      address: personnelItem.address || { street: "", city: "", state: "", zipCode: "" },
       dateOfBirth: personnelItem.dateOfBirth
         ? new Date(personnelItem.dateOfBirth).toISOString().split("T")[0]
         : "",
@@ -354,25 +536,7 @@ const PersonnelContent = () => {
     setIsEditModalOpen(true);
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      active: "bg-green-100 text-green-800",
-      "on-leave": "bg-yellow-100 text-yellow-800",
-      suspended: "bg-red-100 text-red-800",
-      retired: "bg-gray-100 text-gray-800",
-    };
-    return colors[status] || "bg-gray-100 text-gray-800";
-  };
-
-  const getRoleColor = (role) => {
-    const colors = {
-      admin: "bg-purple-100 text-purple-800",
-      officer: "bg-blue-100 text-blue-800",
-      clerk: "bg-orange-100 text-orange-800",
-    };
-    return colors[role] || "bg-gray-100 text-gray-800";
-  };
-
+  // Clear all filters
   const clearAllFilters = () => {
     setSearchTerm("");
     setStatusFilter("");
@@ -392,14 +556,354 @@ const PersonnelContent = () => {
       return "no-data";
     }
     return false;
-  }, [
-    loading,
-    personnel.length,
-    searchTerm,
-    statusFilter,
-    rankFilter,
-    roleFilter,
-  ]);
+  }, [loading, personnel.length, searchTerm, statusFilter, rankFilter, roleFilter]);
+
+  // Render form fields (reused for create and edit)
+  const renderFormFields = () => (
+    <>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="firstName">First Name *</Label>
+          <Input
+            id="firstName"
+            value={formData.firstName}
+            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="lastName">Last Name *</Label>
+          <Input
+            id="lastName"
+            value={formData.lastName}
+            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="email">Email *</Label>
+          <Input
+            id="email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="username">Username *</Label>
+          <Input
+            id="username"
+            value={formData.username}
+            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="role">Role *</Label>
+          <Select
+            value={formData.role}
+            onValueChange={(value: PersonnelRole) => setFormData({ ...formData, role: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select role" />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLES.map((role) => (
+                <SelectItem key={role} value={role}>
+                  {role}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="rank">Rank *</Label>
+          <Select
+            value={formData.rank}
+            onValueChange={(value: PersonnelRank) => setFormData({ ...formData, rank: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select rank" />
+            </SelectTrigger>
+            <SelectContent>
+              {RANKS.map((rank) => (
+                <SelectItem key={rank} value={rank}>
+                  {rank}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="badgeNumber">Badge Number (Optional)</Label>
+          <Input
+            id="badgeNumber"
+            value={formData.badgeNumber}
+            onChange={(e) => setFormData({ ...formData, badgeNumber: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="specialization">Specialization</Label>
+          <Select
+            value={formData.specialization}
+            onValueChange={(value: PersonnelSpecialization) => 
+              setFormData({ ...formData, specialization: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select specialization" />
+            </SelectTrigger>
+            <SelectContent>
+              {SPECIALIZATIONS.map((spec) => (
+                <SelectItem key={spec} value={spec}>
+                  {spec}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="phoneNumber">Phone Number *</Label>
+          <Input
+            id="phoneNumber"
+            value={formData.phoneNumber}
+            onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="department">Department</Label>
+          <Input
+            id="department"
+            value={formData.department}
+            onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+          <Input
+            id="dateOfBirth"
+            type="date"
+            value={formData.dateOfBirth}
+            onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="dateJoined">Date Joined</Label>
+          <Input
+            id="dateJoined"
+            type="date"
+            value={formData.dateJoined}
+            onChange={(e) => setFormData({ ...formData, dateJoined: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="shift">Shift</Label>
+          <Select
+            value={formData.shift}
+            onValueChange={(value: PersonnelShift) => setFormData({ ...formData, shift: value })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SHIFTS.map((shift) => (
+                <SelectItem key={shift} value={shift}>
+                  {shift}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="status">Status</Label>
+          <Select
+            value={formData.status}
+            onValueChange={(value: PersonnelStatus) => setFormData({ ...formData, status: value })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUSES.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Profile Image Upload */}
+      <div>
+        <Label>Profile Picture (Optional)</Label>
+        <div className="space-y-2 mt-2">
+          {formData.profileImage && (
+            <div className="relative w-32 h-32 border border-gray-300 rounded-lg overflow-hidden">
+              <img
+                src={formData.profileImage}
+                alt="Profile preview"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+          <div className="relative">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleImageUpload(e)}
+              disabled={uploading}
+              className="hidden"
+              id="profile-upload"
+            />
+            <label htmlFor="profile-upload">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 cursor-pointer"
+                disabled={uploading}
+                asChild
+              >
+                <span>
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Upload Photo
+                    </>
+                  )}
+                </span>
+              </Button>
+            </label>
+          </div>
+          {formData.profileImage && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-red-600"
+              onClick={() => setFormData({ ...formData, profileImage: "" })}
+            >
+              Remove Photo
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Emergency Contact */}
+      <div>
+        <h3 className="text-lg font-semibold mb-2">Emergency Contact</h3>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="emergencyContactName">Name</Label>
+            <Input
+              id="emergencyContactName"
+              value={formData.emergencyContact.name}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  emergencyContact: { ...formData.emergencyContact, name: e.target.value },
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="emergencyContactRelationship">Relationship</Label>
+            <Input
+              id="emergencyContactRelationship"
+              value={formData.emergencyContact.relationship}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  emergencyContact: { ...formData.emergencyContact, relationship: e.target.value },
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="emergencyContactPhone">Phone</Label>
+            <Input
+              id="emergencyContactPhone"
+              value={formData.emergencyContact.phone}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  emergencyContact: { ...formData.emergencyContact, phone: e.target.value },
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Address */}
+      <div>
+        <h3 className="text-lg font-semibold mb-2">Address</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="street">Street</Label>
+            <Input
+              id="street"
+              value={formData.address.street}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  address: { ...formData.address, street: e.target.value },
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="city">City</Label>
+            <Input
+              id="city"
+              value={formData.address.city}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  address: { ...formData.address, city: e.target.value },
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="state">State</Label>
+            <Input
+              id="state"
+              value={formData.address.state}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  address: { ...formData.address, state: e.target.value },
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="zipCode">Zip Code</Label>
+            <Input
+              id="zipCode"
+              value={formData.address.zipCode}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  address: { ...formData.address, zipCode: e.target.value },
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  );
 
   if (loading) {
     return (
@@ -411,6 +915,7 @@ const PersonnelContent = () => {
 
   return (
     <div className="space-y-6 mt-12">
+      {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Personnel Management</h1>
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
@@ -425,407 +930,9 @@ const PersonnelContent = () => {
               <DialogTitle>Create New Personnel</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Personal Information */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input
-                    id="firstName"
-                    value={formData.firstName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, firstName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input
-                    id="lastName"
-                    value={formData.lastName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, lastName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    value={formData.username}
-                    onChange={(e) =>
-                      setFormData({ ...formData, username: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="role">Role</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, role: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role} value={role}>
-                          {role}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="badgeNumber">Badge Number (Optional)</Label>
-                  <Input
-                    id="badgeNumber"
-                    value={formData.badgeNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, badgeNumber: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="rank">Rank</Label>
-                  <Select
-                    value={formData.rank}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, rank: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select rank" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ranks.map((rank) => (
-                        <SelectItem key={rank} value={rank}>
-                          {rank}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="specialization">Specialization</Label>
-                  <Select
-                    value={formData.specialization}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, specialization: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select specialization" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {specializations.map((spec) => (
-                        <SelectItem key={spec} value={spec}>
-                          {spec}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="phoneNumber">Phone Number</Label>
-                  <Input
-                    id="phoneNumber"
-                    value={formData.phoneNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phoneNumber: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="department">Department</Label>
-                  <Input
-                    id="department"
-                    value={formData.department}
-                    onChange={(e) =>
-                      setFormData({ ...formData, department: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="profileImage">
-                    Profile Picture (Optional)
-                  </Label>
-                  <div className="space-y-2">
-                    {formData.profileImage && (
-                      <div className="relative w-32 h-32 border border-gray-300 rounded-lg overflow-hidden">
-                        <img
-                          src={formData.profileImage || "/placeholder.svg"}
-                          alt="Profile preview"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e, false)}
-                        disabled={uploading}
-                        className="hidden"
-                        id="profile-upload"
-                      />
-                      <label htmlFor="profile-upload">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2 cursor-pointer bg-transparent"
-                          disabled={uploading}
-                          asChild
-                        >
-                          <span>
-                            {uploading ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Uploading...
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="w-4 h-4" />
-                                Upload Photo
-                              </>
-                            )}
-                          </span>
-                        </Button>
-                      </label>
-                    </div>
-                    {formData.profileImage && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-600"
-                        onClick={() =>
-                          setFormData({ ...formData, profileImage: "" })
-                        }
-                      >
-                        Remove Photo
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                  <Input
-                    id="dateOfBirth"
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) =>
-                      setFormData({ ...formData, dateOfBirth: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="dateJoined">Date Joined</Label>
-                  <Input
-                    id="dateJoined"
-                    type="date"
-                    value={formData.dateJoined}
-                    onChange={(e) =>
-                      setFormData({ ...formData, dateJoined: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="shift">Shift</Label>
-                  <Select
-                    value={formData.shift}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, shift: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shifts.map((shift) => (
-                        <SelectItem key={shift} value={shift}>
-                          {shift}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, status: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statuses.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Emergency Contact */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">
-                  Emergency Contact
-                </h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="emergencyContactName">Name</Label>
-                    <Input
-                      id="emergencyContactName"
-                      value={formData.emergencyContact.name}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          emergencyContact: {
-                            ...formData.emergencyContact,
-                            name: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="emergencyContactRelationship">
-                      Relationship
-                    </Label>
-                    <Input
-                      id="emergencyContactRelationship"
-                      value={formData.emergencyContact.relationship}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          emergencyContact: {
-                            ...formData.emergencyContact,
-                            relationship: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="emergencyContactPhone">Phone</Label>
-                    <Input
-                      id="emergencyContactPhone"
-                      value={formData.emergencyContact.phone}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          emergencyContact: {
-                            ...formData.emergencyContact,
-                            phone: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Address */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Address</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="street">Street</Label>
-                    <Input
-                      id="street"
-                      value={formData.address.street}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          address: {
-                            ...formData.address,
-                            street: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="city">City</Label>
-                    <Input
-                      id="city"
-                      value={formData.address.city}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          address: {
-                            ...formData.address,
-                            city: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="state">State</Label>
-                    <Input
-                      id="state"
-                      value={formData.address.state}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          address: {
-                            ...formData.address,
-                            state: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="zipCode">Zip Code</Label>
-                    <Input
-                      id="zipCode"
-                      value={formData.address.zipCode}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          address: {
-                            ...formData.address,
-                            zipCode: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
+              {renderFormFields()}
               <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsCreateModalOpen(false)}
-                >
+                <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
                   Cancel
                 </Button>
                 <Button type="submit">Create Personnel</Button>
@@ -844,7 +951,7 @@ const PersonnelContent = () => {
               value={searchTerm}
               onChange={setSearchTerm}
               onSearch={handleManualSearch}
-              loading={searching}
+              isSearching={searching}
             />
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -853,7 +960,7 @@ const PersonnelContent = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {statuses.map((status) => (
+                  {STATUSES.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status}
                     </SelectItem>
@@ -866,7 +973,7 @@ const PersonnelContent = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Ranks</SelectItem>
-                  {ranks.map((rank) => (
+                  {RANKS.map((rank) => (
                     <SelectItem key={rank} value={rank}>
                       {rank}
                     </SelectItem>
@@ -879,7 +986,7 @@ const PersonnelContent = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  {roles.map((role) => (
+                  {ROLES.map((role) => (
                     <SelectItem key={role} value={role}>
                       {role}
                     </SelectItem>
@@ -903,34 +1010,30 @@ const PersonnelContent = () => {
         </div>
       )}
 
-      {/* Personnel List */}
+      {/* Empty States */}
       {showEmptyState === "no-data" && (
         <EmptyState
-          icon={<AlertCircle className="w-12 h-12 text-gray-400" />}
+          type="no-data"
           title="No personnel records"
           description="Get started by adding your first personnel record."
-          action={
-            <Button onClick={() => setIsCreateModalOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Personnel
-            </Button>
-          }
+          actionLabel="Add Personnel"
+          onAction={() => setIsCreateModalOpen(true)}
+          searchTerm=""
         />
       )}
 
       {showEmptyState === "no-results" && (
         <EmptyState
-          icon={<AlertCircle className="w-12 h-12 text-gray-400" />}
+          type="no-results"
           title="No results found"
           description="Try adjusting your search or filters."
-          action={
-            <Button variant="outline" onClick={clearAllFilters}>
-              Clear Filters
-            </Button>
-          }
+          actionLabel="Clear Filters"
+          onAction={clearAllFilters}
+          searchTerm={searchTerm}
         />
       )}
 
+      {/* Personnel Cards */}
       {!showEmptyState && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {personnel.map((person) => (
@@ -961,7 +1064,7 @@ const PersonnelContent = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Role:</span>
-                    <Badge variant="outline">{person.role}</Badge>
+                    <Badge className={getRoleColor(person.role)}>{person.role}</Badge>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Status:</span>
@@ -972,14 +1075,12 @@ const PersonnelContent = () => {
                   {person.badgeNumber && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Badge:</span>
-                      <span className="text-sm font-mono">
-                        {person.badgeNumber}
-                      </span>
+                      <span className="text-sm font-mono">{person.badgeNumber}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Email:</span>
-                    <span className="text-sm">{person.email}</span>
+                    <span className="text-sm truncate">{person.email}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Phone:</span>
@@ -1027,9 +1128,7 @@ const PersonnelContent = () => {
           </span>
           <Button
             variant="outline"
-            onClick={() =>
-              setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-            }
+            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
             disabled={currentPage === totalPages}
           >
             Next
@@ -1037,171 +1136,16 @@ const PersonnelContent = () => {
         </div>
       )}
 
-      {/* Edit Modal - Similar to Create Modal */}
+      {/* Edit Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Personnel</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Same form fields as create modal */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-firstName">First Name</Label>
-                <Input
-                  id="edit-firstName"
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-lastName">Last Name</Label>
-                <Input
-                  id="edit-lastName"
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-email">Email</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-username">Username</Label>
-                <Input
-                  id="edit-username"
-                  value={formData.username}
-                  onChange={(e) =>
-                    setFormData({ ...formData, username: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-role">Role</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, role: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {role}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-badgeNumber">
-                  Badge Number (Optional)
-                </Label>
-                <Input
-                  id="edit-badgeNumber"
-                  value={formData.badgeNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, badgeNumber: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-rank">Rank</Label>
-                <Select
-                  value={formData.rank}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, rank: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select rank" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ranks.map((rank) => (
-                      <SelectItem key={rank} value={rank}>
-                        {rank}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-specialization">Specialization</Label>
-                <Select
-                  value={formData.specialization}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, specialization: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select specialization" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {specializations.map((spec) => (
-                      <SelectItem key={spec} value={spec}>
-                        {spec}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-phoneNumber">Phone Number</Label>
-                <Input
-                  id="edit-phoneNumber"
-                  value={formData.phoneNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phoneNumber: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statuses.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
+            {renderFormFields()}
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsEditModalOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit">Update Personnel</Button>
@@ -1213,6 +1157,7 @@ const PersonnelContent = () => {
   );
 };
 
+// Main Page Component with Suspense
 const PersonnelPage = () => {
   return (
     <Suspense

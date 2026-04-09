@@ -62,7 +62,8 @@ const PrisonerSchema = new mongoose.Schema(
         required: true,
       },
       arrestingOfficer: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
         required: true,
       },
       charges: [

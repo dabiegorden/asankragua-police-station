@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Evidence from "@/models/Evidence";
+import { requireAuth } from "@/middleware/auth";
+
+const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
 async function getEvidenceById(request, { params }) {
-  const { id } = await params;
+  const { user, error } = requireAuth(request);
+  if (error) return error;
 
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
   try {
     await connectDB();
-
     const evidence = await Evidence.findById(id)
       .populate("caseId", "caseNumber title status")
       .populate("collectedBy", "firstName lastName badgeNumber email")
@@ -20,10 +27,9 @@ async function getEvidenceById(request, { params }) {
         { status: 404 },
       );
     }
-
     return NextResponse.json({ evidence });
-  } catch (error) {
-    console.error("Get evidence error:", error);
+  } catch (err) {
+    console.error("Get evidence by ID error:", err);
     return NextResponse.json(
       { error: "Failed to fetch evidence" },
       { status: 500 },
@@ -32,16 +38,20 @@ async function getEvidenceById(request, { params }) {
 }
 
 async function updateEvidence(request, { params }) {
-  const { id } = await params;
+  const { user, error } = requireAuth(request);
+  if (error) return error;
 
+  if (!ALLOWED_ROLES.includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
   try {
     await connectDB();
-
     const body = await request.json();
     const { action, ...updateData } = body;
 
     const evidence = await Evidence.findById(id);
-
     if (!evidence) {
       return NextResponse.json(
         { error: "Evidence not found" },
@@ -49,9 +59,10 @@ async function updateEvidence(request, { params }) {
       );
     }
 
+    // Handle special actions
     if (action === "add-custody-entry") {
       evidence.chainOfCustody.push({
-        handledBy: request.user._id,
+        handledBy: user._id,
         action: updateData.custodyAction,
         location: updateData.location,
         notes: updateData.notes,
@@ -65,8 +76,16 @@ async function updateEvidence(request, { params }) {
         reportFile: updateData.reportFile,
       });
     } else {
-      // Regular update
-      Object.keys(updateData).forEach((key) => {
+      // Regular update - only allow certain fields to be updated
+      const allowedUpdates = [
+        "description",
+        "location",
+        "storageLocation",
+        "status",
+        "tags",
+        "notes",
+      ];
+      allowedUpdates.forEach((key) => {
         if (updateData[key] !== undefined) {
           evidence[key] = updateData[key];
         }
@@ -84,8 +103,8 @@ async function updateEvidence(request, { params }) {
       message: "Evidence updated successfully",
       evidence: updatedEvidence,
     });
-  } catch (error) {
-    console.error("Update evidence error:", error);
+  } catch (err) {
+    console.error("Update evidence error:", err);
     return NextResponse.json(
       { error: "Failed to update evidence" },
       { status: 500 },
@@ -94,25 +113,27 @@ async function updateEvidence(request, { params }) {
 }
 
 async function deleteEvidence(request, { params }) {
-  const { id } = await params;
+  const { user, error } = requireAuth(request);
+  if (error) return error;
 
+  // Only admin can delete evidence
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
   try {
     await connectDB();
-
-    const evidence = await Evidence.findById(id);
-
+    const evidence = await Evidence.findByIdAndDelete(id);
     if (!evidence) {
       return NextResponse.json(
         { error: "Evidence not found" },
         { status: 404 },
       );
     }
-
-    await Evidence.findByIdAndDelete(id);
-
     return NextResponse.json({ message: "Evidence deleted successfully" });
-  } catch (error) {
-    console.error("Delete evidence error:", error);
+  } catch (err) {
+    console.error("Delete evidence error:", err);
     return NextResponse.json(
       { error: "Failed to delete evidence" },
       { status: 500 },
@@ -120,6 +141,6 @@ async function deleteEvidence(request, { params }) {
   }
 }
 
-export const GET = requireAuth(getEvidenceById);
-export const PUT = requireRole(["admin", "officer"])(updateEvidence);
-export const DELETE = requireRole(["admin"])(deleteEvidence);
+export const GET = getEvidenceById;
+export const PUT = updateEvidence;
+export const DELETE = deleteEvidence;
