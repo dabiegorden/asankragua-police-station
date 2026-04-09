@@ -33,6 +33,46 @@ export const CidLinks = [
   { id: 4, url: "/", title: "Home", icon: HomeIcon },
 ];
 
+export const DcLinks = [
+  { id: 1, url: "/dc-dashboard", title: "Dashboard", icon: Home },
+  { id: 2, url: "/dc-dashboard/cases", title: "Cases", icon: FileText },
+  { id: 3, url: "/dc-dashboard/personnel", title: "Personnel", icon: Users },
+  {
+    id: 4,
+    url: "/dc-dashboard/prisoners",
+    title: "Prisoners",
+    icon: UserCheck,
+  },
+  // { id: 5, url: "/dc-dashboard/evidence", title: "Evidence", icon: Package },
+  { id: 6, url: "/dc-dashboard/vehicles", title: "Vehicles", icon: Car },
+  {
+    id: 7,
+    url: "/dc-dashboard/schedule",
+    title: "Schedule",
+    icon: Calendar,
+  },
+  {
+    id: 8,
+    url: "/dc-dashboard/rifle",
+    title: "Rifle Booking",
+    icon: Calendar,
+  },
+  {
+    id: 10,
+    url: "/dc-dashboard/messages",
+    title: "Messages",
+    icon: MessageSquare,
+  },
+  {
+    id: 11,
+    url: "/dc-dashboard/contact",
+    title: "Contacts",
+    icon: Contact2Icon,
+  },
+  { id: 9, url: "/dc-dashboard/reports", title: "Reports", icon: BarChart3 },
+  { id: 12, url: "/", title: "Home", icon: HomeIcon },
+];
+
 export const SoLinks = [
   { id: 1, url: "/so-dashboard", title: "Dashboard", icon: Home },
   { id: 2, url: "/so-dashboard/cases", title: "Cases", icon: FileText },

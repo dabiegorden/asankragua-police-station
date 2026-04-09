@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
 import Vehicle from "@/models/Vehicle";
 
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
-async function getVehicles(request) {
+async function getVehicles(request: NextRequest) {
   const { user, error } = requireAuth(request);
   if (error) return error;
 
@@ -17,13 +17,13 @@ async function getVehicles(request) {
     await connectDB();
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page")) || 1;
-    const limit = parseInt(searchParams.get("limit")) || 10;
+    const page = parseInt(searchParams.get("page") || "1") || 1;
+    const limit = parseInt(searchParams.get("limit") || "10") || 10;
     const status = searchParams.get("status");
     const type = searchParams.get("type");
     const search = searchParams.get("search");
 
-    const query = {};
+    const query: Record<string, any> = {};
 
     if (status && status !== "all") query.status = status;
     if (type && type !== "all") query.type = type;
@@ -65,7 +65,7 @@ async function getVehicles(request) {
   }
 }
 
-async function createVehicle(request) {
+async function createVehicle(request: NextRequest) {
   const { user, error } = requireAuth(request);
   if (error) return error;
 
@@ -153,8 +153,8 @@ async function createVehicle(request) {
   } catch (err) {
     console.error("Create vehicle error:", err);
 
-    if (err.name === "ValidationError") {
-      const messages = Object.values(err.errors).map((e) => e.message);
+    if (err instanceof Error && err.name === "ValidationError") {
+      const messages = Object.values((err as any).errors).map((e: any) => (e as any).message);
       return NextResponse.json(
         { error: `Validation failed: ${messages.join(", ")}` },
         { status: 400 },

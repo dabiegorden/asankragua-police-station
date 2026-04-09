@@ -4,12 +4,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Case from "@/models/Case";
 import { requireAuth } from "@/middleware/auth";
+import { parseAttachments } from "@/lib/parseAttachments";
 
-// ─── Permission helpers ───────────────────────────────────────────────────────
+// ─── Shared populate ──────────────────────────────────────────────────────────
+export async function populateCase(id: string) {
+  return Case.findById(id)
+    .populate("loggedBy", "fullName email role")
+    .populate("assignedOfficer", "fullName email role")
+    .populate("assignedSO", "fullName email role")
+    .populate("assignedDC", "fullName email role")
+    .populate("notes.addedBy", "fullName role")
+    .populate("threadMessages.fromUser", "fullName role");
+}
 
-/** Roles that can create / edit / delete cases */
-const CAN_MUTATE = ["nco", "so", "admin"];
-
+// ─── GET — list cases (role-scoped) ──────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const { user, error } = requireAuth(req);
   if (error) return error;
@@ -18,8 +26,8 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
+    const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
     const status = searchParams.get("status");
     const category = searchParams.get("category");
     const search = searchParams.get("search");
@@ -30,15 +38,15 @@ export async function GET(req: NextRequest) {
     // ── Role-scoped visibility ────────────────────────────────────────────────
     switch (user!.role) {
       case "nco":
-        // Sees cases they logged OR still in NCO stage
+        // NCO sees cases they logged OR cases still at NCO stage
         query.$or = [{ loggedBy: user!.userId }, { currentStage: "nco" }];
         break;
       case "cid":
-        // Only cases assigned to this CID officer
+        // CID only sees cases assigned to them
         query.assignedOfficer = user!.userId;
         break;
       case "so":
-        // Cases assigned to this SO or currently at SO stage
+        // SO sees cases assigned to them or at SO stage
         query.$or = [{ assignedSO: user!.userId }, { currentStage: "so" }];
         break;
       case "dc":
@@ -70,19 +78,17 @@ export async function GET(req: NextRequest) {
     }
 
     const skip = (page - 1) * limit;
-    const cases = await Case.find(query)
-      .populate("loggedBy", "fullName email role")
-      .populate("assignedOfficer", "fullName email role")
-      .populate("assignedSO", "fullName email role")
-      .populate("assignedDC", "fullName email role")
-      .populate("notes.addedBy", "fullName role")
-      .populate("progressMessages.fromUser", "fullName role")
-      .populate("progressMessages.toUser", "fullName role")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Case.countDocuments(query);
+    const [cases, total] = await Promise.all([
+      Case.find(query)
+        .populate("loggedBy", "fullName email role")
+        .populate("assignedOfficer", "fullName email role")
+        .populate("assignedSO", "fullName email role")
+        .populate("assignedDC", "fullName email role")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Case.countDocuments(query),
+    ]);
 
     return NextResponse.json({
       cases,
@@ -97,12 +103,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// ─── POST — create new case ───────────────────────────────────────────────────
+// Accepts multipart/form-data OR application/json.
+// File fields: attachments[] (optional)
 export async function POST(req: NextRequest) {
   const { user, error } = requireAuth(req);
   if (error) return error;
 
-  // NCO and SO (and admin) can create cases
-  if (!CAN_MUTATE.includes(user!.role)) {
+  // Only NCO, SO, and admin can log new cases
+  if (!["nco", "so", "admin"].includes(user!.role)) {
     return NextResponse.json(
       { error: "Only NCO or Station Officers can log new cases" },
       { status: 403 },
@@ -112,7 +121,40 @@ export async function POST(req: NextRequest) {
   try {
     await connectDB();
 
-    const body = await req.json();
+    const contentType = req.headers.get("content-type") || "";
+    let fields: Record<string, unknown> = {};
+    let uploadedAttachments: {
+      url: string;
+      publicId: string;
+      originalName?: string;
+      resourceType?: string;
+      format?: string;
+      bytes?: number;
+    }[] = [];
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+
+      // Extract scalar fields
+      for (const [key, val] of formData.entries()) {
+        if (typeof val === "string") {
+          try {
+            fields[key] = JSON.parse(val); // handles arrays / objects sent as JSON strings
+          } catch {
+            fields[key] = val;
+          }
+        }
+      }
+
+      // Upload any attached files to Cloudinary
+      const files = formData.getAll("attachments") as File[];
+      if (files.length > 0) {
+        uploadedAttachments = await parseAttachments(files, "cases");
+      }
+    } else {
+      fields = await req.json();
+    }
+
     const {
       title,
       description,
@@ -123,8 +165,8 @@ export async function POST(req: NextRequest) {
       dateOccurred,
       suspects,
       witnesses,
-      notes,
-    } = body;
+      notes: initialNote,
+    } = fields as Record<string, any>;
 
     if (
       !title ||
@@ -156,20 +198,22 @@ export async function POST(req: NextRequest) {
       loggedBy: user!.userId,
       currentStage: "nco",
       status: "open",
+      attachments: uploadedAttachments,
     });
 
-    if (notes?.trim()) {
+    if (typeof initialNote === "string" && initialNote.trim()) {
       newCase.notes.push({
-        content: notes.trim(),
+        content: initialNote.trim(),
         addedBy: user!.userId,
         roleSnapshot: user!.role,
         addedAt: new Date(),
+        attachments: [],
       });
     }
 
     await newCase.save();
-
     const populated = await populateCase(newCase._id.toString());
+
     return NextResponse.json(
       { message: "Case created successfully", case: populated },
       { status: 201 },
@@ -181,16 +225,4 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-// ─── Shared populate helper (exported for [id]/route.ts) ─────────────────────
-export async function populateCase(id: string) {
-  return Case.findById(id)
-    .populate("loggedBy", "fullName email role")
-    .populate("assignedOfficer", "fullName email role")
-    .populate("assignedSO", "fullName email role")
-    .populate("assignedDC", "fullName email role")
-    .populate("notes.addedBy", "fullName role")
-    .populate("progressMessages.fromUser", "fullName role")
-    .populate("progressMessages.toUser", "fullName role");
 }

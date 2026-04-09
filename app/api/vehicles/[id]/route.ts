@@ -1,11 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
 import Vehicle from "@/models/Vehicle";
 
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
-async function getVehicleById(request, { params }) {
+interface RouteContext {
+  params: Promise<{ id: string }>;
+}
+
+async function getVehicleById(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
 
@@ -13,7 +20,7 @@ async function getVehicleById(request, { params }) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { id } = await params;
+  const { id } = await context.params;
   try {
     await connectDB();
 
@@ -39,7 +46,10 @@ async function getVehicleById(request, { params }) {
   }
 }
 
-async function updateVehicle(request, { params }) {
+async function updateVehicle(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
 
@@ -47,7 +57,7 @@ async function updateVehicle(request, { params }) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { id } = await params;
+  const { id } = await context.params;
   try {
     await connectDB();
 
@@ -76,7 +86,7 @@ async function updateVehicle(request, { params }) {
         amount: updateData.amount,
         cost: updateData.cost,
         mileage: updateData.mileage,
-        filledBy: user._id,
+        filledBy: user.userId,
       });
       if (updateData.newFuelLevel !== undefined) {
         vehicle.fuelLevel = updateData.newFuelLevel;
@@ -145,7 +155,10 @@ async function updateVehicle(request, { params }) {
   }
 }
 
-async function deleteVehicle(request, { params }) {
+async function deleteVehicle(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
 
@@ -153,7 +166,7 @@ async function deleteVehicle(request, { params }) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { id } = await params;
+  const { id } = await context.params;
   try {
     await connectDB();
 

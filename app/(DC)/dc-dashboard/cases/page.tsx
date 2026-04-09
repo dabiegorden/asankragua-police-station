@@ -18,12 +18,13 @@ import {
   ChevronRight,
   Paperclip,
   Download,
-  Shield,
   RefreshCw,
-  ArrowUpRight,
-  RotateCcw,
-  Scale,
+  AlertTriangle,
   CheckCircle2,
+  TrendingDown,
+  Star,
+  Shield,
+  BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -120,6 +121,30 @@ function Field({
   );
 }
 
+// ─── Attachment display ───────────────────────────────────────────────────────
+function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
+  if (!attachments?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {attachments.map((a, i) => (
+        <a
+          key={i}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1 transition-colors"
+        >
+          <Download size={11} />
+          {a.originalName || `file-${i + 1}`}
+          {a.bytes && (
+            <span className="text-primary/70">{formatBytes(a.bytes)}</span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 // ─── File attachment picker ───────────────────────────────────────────────────
 function FilePicker({
   files,
@@ -175,49 +200,25 @@ function FilePicker({
   );
 }
 
-// ─── Attachment display ───────────────────────────────────────────────────────
-function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {attachments.map((a, i) => (
-        <a
-          key={i}
-          href={a.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1 transition-colors"
-        >
-          <Download size={11} />
-          {a.originalName || `file-${i + 1}`}
-          {a.bytes && (
-            <span className="text-primary/70">{formatBytes(a.bytes)}</span>
-          )}
-        </a>
-      ))}
-    </div>
-  );
-}
-
-// ─── CID ↔ SO thread panel ────────────────────────────────────────────────────
-function SOThreadPanel({
+// ─── DC broadcast / thread message panel ─────────────────────────────────────
+// DC can message any participant — NCO, CID, or SO
+function DCThreadPanel({
   caseItem,
   userId,
-  userRole,
   onRefresh,
 }: {
   caseItem: CaseData;
   userId: string;
-  userRole: string;
   onRefresh: () => void;
 }) {
   const [content, setContent] = useState("");
+  const [toRole, setToRole] = useState("so");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const msgs = (caseItem.threadMessages || [])
-    .filter((m) => m.thread === "cid_so")
+    .filter((m) => m.thread === "dc")
     .sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
     );
@@ -226,17 +227,39 @@ function SOThreadPanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs.length]);
 
-  const toRole = userRole === "so" ? "cid" : "so";
+  // Build selectable recipients based on who's been assigned
+  const recipients: { role: string; label: string }[] = [];
+  if (caseItem.loggedBy)
+    recipients.push({
+      role: "nco",
+      label: `NCO — ${caseItem.loggedBy.fullName}`,
+    });
+  if (caseItem.assignedOfficer)
+    recipients.push({
+      role: "cid",
+      label: `CID — ${caseItem.assignedOfficer.fullName}`,
+    });
+  if (caseItem.assignedSO)
+    recipients.push({
+      role: "so",
+      label: `SO — ${caseItem.assignedSO.fullName}`,
+    });
+
+  useEffect(() => {
+    if (recipients.length > 0 && !recipients.find((r) => r.role === toRole)) {
+      setToRole(recipients[0].role);
+    }
+  }, [recipients.length]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
-    if (!content.trim()) return;
+    if (!content.trim() || !toRole) return;
     setSending(true);
     try {
       if (files.length > 0) {
         const fd = new FormData();
         fd.append("action", "send-message");
-        fd.append("thread", "cid_so");
+        fd.append("thread", "dc");
         fd.append("content", content.trim());
         fd.append("toRole", toRole);
         files.forEach((f) => fd.append("attachments", f));
@@ -251,7 +274,7 @@ function SOThreadPanel({
           method: "PUT",
           body: JSON.stringify({
             action: "send-message",
-            thread: "cid_so",
+            thread: "dc",
             content: content.trim(),
             toRole,
           }),
@@ -269,23 +292,25 @@ function SOThreadPanel({
   }
 
   return (
-    <div className="flex flex-col h-64">
+    <div className="flex flex-col h-72">
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {msgs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <MessageSquare size={28} className="mb-2 opacity-40" />
-            <p className="text-xs">No messages yet in this thread.</p>
+            <p className="text-xs">
+              No DC messages sent yet. Use this to communicate with the team.
+            </p>
           </div>
         ) : (
           msgs.map((m) => {
-            const mine = m.fromRole === userRole;
+            const mine = m.fromRole === "dc";
             return (
               <div
                 key={m._id}
                 className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
+                  className={`max-w-[78%] rounded-xl px-4 py-2.5 ${mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span
@@ -321,55 +346,76 @@ function SOThreadPanel({
         )}
         <div ref={bottomRef} />
       </div>
-      <form onSubmit={send} className="border-t pt-3 mt-3 space-y-2">
-        <FilePicker files={files} onChange={setFiles} />
-        <div className="flex gap-2">
-          <input
-            className={`${inputBase} flex-1`}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={`Message ${ROLE_LABELS[toRole]}…`}
-          />
-          <Button type="submit" disabled={sending || !content.trim()} size="sm">
-            {sending ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Send size={14} />
-            )}
-          </Button>
-        </div>
-      </form>
+
+      {recipients.length > 0 ? (
+        <form onSubmit={send} className="border-t pt-3 mt-3 space-y-2">
+          <FilePicker files={files} onChange={setFiles} />
+          <div className="flex gap-2">
+            <select
+              className={`${inputBase} shrink-0 w-48`}
+              value={toRole}
+              onChange={(e) => setToRole(e.target.value)}
+            >
+              {recipients.map((r) => (
+                <option key={r.role} value={r.role} className="bg-background">
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className={`${inputBase} flex-1`}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Send directive or message…"
+            />
+            <Button
+              type="submit"
+              disabled={sending || !content.trim()}
+              size="sm"
+            >
+              {sending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <p className="text-xs text-muted-foreground text-center pt-3 border-t">
+          No participants assigned yet to message.
+        </p>
+      )}
     </div>
   );
 }
 
-// ─── Return to CID modal ──────────────────────────────────────────────────────
-function ReturnModal({
+// ─── DC Close / Suspend modals ────────────────────────────────────────────────
+function DCActionModal({
   caseItem,
+  action,
   onSuccess,
   onClose,
 }: {
   caseItem: CaseData;
+  action: "dc-close" | "dc-suspend";
   onSuccess: () => void;
   onClose: () => void;
 }) {
-  const [directive, setDirective] = useState("");
+  const isClose = action === "dc-close";
+  const [dcNote, setDcNote] = useState("");
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!directive.trim()) {
-      toast.error("Directive is required");
-      return;
-    }
     setLoading(true);
     try {
       if (files.length > 0) {
         const fd = new FormData();
-        fd.append("action", "so-return");
-        fd.append("soDirective", directive.trim());
+        fd.append("action", action);
+        if (dcNote) fd.append("dcNote", dcNote);
         if (note) fd.append("note", note);
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
@@ -381,14 +427,10 @@ function ReturnModal({
       } else {
         await api(`/api/cases/${caseItem._id}`, {
           method: "PUT",
-          body: JSON.stringify({
-            action: "so-return",
-            soDirective: directive.trim(),
-            note,
-          }),
+          body: JSON.stringify({ action, dcNote, note }),
         });
       }
-      toast.success("Case returned to CID with directive");
+      toast.success(isClose ? "Case closed successfully" : "Case suspended");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -400,51 +442,94 @@ function ReturnModal({
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-xs font-mono text-primary mb-1">
-            {caseItem.caseNumber}
-          </p>
-          <p className="font-bold text-foreground text-sm">{caseItem.title}</p>
-          {caseItem.assignedOfficer && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Investigator: {caseItem.assignedOfficer.fullName}
-            </p>
+      <div
+        className={`${isClose ? "bg-emerald-500/5 border-emerald-500/20" : "bg-orange-500/5 border-orange-500/20"} border rounded-xl p-4`}
+      >
+        <div className="flex items-start gap-3">
+          {isClose ? (
+            <CheckCircle2
+              size={16}
+              className="text-emerald-600 shrink-0 mt-0.5"
+            />
+          ) : (
+            <TrendingDown
+              size={16}
+              className="text-orange-600 shrink-0 mt-0.5"
+            />
           )}
-        </CardContent>
-      </Card>
-      {caseItem.cidSubmissionNote && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-          <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-            CID Submission Note
-          </p>
-          <p className="text-sm text-foreground">
-            {caseItem.cidSubmissionNote}
-          </p>
+          <div>
+            <p
+              className={`font-bold text-sm ${isClose ? "text-emerald-700" : "text-orange-700"}`}
+            >
+              {isClose ? "Close This Case" : "Suspend This Case"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {caseItem.caseNumber} — {caseItem.title}
+            </p>
+          </div>
         </div>
-      )}
-      <Field label="Directive for Investigator *">
+      </div>
+
+      {/* Full case summary for DC review */}
+      <div className="space-y-2">
+        {caseItem.ncoReferralNote && (
+          <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3">
+            <p className="text-xs font-bold text-sky-600 uppercase tracking-wider mb-1">
+              NCO Referral Note
+            </p>
+            <p className="text-xs text-foreground">
+              {caseItem.ncoReferralNote}
+            </p>
+          </div>
+        )}
+        {caseItem.cidSubmissionNote && (
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+            <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+              CID Submission Note
+            </p>
+            <p className="text-xs text-foreground">
+              {caseItem.cidSubmissionNote}
+            </p>
+          </div>
+        )}
+        {caseItem.soReviewNote && (
+          <div className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3">
+            <p className="text-xs font-bold text-violet-600 uppercase tracking-wider mb-1">
+              SO Review Note
+            </p>
+            <p className="text-xs text-foreground">{caseItem.soReviewNote}</p>
+          </div>
+        )}
+      </div>
+
+      <Field label={`${isClose ? "Closure" : "Suspension"} Note (optional)`}>
         <textarea
           className={inputBase}
           rows={4}
-          value={directive}
-          onChange={(e) => setDirective(e.target.value)}
-          placeholder="Clearly state what further action is required..."
+          value={dcNote}
+          onChange={(e) => setDcNote(e.target.value)}
+          placeholder={
+            isClose
+              ? "Final decision notes, outcome, verdict..."
+              : "Reason for suspension, conditions for re-opening..."
+          }
           style={{ resize: "vertical" }}
-          required
         />
       </Field>
+
       <Field label="Internal Note (optional)">
         <textarea
           className={inputBase}
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Additional notes..."
+          placeholder="Additional internal notes..."
           style={{ resize: "vertical" }}
         />
       </Field>
+
       <FilePicker files={files} onChange={setFiles} />
+
       <div className="flex justify-end gap-3 pt-2 border-t">
         <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
@@ -452,190 +537,20 @@ function ReturnModal({
         <Button
           type="submit"
           disabled={loading}
-          variant="destructive"
-          className="gap-2"
+          variant={isClose ? "default" : "destructive"}
         >
-          {loading ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <RotateCcw size={14} />
-          )}{" "}
-          Return to CID
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-// ─── Forward to DC modal ──────────────────────────────────────────────────────
-function ForwardDCModal({
-  caseItem,
-  onSuccess,
-  onClose,
-}: {
-  caseItem: CaseData;
-  onSuccess: () => void;
-  onClose: () => void;
-}) {
-  const [commanders, setCommanders] = useState<UserRef[]>([]);
-  const [selected, setSelected] = useState(
-    // Pre-select the already-assigned DC if re-forwarding
-    (caseItem.assignedDC as any)?._id ||
-      (caseItem.assignedDC as unknown as string) ||
-      "",
-  );
-  const [reviewNote, setReviewNote] = useState(caseItem.soReviewNote || "");
-  const [note, setNote] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    api("/api/users/by-role?role=dc")
-      .then((d) => setCommanders(d.users))
-      .catch(() => toast.error("Failed to load District Commanders"));
-  }, []);
-
-  const isReforward = caseItem.status === "commander_review";
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selected) {
-      toast.error("Select a District Commander");
-      return;
-    }
-    setLoading(true);
-    try {
-      if (files.length > 0) {
-        const fd = new FormData();
-        fd.append("action", "so-forward");
-        fd.append("assignedDC", selected);
-        if (reviewNote) fd.append("soReviewNote", reviewNote);
-        if (note) fd.append("note", note);
-        files.forEach((f) => fd.append("attachments", f));
-        const res = await fetch(`/api/cases/${caseItem._id}`, {
-          method: "PUT",
-          credentials: "include",
-          body: fd,
-        });
-        if (!res.ok) throw new Error((await res.json()).error);
-      } else {
-        await api(`/api/cases/${caseItem._id}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            action: "so-forward",
-            assignedDC: selected,
-            soReviewNote: reviewNote,
-            note,
-          }),
-        });
-      }
-      toast.success(
-        isReforward
-          ? "Case re-forwarded to District Commander"
-          : "Forwarded to District Commander",
-      );
-      onSuccess();
-      onClose();
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-5">
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-xs font-mono text-primary mb-1">
-            {caseItem.caseNumber}
-          </p>
-          <p className="font-bold text-foreground text-sm">{caseItem.title}</p>
-          {caseItem.assignedOfficer && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Investigated by: {caseItem.assignedOfficer.fullName}
-            </p>
+          {loading && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-2" />
           )}
-        </CardContent>
-      </Card>
-
-      {/* Show existing handoff notes for context */}
-      {caseItem.cidSubmissionNote && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-          <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-            CID Submission Note
-          </p>
-          <p className="text-sm text-foreground">
-            {caseItem.cidSubmissionNote}
-          </p>
-        </div>
-      )}
-
-      {isReforward && (
-        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
-          <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">
-            Already forwarded to DC
-          </p>
-          <p className="text-sm text-muted-foreground">
-            This case is currently at commander review. You can re-assign it to
-            a different commander or update the review note.
-          </p>
-        </div>
-      )}
-
-      <Field label="Assign District Commander *">
-        <select
-          className={inputBase}
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          required
-        >
-          <option value="" className="bg-background">
-            — Select Commander —
-          </option>
-          {commanders.map((c) => (
-            <option key={c._id} value={c._id} className="bg-background">
-              {c.fullName} ({c.email})
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="SO Review Note (optional)">
-        <textarea
-          className={inputBase}
-          rows={3}
-          value={reviewNote}
-          onChange={(e) => setReviewNote(e.target.value)}
-          placeholder="Summary for the Commander..."
-          style={{ resize: "vertical" }}
-        />
-      </Field>
-
-      <Field label="Internal Note (optional)">
-        <textarea
-          className={inputBase}
-          rows={2}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Additional notes..."
-          style={{ resize: "vertical" }}
-        />
-      </Field>
-
-      <FilePicker files={files} onChange={setFiles} />
-
-      <div className="flex justify-end gap-3 pt-2 border-t">
-        <Button type="button" variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={loading || !selected} className="gap-2">
-          {loading ? (
-            <Loader2 size={14} className="animate-spin" />
+          {isClose ? (
+            <>
+              <CheckCircle2 size={14} className="mr-1.5" /> Close Case
+            </>
           ) : (
-            <ArrowUpRight size={14} />
-          )}{" "}
-          {isReforward ? "Re-forward to Commander" : "Forward to Commander"}
+            <>
+              <TrendingDown size={14} className="mr-1.5" /> Suspend Case
+            </>
+          )}
         </Button>
       </div>
     </form>
@@ -646,19 +561,17 @@ function ForwardDCModal({
 function DetailModal({
   caseItem,
   userId,
-  userRole,
   onRefresh,
   onClose,
 }: {
   caseItem: CaseData;
   userId: string;
-  userRole: string;
   onRefresh: () => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"info" | "thread" | "notes" | "parties">(
-    "info",
-  );
+  const [tab, setTab] = useState<
+    "info" | "dc_msgs" | "all_msgs" | "notes" | "parties"
+  >("info");
   const [noteContent, setNC] = useState("");
   const [noteFiles, setNF] = useState<File[]>([]);
   const [addingNote, setAN] = useState(false);
@@ -698,22 +611,29 @@ function DetailModal({
     }
   }
 
-  const threadUnread = (caseItem.threadMessages || []).filter(
-    (m) =>
-      m.thread === "cid_so" &&
-      m.fromRole !== "so" &&
-      !m.readBy?.includes(userId),
-  ).length;
+  // DC sees all thread messages
+  const allThreadMsgs = (caseItem.threadMessages || []).sort(
+    (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+  );
 
   const tabs = [
     { id: "info", label: "Info" },
-    {
-      id: "thread",
-      label: `CID Chat${threadUnread > 0 ? ` (${threadUnread})` : ""}`,
-    },
+    { id: "dc_msgs", label: "DC Comms" },
+    { id: "all_msgs", label: `All Threads (${allThreadMsgs.length})` },
     { id: "notes", label: `Notes (${caseItem.notes.length})` },
     { id: "parties", label: "Parties" },
   ] as const;
+
+  const THREAD_BADGE: Record<string, string> = {
+    nco_cid: "text-sky-600 bg-sky-50 border-sky-200",
+    cid_so: "text-amber-600 bg-amber-50 border-amber-200",
+    dc: "text-primary bg-primary/10 border-primary/20",
+  };
+  const THREAD_LABEL: Record<string, string> = {
+    nco_cid: "NCO ↔ CID",
+    cid_so: "CID ↔ SO",
+    dc: "DC Comms",
+  };
 
   return (
     <div className="space-y-4">
@@ -740,12 +660,12 @@ function DetailModal({
         </div>
       </div>
 
-      <div className="flex gap-0.5 bg-muted rounded-lg p-1">
+      <div className="flex gap-0.5 bg-muted rounded-lg p-1 overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold transition-all ${tab === t.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${tab === t.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {t.label}
           </button>
@@ -781,7 +701,7 @@ function DetailModal({
                 ? [
                     {
                       icon: <User size={11} />,
-                      label: "Logged By",
+                      label: "Logged By (NCO)",
                       val: caseItem.loggedBy.fullName,
                     },
                   ]
@@ -790,17 +710,17 @@ function DetailModal({
                 ? [
                     {
                       icon: <Users size={11} />,
-                      label: "CID Investigator",
+                      label: "CID Officer",
                       val: caseItem.assignedOfficer.fullName,
                     },
                   ]
                 : []),
-              ...(caseItem.assignedDC
+              ...(caseItem.assignedSO
                 ? [
                     {
                       icon: <Shield size={11} />,
-                      label: "District Commander",
-                      val: (caseItem.assignedDC as any).fullName || "Assigned",
+                      label: "Station Officer",
+                      val: caseItem.assignedSO.fullName,
                     },
                   ]
                 : []),
@@ -818,68 +738,104 @@ function DetailModal({
               </div>
             ))}
           </div>
-
-          {caseItem.ncoReferralNote && (
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
-                NCO Referral Note
-              </p>
-              <p className="text-sm text-foreground">
-                {caseItem.ncoReferralNote}
-              </p>
-            </div>
-          )}
-          {caseItem.cidSubmissionNote && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-                CID Submission Note
-              </p>
-              <p className="text-sm text-foreground">
-                {caseItem.cidSubmissionNote}
-              </p>
-            </div>
-          )}
-          {caseItem.soDirective && (
-            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-destructive uppercase tracking-wider mb-1">
-                Your Directive (Returned to CID)
-              </p>
-              <p className="text-sm text-foreground">{caseItem.soDirective}</p>
-            </div>
-          )}
-          {caseItem.soReviewNote && (
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
-                Your Review Note
-              </p>
-              <p className="text-sm text-foreground">{caseItem.soReviewNote}</p>
-            </div>
-          )}
-          {caseItem.dcNote && (
-            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">
-                DC Decision Note
-              </p>
-              <p className="text-sm text-foreground">{caseItem.dcNote}</p>
-            </div>
-          )}
+          {/* Full paper trail */}
+          <div className="space-y-2">
+            {caseItem.ncoReferralNote && (
+              <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3">
+                <p className="text-xs font-bold text-sky-600 uppercase tracking-wider mb-1">
+                  NCO Referral Note
+                </p>
+                <p className="text-sm text-foreground">
+                  {caseItem.ncoReferralNote}
+                </p>
+              </div>
+            )}
+            {caseItem.cidSubmissionNote && (
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+                  CID Submission Note
+                </p>
+                <p className="text-sm text-foreground">
+                  {caseItem.cidSubmissionNote}
+                </p>
+              </div>
+            )}
+            {caseItem.soDirective && (
+              <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
+                <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1">
+                  SO Directive (Returned to CID)
+                </p>
+                <p className="text-sm text-foreground">
+                  {caseItem.soDirective}
+                </p>
+              </div>
+            )}
+            {caseItem.soReviewNote && (
+              <div className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3">
+                <p className="text-xs font-bold text-violet-600 uppercase tracking-wider mb-1">
+                  SO Review Note
+                </p>
+                <p className="text-sm text-foreground">
+                  {caseItem.soReviewNote}
+                </p>
+              </div>
+            )}
+            {caseItem.dcNote && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
+                  DC Final Note
+                </p>
+                <p className="text-sm text-foreground">{caseItem.dcNote}</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {tab === "thread" &&
-        (!caseItem.assignedOfficer ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <MessageSquare size={28} className="mb-2 opacity-40" />
-            <p className="text-xs">No CID officer assigned yet.</p>
-          </div>
-        ) : (
-          <SOThreadPanel
-            caseItem={caseItem}
-            userId={userId}
-            userRole={userRole}
-            onRefresh={onRefresh}
-          />
-        ))}
+      {tab === "dc_msgs" && (
+        <DCThreadPanel
+          caseItem={caseItem}
+          userId={userId}
+          onRefresh={onRefresh}
+        />
+      )}
+
+      {/* All threads read-only view for DC */}
+      {tab === "all_msgs" && (
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {allThreadMsgs.length === 0 ? (
+            <p className="text-muted-foreground text-xs text-center py-8">
+              No messages across any thread.
+            </p>
+          ) : (
+            allThreadMsgs.map((m) => (
+              <div key={m._id} className="bg-muted/50 rounded-lg p-3 border">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <Pill className={THREAD_BADGE[m.thread] || ""}>
+                      {THREAD_LABEL[m.thread] || m.thread}
+                    </Pill>
+                    <span className="text-xs font-semibold text-foreground">
+                      {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
+                    </span>
+                    <ChevronRight size={10} className="text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      {ROLE_LABELS[m.toRole || ""] || m.toRole}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(m.sentAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-sm text-foreground leading-relaxed">
+                  {m.content}
+                </p>
+                <AttachmentList attachments={m.attachments} />
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {tab === "notes" && (
         <div className="space-y-3">
@@ -918,7 +874,7 @@ function DetailModal({
               rows={2}
               value={noteContent}
               onChange={(e) => setNC(e.target.value)}
-              placeholder="Add a review note..."
+              placeholder="Add a commander note..."
               style={{ resize: "vertical" }}
             />
             <FilePicker files={noteFiles} onChange={setNF} />
@@ -933,7 +889,7 @@ function DetailModal({
                   <Loader2 size={12} className="animate-spin" />
                 ) : (
                   <StickyNote size={12} />
-                )}{" "}
+                )}
                 Add Note
               </Button>
             </div>
@@ -1051,9 +1007,9 @@ function StatCard({
 }
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-export default function SoCasesPage() {
+export default function DCCasesPage() {
   const userId = "CURRENT_USER_ID";
-  const userRole = "so";
+  const userRole = "dc";
 
   const [cases, setCases] = useState<CaseData[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -1063,9 +1019,11 @@ export default function SoCasesPage() {
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
 
-  const [returnCase, setReturnCase] = useState<CaseData | null>(null);
-  const [forwardCase, setForwardCase] = useState<CaseData | null>(null);
   const [detailCase, setDetailCase] = useState<CaseData | null>(null);
+  const [actionCase, setActionCase] = useState<{
+    case: CaseData;
+    action: "dc-close" | "dc-suspend";
+  } | null>(null);
 
   const fetchCases = useCallback(async () => {
     setLoading(true);
@@ -1101,41 +1059,28 @@ export default function SoCasesPage() {
   }
 
   const total = pagination?.total || 0;
-
-  // Cases awaiting SO action: either just submitted by CID or already at commander
-  // but the SO may still want to re-forward or return
-  const awaitingReview = cases.filter(
-    (c) => c.status === "under_review",
-  ).length;
-  const forwardedCount = cases.filter(
+  const commanderReview = cases.filter(
     (c) => c.status === "commander_review",
   ).length;
-  const unreadCount = cases.reduce(
-    (acc, c) =>
-      acc +
-      (c.threadMessages || []).filter(
-        (m) =>
-          m.thread === "cid_so" &&
-          m.fromRole !== "so" &&
-          !m.readBy?.includes(userId),
-      ).length,
-    0,
-  );
+  const closedCount = cases.filter((c) => c.status === "closed").length;
+  const suspendedCount = cases.filter((c) => c.status === "suspended").length;
+  const activeCount = cases.filter(
+    (c) => !["closed", "suspended"].includes(c.status),
+  ).length;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <Scale size={14} className="text-primary" />
+              <Shield size={14} className="text-primary" />
               <span className="text-xs font-bold text-primary uppercase tracking-widest">
-                Station Officer
+                District Commander
               </span>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-foreground">
-              Case Reviews
+              Command Overview
             </h1>
           </div>
           <Button
@@ -1148,39 +1093,37 @@ export default function SoCasesPage() {
           </Button>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Total Cases"
             value={total}
-            sub="Assigned to you"
-            icon={<Scale className="h-5 w-5 text-blue-600" />}
+            sub="Full district view"
+            icon={<BarChart3 className="h-5 w-5 text-blue-600" />}
             iconBg="bg-blue-100"
           />
           <StatCard
-            label="Awaiting Review"
-            value={awaitingReview}
-            sub="Submitted by CID"
-            icon={<Clock className="h-5 w-5 text-violet-600" />}
-            iconBg="bg-violet-100"
+            label="Awaiting Decision"
+            value={commanderReview}
+            sub="Forwarded to you"
+            icon={<Clock className="h-5 w-5 text-rose-600" />}
+            iconBg="bg-rose-100"
           />
           <StatCard
-            label="Forwarded to DC"
-            value={forwardedCount}
-            sub="At Commander stage"
-            icon={<ArrowUpRight className="h-5 w-5 text-pink-600" />}
-            iconBg="bg-pink-100"
+            label="Active Cases"
+            value={activeCount}
+            sub="In progress"
+            icon={<Shield className="h-5 w-5 text-sky-600" />}
+            iconBg="bg-sky-100"
           />
           <StatCard
-            label="Unread Messages"
-            value={unreadCount}
-            sub="From CID"
-            icon={<MessageSquare className="h-5 w-5 text-amber-600" />}
-            iconBg="bg-amber-100"
+            label="Resolved"
+            value={closedCount + suspendedCount}
+            sub={`${closedCount} closed · ${suspendedCount} suspended`}
+            icon={<CheckCircle2 className="h-5 w-5 text-emerald-600" />}
+            iconBg="bg-emerald-100"
           />
         </div>
 
-        {/* Filters */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-3">
@@ -1196,7 +1139,7 @@ export default function SoCasesPage() {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search cases…"
+                  placeholder="Search all cases…"
                 />
               </div>
               <select
@@ -1241,12 +1184,11 @@ export default function SoCasesPage() {
           </CardContent>
         </Card>
 
-        {/* Cases list */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Scale size={16} className="text-muted-foreground" />
-              Cases Under Review ({total})
+              <FileText size={16} className="text-muted-foreground" />
+              District Cases ({total})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1256,40 +1198,22 @@ export default function SoCasesPage() {
               </div>
             ) : cases.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
-                <Scale size={36} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm">No cases assigned to you for review.</p>
+                <FileText size={36} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No cases in the district.</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {cases.map((c) => {
                   const s = STATUS_MAP[c.status] || STATUS_MAP.open;
-
-                  // SO can act on a case when:
-                  //  - CID just submitted it for review (under_review) → Return or Forward
-                  //  - Already forwarded to DC (commander_review) → can still re-forward
-                  //    to a different commander or update the review note
-                  const canReturn = c.status === "under_review";
-                  const canForward =
-                    c.status === "under_review" ||
-                    c.status === "commander_review";
-
-                  const unread = (c.threadMessages || []).filter(
-                    (m) =>
-                      m.thread === "cid_so" &&
-                      m.fromRole !== "so" &&
-                      !m.readBy?.includes(userId),
+                  const canDecide = c.status === "commander_review";
+                  const dcMsgCount = (c.threadMessages || []).filter(
+                    (m) => m.thread === "dc",
                   ).length;
 
                   return (
                     <div
                       key={c._id}
-                      className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
-                        c.status === "under_review"
-                          ? "bg-primary/5 border-primary/20"
-                          : c.status === "commander_review"
-                            ? "bg-indigo-500/5 border-indigo-500/20"
-                            : "bg-muted/40 hover:border-border"
-                      }`}
+                      className={`flex items-center gap-3 p-4 bg-muted/40 rounded-xl border hover:border-border transition-all group ${canDecide ? "border-primary/30" : ""}`}
                     >
                       <div
                         className={`w-0.5 h-10 rounded-full shrink-0 ${PRIORITY_STRIPE[c.priority] || "bg-muted-foreground/30"}`}
@@ -1308,22 +1232,16 @@ export default function SoCasesPage() {
                             />
                             {s.label}
                           </Pill>
-                          {c.status === "under_review" && (
+                          {canDecide && (
                             <Pill className="text-primary bg-primary/10 border-primary/20">
-                              <CheckCircle2 size={9} />
-                              Needs Review
+                              <Star size={9} className="fill-primary" />
+                              Decision Required
                             </Pill>
                           )}
-                          {c.status === "commander_review" && (
-                            <Pill className="text-indigo-600 bg-indigo-500/10 border-indigo-500/20">
-                              <Shield size={9} />
-                              At Commander
-                            </Pill>
-                          )}
-                          {unread > 0 && (
+                          {dcMsgCount > 0 && (
                             <Pill className="text-primary bg-primary/10 border-primary/20">
                               <MessageSquare size={9} />
-                              {unread} new
+                              {dcMsgCount} DC msgs
                             </Pill>
                           )}
                         </div>
@@ -1340,15 +1258,14 @@ export default function SoCasesPage() {
                           <span className="text-xs text-muted-foreground">
                             👤 {c.reportedBy.name}
                           </span>
+                          {c.assignedSO && (
+                            <span className="text-xs text-muted-foreground">
+                              ⚖️ SO: {c.assignedSO.fullName}
+                            </span>
+                          )}
                           {c.assignedOfficer && (
                             <span className="text-xs text-muted-foreground">
                               🔍 {c.assignedOfficer.fullName}
-                            </span>
-                          )}
-                          {c.assignedDC && (
-                            <span className="text-xs text-muted-foreground">
-                              🎖️{" "}
-                              {(c.assignedDC as any).fullName || "DC Assigned"}
                             </span>
                           )}
                         </div>
@@ -1358,14 +1275,12 @@ export default function SoCasesPage() {
                           {new Date(c.createdAt).toLocaleDateString()}
                         </p>
                         <p className="text-xs text-muted-foreground/70 mt-0.5">
-                          {c.notes.length} notes
+                          {c.notes.length} note{c.notes.length !== 1 ? "s" : ""}
                         </p>
                       </div>
-
-                      {/* ── Action buttons ────────────────────────────────── */}
                       <div className="flex items-center gap-1 shrink-0">
                         <Button
-                          title="View details"
+                          title="View"
                           variant="ghost"
                           size="icon"
                           onClick={() => setDetailCase(c)}
@@ -1373,36 +1288,28 @@ export default function SoCasesPage() {
                         >
                           <Eye size={15} />
                         </Button>
-
-                        {/* Return to CID — only when case is under_review */}
-                        {canReturn && (
-                          <Button
-                            onClick={() => setReturnCase(c)}
-                            size="sm"
-                            variant="destructive"
-                            className="gap-1.5"
-                          >
-                            <RotateCcw size={12} /> Return
-                          </Button>
-                        )}
-
-                        {/* Forward to DC — available for under_review AND commander_review */}
-                        {canForward && (
-                          <Button
-                            onClick={() => setForwardCase(c)}
-                            size="sm"
-                            variant={
-                              c.status === "commander_review"
-                                ? "outline"
-                                : "default"
-                            }
-                            className="gap-1.5"
-                          >
-                            <ArrowUpRight size={12} />
-                            {c.status === "commander_review"
-                              ? "Re-forward"
-                              : "Forward"}
-                          </Button>
+                        {canDecide && (
+                          <>
+                            <Button
+                              onClick={() =>
+                                setActionCase({ case: c, action: "dc-close" })
+                              }
+                              size="sm"
+                              className="gap-1.5"
+                            >
+                              <CheckCircle2 size={12} /> Close
+                            </Button>
+                            <Button
+                              onClick={() =>
+                                setActionCase({ case: c, action: "dc-suspend" })
+                              }
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                            >
+                              <TrendingDown size={12} /> Suspend
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1410,7 +1317,6 @@ export default function SoCasesPage() {
                 })}
               </div>
             )}
-
             {pagination && pagination.pages > 1 && (
               <div className="flex justify-center gap-1 mt-6">
                 {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
@@ -1432,35 +1338,6 @@ export default function SoCasesPage() {
         </Card>
       </div>
 
-      {/* Modals */}
-      {returnCase && (
-        <Modal
-          title={`Return to CID — ${returnCase.caseNumber}`}
-          onClose={() => setReturnCase(null)}
-        >
-          <ReturnModal
-            caseItem={returnCase}
-            onSuccess={fetchCases}
-            onClose={() => setReturnCase(null)}
-          />
-        </Modal>
-      )}
-      {forwardCase && (
-        <Modal
-          title={
-            forwardCase.status === "commander_review"
-              ? `Re-forward to Commander — ${forwardCase.caseNumber}`
-              : `Forward to Commander — ${forwardCase.caseNumber}`
-          }
-          onClose={() => setForwardCase(null)}
-        >
-          <ForwardDCModal
-            caseItem={forwardCase}
-            onSuccess={fetchCases}
-            onClose={() => setForwardCase(null)}
-          />
-        </Modal>
-      )}
       {detailCase && (
         <Modal
           title={`Case — ${detailCase.caseNumber}`}
@@ -1470,9 +1347,24 @@ export default function SoCasesPage() {
           <DetailModal
             caseItem={detailCase}
             userId={userId}
-            userRole={userRole}
             onRefresh={refreshDetail}
             onClose={() => setDetailCase(null)}
+          />
+        </Modal>
+      )}
+      {actionCase && (
+        <Modal
+          title={`${actionCase.action === "dc-close" ? "Close" : "Suspend"} Case — ${actionCase.case.caseNumber}`}
+          onClose={() => setActionCase(null)}
+        >
+          <DCActionModal
+            caseItem={actionCase.case}
+            action={actionCase.action}
+            onSuccess={() => {
+              fetchCases();
+              setActionCase(null);
+            }}
+            onClose={() => setActionCase(null)}
           />
         </Modal>
       )}

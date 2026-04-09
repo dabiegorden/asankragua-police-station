@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import Image from "next/image";
-import NcoNavbar from "@/components/NcoNavbar";
-import NcoSidebar from "@/components/NcoSidebar";
 
-const NcoLayout = ({ children }: { children: React.ReactNode }) => {
+import DcNavbar from "@/components/DcNavbar";
+import DcSidebar from "@/components/DcSidebar";
+
+const DcLayout = ({ children }: { children: React.ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const toggleSidebar = () => {
@@ -37,7 +37,7 @@ const NcoLayout = ({ children }: { children: React.ReactNode }) => {
             </svg>
           </button>
           <div className="flex-1 px-4">
-            <NcoNavbar />
+            <DcNavbar />
           </div>
         </div>
       </div>
@@ -57,7 +57,7 @@ const NcoLayout = ({ children }: { children: React.ReactNode }) => {
         >
           <div className="flex flex-col h-full">
             <div className="flex-1 overflow-hidden">
-              <NcoSidebar toggleSidebar={toggleSidebar} />
+              <DcSidebar toggleSidebar={toggleSidebar} />
             </div>
           </div>
         </aside>
@@ -74,7 +74,7 @@ const NcoLayout = ({ children }: { children: React.ReactNode }) => {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Desktop navbar - full width */}
           <header className="hidden md:block sticky top-0 z-20 h-16">
-            <NcoNavbar />
+            <DcNavbar />
           </header>
 
           {/* Page content - this is the only part that should scroll */}
@@ -87,4 +87,4 @@ const NcoLayout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default NcoLayout;
+export default DcLayout;
