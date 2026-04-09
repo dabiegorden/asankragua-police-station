@@ -101,7 +101,7 @@ const Hero = () => {
                   className="text-xl lg:text-2xl text-slate-600 leading-relaxed"
                 >
                   Protecting and serving our community with integrity,
-                  innovation, and dedication across the Western North Region.
+                  innovation, and dedication across the Western Region.
                 </motion.p>
               </div>
 
@@ -171,7 +171,7 @@ const Hero = () => {
                 {/* Police officer image */}
                 <div className="aspect-3/4 relative bg-slate-100">
                   <Image
-                    src="/assets/hero.jpg"
+                    src="/assets/Hero1.jpeg"
                     alt="Asankrangwa Police Officer"
                     className="w-full h-full object-cover object-center"
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
