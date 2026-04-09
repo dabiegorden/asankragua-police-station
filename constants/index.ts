@@ -26,6 +26,20 @@ export const AdminSidebarLinks = [
   { id: 12, url: "/", title: "Home", icon: HomeIcon },
 ];
 
+export const CidLinks = [
+  { id: 1, url: "/cid-dashboard", title: "Dashboard", icon: Home },
+  { id: 2, url: "/cid-dashboard/cases", title: "Cases", icon: FileText },
+  { id: 3, url: "/cid-dashboard/profile", title: "Profile", icon: Users },
+  { id: 4, url: "/", title: "Home", icon: HomeIcon },
+];
+
+export const SoLinks = [
+  { id: 1, url: "/so-dashboard", title: "Dashboard", icon: Home },
+  { id: 2, url: "/so-dashboard/cases", title: "Cases", icon: FileText },
+  { id: 3, url: "/so-dashboard/profile", title: "Profile", icon: Users },
+  { id: 4, url: "/", title: "Home", icon: HomeIcon },
+];
+
 export const NcoLinks = [
   { id: 1, url: "/nco-dashboard", title: "Dashboard", icon: Home },
   { id: 2, url: "/nco-dashboard/cases", title: "Cases", icon: FileText },
