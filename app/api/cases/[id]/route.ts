@@ -75,7 +75,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     // Filter threadMessages so each role only sees the threads they belong to
     const filtered = caseData.toObject();
 
-    if (!["admin", "dc"].includes(user!.role)) {
+    if (!["admin", "dc"].includes(user.role)) {
       filtered.threadMessages = filtered.threadMessages.filter((msg: any) => {
         if (user!.role === "nco" || user!.role === "so") {
           return msg.thread === "nco_cid";
@@ -223,7 +223,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         );
       }
 
-      if (!canAccessThread(thread, user!.userId, user!.role, caseData)) {
+      if (!canAccessThread(thread, user.userId, user.role, caseData)) {
         return NextResponse.json(
           { error: "You are not a participant of this communication thread" },
           { status: 403 },
@@ -284,7 +284,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           const recipient = await User.findById(recipientId).select(
             "fullName email role",
           );
-          const sender = await User.findById(user!.userId).select("fullName");
+          const sender = await User.findById(user.userId).select("fullName");
           if (recipient) {
             await sendCaseAssignmentEmail({
               recipientEmail: recipient.email,
@@ -295,7 +295,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
               caseCategory: caseData.category,
               casePriority: caseData.priority,
               caseDescription: caseData.description,
-              assignedBy: sender?.fullName || user!.role.toUpperCase(),
+              assignedBy: sender?.fullName || user.role.toUpperCase(),
               caseId: caseData._id.toString(),
               notes: `MESSAGE: ${data.content.trim()}`,
             });
@@ -327,9 +327,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
       caseData.threadMessages.forEach((msg: any) => {
         if (
           msg.thread === thread &&
-          !msg.readBy.some((u: any) => u.toString() === user!.userId)
+          !msg.readBy.some((u: any) => u.toString() === user.userId)
         ) {
-          msg.readBy.push(user!.userId);
+          msg.readBy.push(user.userId);
         }
       });
 
@@ -342,7 +342,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Body: { assignedOfficer: string, ncoReferralNote?: string, note?: string }
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "nco-refer") {
-      if (!["nco", "cid", "so", "dc"].includes(user!.role)) {
+      if (!["nco", "cid", "so", "dc"].includes(user.role)) {
         return NextResponse.json(
           { error: "Only NCO or Station Officers can refer cases to CID" },
           { status: 403 },
@@ -380,7 +380,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
       await caseData.save();
 
-      const loggedByUser = await User.findById(user!.userId).select("fullName");
+      const loggedByUser = await User.findById(user.userId).select("fullName");
       await sendCaseAssignmentEmail({
         recipientEmail: cid.email,
         recipientName: cid.fullName,
@@ -405,7 +405,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // cid-start  — CID accepts and begins investigation
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "cid-start") {
-      if (!["cid", "admin"].includes(user!.role)) {
+      if (!["cid", "admin"].includes(user.role)) {
         return NextResponse.json(
           { error: "Only CID can start investigation" },
           { status: 403 },
@@ -436,7 +436,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Body: { assignedSO: string, cidSubmissionNote?: string, note?: string }
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "cid-submit") {
-      if (!["cid", "admin"].includes(user!.role)) {
+      if (!["cid", "admin"].includes(user.role)) {
         return NextResponse.json(
           { error: "Only CID can submit for SO review" },
           { status: 403 },
@@ -475,7 +475,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
       await caseData.save();
 
-      const cidUser = await User.findById(user!.userId).select("fullName");
+      const cidUser = await User.findById(user.userId).select("fullName");
       await sendCaseAssignmentEmail({
         recipientEmail: so.email,
         recipientName: so.fullName,
@@ -561,7 +561,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Body: { assignedDC: string, soReviewNote?: string, note?: string }
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "so-forward") {
-      if (!["so", "admin"].includes(user!.role)) {
+      if (!["so", "admin"].includes(user.role)) {
         return NextResponse.json(
           { error: "Only Station Officer can forward to District Commander" },
           { status: 403 },
@@ -599,7 +599,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
       await caseData.save();
 
-      const soUser = await User.findById(user!.userId).select("fullName");
+      const soUser = await User.findById(user.userId).select("fullName");
       await sendCaseAssignmentEmail({
         recipientEmail: dc.email,
         recipientName: dc.fullName,
@@ -625,7 +625,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Body: { dcNote?: string, note?: string }
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "dc-close") {
-      if (!["dc", "admin"].includes(user!.role)) {
+      if (!["dc", "admin"].includes(user.role)) {
         return NextResponse.json(
           { error: "Only District Commander can close cases" },
           { status: 403 },
@@ -658,7 +658,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Body: { dcNote?: string, note?: string }
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "dc-suspend") {
-      if (!["dc", "admin"].includes(user!.role)) {
+      if (!["dc", "admin"].includes(user.role)) {
         return NextResponse.json(
           { error: "Only District Commander can suspend cases" },
           { status: 403 },
@@ -689,7 +689,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // update  — generic field edit (nco / so / dc / admin)
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "update" || !action) {
-      if (!["nco", "so", "dc", "admin"].includes(user!.role)) {
+      if (!["nco", "so", "dc", "admin"].includes(user.role)) {
         return NextResponse.json(
           { error: "You do not have permission to edit cases" },
           { status: 403 },
@@ -739,7 +739,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { user, error } = requireAuth(req);
   if (error) return error;
 
-  if (!["nco", "so", "dc", "admin"].includes(user!.role)) {
+  if (!["nco", "so", "dc", "admin"].includes(user.role)) {
     return NextResponse.json(
       { error: "You do not have permission to delete cases" },
       { status: 403 },
@@ -756,10 +756,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Case not found" }, { status: 404 });
 
     // NCO can only delete cases they logged
-    if (
-      user!.role === "nco" &&
-      caseData.loggedBy?.toString() !== user!.userId
-    ) {
+    if (user!.role === "nco" && caseData.loggedBy?.toString() !== user.userId) {
       return NextResponse.json(
         { error: "NCO can only delete cases they logged" },
         { status: 403 },

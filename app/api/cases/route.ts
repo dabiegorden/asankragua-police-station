@@ -22,6 +22,12 @@ export async function populateCase(id: string) {
 
 // ─── GET — list cases (role-scoped) ──────────────────────────────────────────
 export async function GET(req: NextRequest) {
+  console.log("HEADERS:", req.headers.get("cookie"));
+  const auth = requireAuth(req);
+
+  if (!auth.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { user, error } = requireAuth(req);
   if (error) return error;
 
