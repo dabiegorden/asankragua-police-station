@@ -59,6 +59,11 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { user, error } = requireAuth(req);
   if (error) return error;
 
+  if (error) {
+    console.error("AUTH ERROR:", error);
+    return error;
+  }
+
   const { id } = await params;
 
   try {
@@ -113,6 +118,11 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function PUT(req: NextRequest, { params }: Params) {
   const { user, error } = requireAuth(req);
   if (error) return error;
+
+  if (error) {
+    console.error("AUTH ERROR:", error);
+    return error;
+  }
 
   const { id } = await params;
 
@@ -332,7 +342,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Body: { assignedOfficer: string, ncoReferralNote?: string, note?: string }
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "nco-refer") {
-      if (!["nco", "so", "admin"].includes(user!.role)) {
+      if (!["nco", "cid", "so", "dc"].includes(user!.role)) {
         return NextResponse.json(
           { error: "Only NCO or Station Officers can refer cases to CID" },
           { status: 403 },
@@ -491,7 +501,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Body: { soDirective: string, note?: string }
     // ══════════════════════════════════════════════════════════════════════════
     if (action === "so-return") {
-      if (!["so", "admin"].includes(user!.role)) {
+      if (!["so", "admin"].includes(user.role)) {
         return NextResponse.json(
           { error: "Only Station Officer can return cases to CID" },
           { status: 403 },

@@ -25,6 +25,11 @@ export async function GET(req: NextRequest) {
   const { user, error } = requireAuth(req);
   if (error) return error;
 
+  if (error) {
+    console.error("AUTH ERROR:", error);
+    return error;
+  }
+
   try {
     await connectDB();
 
@@ -39,18 +44,18 @@ export async function GET(req: NextRequest) {
     const query: Record<string, unknown> = {};
 
     // ── Role-scoped visibility ────────────────────────────────────────────────
-    switch (user!.role) {
+    switch (user.role) {
       case "nco":
         // NCO sees cases they logged OR cases still at NCO stage
-        query.$or = [{ loggedBy: user!.userId }, { currentStage: "nco" }];
+        query.$or = [{ loggedBy: user.userId }, { currentStage: "nco" }];
         break;
       case "cid":
         // CID only sees cases assigned to them
-        query.assignedOfficer = user!.userId;
+        query.assignedOfficer = user.userId;
         break;
       case "so":
         // SO sees cases assigned to them or at SO stage
-        query.$or = [{ assignedSO: user!.userId }, { currentStage: "so" }];
+        query.$or = [{ assignedSO: user.userId }, { currentStage: "so" }];
         break;
       case "dc":
       case "admin":
@@ -114,7 +119,7 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   // Only NCO, SO, and admin can log new cases
-  if (!["nco", "so", "admin"].includes(user!.role)) {
+  if (!["nco", "so", "admin", "dc"].includes(user.role)) {
     return NextResponse.json(
       { error: "Only NCO or Station Officers can log new cases" },
       { status: 403 },
