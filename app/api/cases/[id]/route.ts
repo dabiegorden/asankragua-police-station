@@ -7,6 +7,9 @@ import User from "@/models/User";
 import { requireAuth } from "@/middleware/auth";
 import { sendCaseAssignmentEmail } from "@/lib/email";
 import { parseAttachments } from "@/lib/parseAttachments";
+import mongoose from "mongoose";
+
+console.log("DB STATE:", mongoose.connection.readyState);
 
 type Params = { params: Promise<{ id: string }> };
 

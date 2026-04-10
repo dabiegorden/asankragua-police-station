@@ -5,6 +5,9 @@ import { connectDB } from "@/lib/db";
 import Case from "@/models/Case";
 import { requireAuth } from "@/middleware/auth";
 import { parseAttachments } from "@/lib/parseAttachments";
+import mongoose from "mongoose";
+
+console.log("DB STATE:", mongoose.connection.readyState);
 
 // ─── Shared populate ──────────────────────────────────────────────────────────
 export async function populateCase(id: string) {
