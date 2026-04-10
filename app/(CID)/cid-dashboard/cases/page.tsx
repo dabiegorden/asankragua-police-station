@@ -11,66 +11,59 @@ import {
   StickyNote,
   Users,
   Clock,
-  TrendingUp,
-  ArrowRight,
   X,
-  AlertTriangle,
   MapPin,
   Calendar,
   User,
   ChevronRight,
   Paperclip,
   Download,
-  Shield,
   RefreshCw,
-  UserPlus,
-  CheckCircle2,
+  PlayCircle,
+  ArrowUpRight,
+  AlertTriangle,
+  Microscope,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   api,
   CaseData,
   Pagination,
   UserRef,
-  ThreadMessage,
-  Note,
   Attachment,
   STATUS_MAP,
-  PRIORITY_STRIPE,
   PRIORITY_BADGE,
+  PRIORITY_LEFT,
   ROLE_LABELS,
   CATEGORIES,
   formatBytes,
 } from "@/components/cases/shared";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
-// ─── Base styles ──────────────────────────────────────────────────────────────
-const inputBase = `w-full bg-background border rounded-lg px-3 py-2.5 text-sm text-foreground
-   placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition`;
-const labelBase =
-  "block text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5";
+const inputCls =
+  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition";
 
-// ─── Pill badge ───────────────────────────────────────────────────────────────
-function Pill({
-  className,
-  children,
-}: {
-  className: string;
-  children: React.ReactNode;
-}) {
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_MAP[status] || STATUS_MAP.open;
   return (
-    <Badge
-      variant="outline"
-      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${className}`}
+    <span
+      className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full border ${s.color}`}
     >
-      {children}
-    </Badge>
+      {s.label}
+    </span>
+  );
+}
+function PriorityBadge({ priority }: { priority: string }) {
+  return (
+    <span
+      className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full border ${PRIORITY_BADGE[priority] || ""}`}
+    >
+      {priority}
+    </span>
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
 function Modal({
   title,
   onClose,
@@ -88,15 +81,13 @@ function Modal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`bg-card border rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh]`}
+        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-          <h2 className="font-bold text-foreground text-sm tracking-wide">
-            {title}
-          </h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <X size={16} />
           </button>
@@ -107,8 +98,7 @@ function Modal({
   );
 }
 
-// ─── Field wrapper ────────────────────────────────────────────────────────────
-function Field({
+function FormField({
   label,
   children,
 }: {
@@ -117,13 +107,37 @@ function Field({
 }) {
   return (
     <div>
-      <label className={labelBase}>{label}</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+        {label}
+      </label>
       {children}
     </div>
   );
 }
 
-// ─── File attachment picker ───────────────────────────────────────────────────
+function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
+  if (!attachments?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {attachments.map((a, i) => (
+        <a
+          key={i}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1"
+        >
+          <Download size={11} />
+          {a.originalName || `file-${i + 1}`}
+          {a.bytes && (
+            <span className="text-blue-400">{formatBytes(a.bytes)}</span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function FilePicker({
   files,
   onChange,
@@ -134,16 +148,15 @@ function FilePicker({
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div>
-      <label className={labelBase}>Attachments (optional)</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+        Attachments (optional)
+      </label>
       <div
         onClick={() => ref.current?.click()}
-        className="flex items-center gap-3 border border-dashed rounded-lg px-4 py-3 cursor-pointer hover:border-primary/50 transition-colors group"
+        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
       >
-        <Paperclip
-          size={14}
-          className="text-muted-foreground group-hover:text-primary transition-colors"
-        />
-        <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+        <Paperclip size={14} className="text-gray-400" />
+        <span className="text-xs text-gray-500">
           {files.length > 0
             ? `${files.length} file(s) selected`
             : "Click to attach files"}
@@ -161,12 +174,12 @@ function FilePicker({
           {files.map((f, i) => (
             <div
               key={i}
-              className="flex items-center justify-between text-xs text-muted-foreground bg-muted rounded-lg px-3 py-1.5"
+              className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 rounded-md px-3 py-1.5 border border-gray-100"
             >
               <span className="truncate">{f.name}</span>
               <button
                 onClick={() => onChange(files.filter((_, j) => j !== i))}
-                className="text-muted-foreground hover:text-destructive ml-2 shrink-0"
+                className="text-gray-400 hover:text-red-500 ml-2"
               >
                 <X size={12} />
               </button>
@@ -178,80 +191,28 @@ function FilePicker({
   );
 }
 
-// ─── Attachment display ───────────────────────────────────────────────────────
-function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {attachments.map((a, i) => (
-        <a
-          key={i}
-          href={a.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1 transition-colors"
-        >
-          <Download size={11} />
-          {a.originalName || `file-${i + 1}`}
-          {a.bytes && (
-            <span className="text-primary/70">{formatBytes(a.bytes)}</span>
-          )}
-        </a>
-      ))}
-    </div>
-  );
-}
-
-// ─── Thread chat panel ────────────────────────────────────────────────────────
-function ThreadPanel({
+// ─── NCO ↔ CID Thread ────────────────────────────────────────────────────────
+function NCOThread({
   caseItem,
-  userId,
   userRole,
-  thread,
   onRefresh,
 }: {
   caseItem: CaseData;
-  userId: string;
   userRole: string;
-  thread: "nco_cid" | "cid_so" | "dc";
   onRefresh: () => void;
 }) {
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-
   const msgs = (caseItem.threadMessages || [])
-    .filter((m) => m.thread === thread)
+    .filter((m) => m.thread === "nco_cid")
     .sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
     );
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs.length]);
-
-  const otherRoleLabel =
-    thread === "nco_cid"
-      ? userRole === "nco" || userRole === "so"
-        ? "CID Investigator"
-        : "NCO / Station Orderly"
-      : thread === "cid_so"
-        ? userRole === "cid"
-          ? "Station Officer"
-          : "CID Investigator"
-        : "All Parties";
-
-  const toRoleForThread =
-    thread === "nco_cid"
-      ? userRole === "nco" || userRole === "so"
-        ? "cid"
-        : "nco"
-      : thread === "cid_so"
-        ? userRole === "cid"
-          ? "so"
-          : "cid"
-        : undefined;
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -261,25 +222,24 @@ function ThreadPanel({
       if (files.length > 0) {
         const fd = new FormData();
         fd.append("action", "send-message");
-        fd.append("thread", thread);
+        fd.append("thread", "nco_cid");
         fd.append("content", content.trim());
-        if (toRoleForThread) fd.append("toRole", toRoleForThread);
+        fd.append("toRole", "nco");
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
           method: "PUT",
           credentials: "include",
           body: fd,
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed");
+        if (!res.ok) throw new Error((await res.json()).error);
       } else {
         await api(`/api/cases/${caseItem._id}`, {
           method: "PUT",
           body: JSON.stringify({
             action: "send-message",
-            thread,
+            thread: "nco_cid",
             content: content.trim(),
-            toRole: toRoleForThread,
+            toRole: "nco",
           }),
         });
       }
@@ -294,62 +254,45 @@ function ThreadPanel({
     }
   }
 
-  const canSend = (() => {
-    if (thread === "nco_cid")
-      return (
-        ((userRole === "nco" || userRole === "so") &&
-          !!caseItem.assignedOfficer) ||
-        userRole === "cid"
-      );
-    if (thread === "cid_so")
-      return (userRole === "cid" && !!caseItem.assignedSO) || userRole === "so";
-    if (thread === "dc") return userRole === "dc" || userRole === "admin";
-    return false;
-  })();
-
   return (
     <div className="flex flex-col h-64">
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {msgs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <MessageSquare size={28} className="mb-2 opacity-40" />
-            <p className="text-xs">No messages yet. Start the conversation.</p>
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <MessageSquare size={24} className="mb-2 opacity-40" />
+            <p className="text-xs">No messages yet.</p>
           </div>
         ) : (
           msgs.map((m) => {
-            const mine = m.fromUser?._id === userId || m.fromRole === userRole;
+            const mine = m.fromRole === "cid";
             return (
               <div
                 key={m._id}
                 className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
+                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className={`text-xs font-semibold ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                      className={`text-xs font-semibold ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
                       {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
                     </span>
                     <ChevronRight
                       size={10}
-                      className={
-                        mine
-                          ? "text-primary-foreground/60"
-                          : "text-muted-foreground/60"
-                      }
+                      className={mine ? "text-blue-300" : "text-gray-400"}
                     />
                     <span
-                      className={`text-xs ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                      className={`text-xs ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
-                      {m.toRole ? ROLE_LABELS[m.toRole] : otherRoleLabel}
+                      {ROLE_LABELS[m.toRole || ""] || m.toRole}
                     </span>
                   </div>
                   <p className="text-sm leading-relaxed">{m.content}</p>
                   <AttachmentList attachments={m.attachments} />
                   <p
-                    className={`text-xs mt-1.5 ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                    className={`text-xs mt-1.5 ${mine ? "text-blue-300" : "text-gray-400"}`}
                   >
                     {new Date(m.sentAt).toLocaleString()}
                   </p>
@@ -360,37 +303,187 @@ function ThreadPanel({
         )}
         <div ref={bottomRef} />
       </div>
-
-      {canSend && (
-        <form onSubmit={send} className="border-t pt-3 mt-3 space-y-2">
-          <FilePicker files={files} onChange={setFiles} />
-          <div className="flex gap-2">
-            <input
-              className={`${inputBase} flex-1`}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={`Message ${otherRoleLabel}...`}
-            />
-            <Button
-              type="submit"
-              disabled={sending || !content.trim()}
-              size="sm"
-            >
-              {sending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send size={14} />
-              )}
-            </Button>
-          </div>
-        </form>
-      )}
+      <form
+        onSubmit={send}
+        className="border-t border-gray-100 pt-3 mt-3 space-y-2"
+      >
+        <FilePicker files={files} onChange={setFiles} />
+        <div className="flex gap-2">
+          <input
+            className={`${inputCls} flex-1`}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Message NCO..."
+          />
+          <button
+            type="submit"
+            disabled={sending || !content.trim()}
+            className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
+          >
+            {sending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Send size={14} />
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
-// ─── Add suspects/witnesses modal ─────────────────────────────────────────────
-function AddPartiesModal({
+// ─── CID ↔ SO Thread ─────────────────────────────────────────────────────────
+function SOThread({
+  caseItem,
+  onRefresh,
+}: {
+  caseItem: CaseData;
+  onRefresh: () => void;
+}) {
+  const [content, setContent] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const msgs = (caseItem.threadMessages || [])
+    .filter((m) => m.thread === "cid_so")
+    .sort(
+      (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+    );
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs.length]);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (!content.trim()) return;
+    setSending(true);
+    try {
+      if (files.length > 0) {
+        const fd = new FormData();
+        fd.append("action", "send-message");
+        fd.append("thread", "cid_so");
+        fd.append("content", content.trim());
+        fd.append("toRole", "so");
+        files.forEach((f) => fd.append("attachments", f));
+        const res = await fetch(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          credentials: "include",
+          body: fd,
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+      } else {
+        await api(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            action: "send-message",
+            thread: "cid_so",
+            content: content.trim(),
+            toRole: "so",
+          }),
+        });
+      }
+      setContent("");
+      setFiles([]);
+      toast.success("Message sent");
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!caseItem.assignedSO) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+        <MessageSquare size={24} className="mb-2 opacity-40" />
+        <p className="text-xs">
+          Submit this case to a Station Officer to unlock this thread.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-64">
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+        {msgs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <MessageSquare size={24} className="mb-2 opacity-40" />
+            <p className="text-xs">No messages yet.</p>
+          </div>
+        ) : (
+          msgs.map((m) => {
+            const mine = m.fromRole === "cid";
+            return (
+              <div
+                key={m._id}
+                className={`flex ${mine ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={`text-xs font-semibold ${mine ? "text-blue-200" : "text-gray-500"}`}
+                    >
+                      {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
+                    </span>
+                    <ChevronRight
+                      size={10}
+                      className={mine ? "text-blue-300" : "text-gray-400"}
+                    />
+                    <span
+                      className={`text-xs ${mine ? "text-blue-200" : "text-gray-500"}`}
+                    >
+                      {ROLE_LABELS[m.toRole || ""] || m.toRole}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed">{m.content}</p>
+                  <AttachmentList attachments={m.attachments} />
+                  <p
+                    className={`text-xs mt-1.5 ${mine ? "text-blue-300" : "text-gray-400"}`}
+                  >
+                    {new Date(m.sentAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+        <div ref={bottomRef} />
+      </div>
+      <form
+        onSubmit={send}
+        className="border-t border-gray-100 pt-3 mt-3 space-y-2"
+      >
+        <FilePicker files={files} onChange={setFiles} />
+        <div className="flex gap-2">
+          <input
+            className={`${inputCls} flex-1`}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Message Station Officer..."
+          />
+          <button
+            type="submit"
+            disabled={sending || !content.trim()}
+            className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
+          >
+            {sending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Send size={14} />
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ─── Start Investigation Modal ─────────────────────────────────────────────────
+function StartModal({
   caseItem,
   onSuccess,
   onClose,
@@ -399,38 +492,18 @@ function AddPartiesModal({
   onSuccess: () => void;
   onClose: () => void;
 }) {
-  const [suspects, setSuspects] = useState([
-    { name: "", age: "", description: "", address: "" },
-  ]);
-  const [witnesses, setWitnesses] = useState([
-    { name: "", phone: "", statement: "" },
-  ]);
+  const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const validSuspects = suspects.filter((s) => s.name.trim());
-    const validWitnesses = witnesses.filter((w) => w.name.trim());
-
-    if (validSuspects.length === 0 && validWitnesses.length === 0) {
-      toast.error("Add at least one suspect or witness");
-      return;
-    }
-
     setLoading(true);
     try {
       await api(`/api/cases/${caseItem._id}`, {
         method: "PUT",
-        body: JSON.stringify({
-          action: "add-parties",
-          suspects: validSuspects.map((s) => ({
-            ...s,
-            age: s.age ? parseInt(s.age) : undefined,
-          })),
-          witnesses: validWitnesses,
-        }),
+        body: JSON.stringify({ action: "cid-start", note }),
       });
-      toast.success("Parties added");
+      toast.success("Investigation started");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -441,193 +514,56 @@ function AddPartiesModal({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-xs font-mono text-primary mb-1">
-            {caseItem.caseNumber}
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <p className="text-xs font-mono font-bold text-blue-700 mb-1">
+          {caseItem.caseNumber}
+        </p>
+        <p className="font-semibold text-gray-900 text-sm">{caseItem.title}</p>
+        <p className="text-xs text-gray-500 mt-1 capitalize">
+          {caseItem.category} · {caseItem.location}
+        </p>
+      </div>
+      {caseItem.ncoReferralNote && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">
+            NCO Referral Note
           </p>
-          <p className="font-bold text-foreground text-sm">{caseItem.title}</p>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className={labelBase}>Suspects</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setSuspects([
-                ...suspects,
-                { name: "", age: "", description: "", address: "" },
-              ])
-            }
-          >
-            Add Suspect
-          </Button>
+          <p className="text-sm text-gray-700">{caseItem.ncoReferralNote}</p>
         </div>
-        {suspects.map((s, i) => (
-          <div key={i} className="border rounded-lg p-3 space-y-2 bg-muted/30">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Name *">
-                <input
-                  className={inputBase}
-                  value={s.name}
-                  onChange={(e) => {
-                    const n = [...suspects];
-                    n[i].name = e.target.value;
-                    setSuspects(n);
-                  }}
-                  placeholder="Suspect name"
-                />
-              </Field>
-              <Field label="Age">
-                <input
-                  className={inputBase}
-                  type="number"
-                  value={s.age}
-                  onChange={(e) => {
-                    const n = [...suspects];
-                    n[i].age = e.target.value;
-                    setSuspects(n);
-                  }}
-                  placeholder="Age"
-                />
-              </Field>
-            </div>
-            <Field label="Description">
-              <input
-                className={inputBase}
-                value={s.description}
-                onChange={(e) => {
-                  const n = [...suspects];
-                  n[i].description = e.target.value;
-                  setSuspects(n);
-                }}
-                placeholder="Physical description, clothing, etc."
-              />
-            </Field>
-            <Field label="Address">
-              <input
-                className={inputBase}
-                value={s.address}
-                onChange={(e) => {
-                  const n = [...suspects];
-                  n[i].address = e.target.value;
-                  setSuspects(n);
-                }}
-                placeholder="Known address"
-              />
-            </Field>
-            {suspects.length > 1 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setSuspects(suspects.filter((_, j) => j !== i))}
-                className="text-destructive"
-              >
-                Remove
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className={labelBase}>Witnesses</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setWitnesses([
-                ...witnesses,
-                { name: "", phone: "", statement: "" },
-              ])
-            }
-          >
-            Add Witness
-          </Button>
-        </div>
-        {witnesses.map((w, i) => (
-          <div key={i} className="border rounded-lg p-3 space-y-2 bg-muted/30">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Name *">
-                <input
-                  className={inputBase}
-                  value={w.name}
-                  onChange={(e) => {
-                    const n = [...witnesses];
-                    n[i].name = e.target.value;
-                    setWitnesses(n);
-                  }}
-                  placeholder="Witness name"
-                />
-              </Field>
-              <Field label="Phone">
-                <input
-                  className={inputBase}
-                  value={w.phone}
-                  onChange={(e) => {
-                    const n = [...witnesses];
-                    n[i].phone = e.target.value;
-                    setWitnesses(n);
-                  }}
-                  placeholder="Contact number"
-                />
-              </Field>
-            </div>
-            <Field label="Statement">
-              <textarea
-                className={inputBase}
-                rows={2}
-                value={w.statement}
-                onChange={(e) => {
-                  const n = [...witnesses];
-                  n[i].statement = e.target.value;
-                  setWitnesses(n);
-                }}
-                placeholder="Witness statement..."
-                style={{ resize: "vertical" }}
-              />
-            </Field>
-            {witnesses.length > 1 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setWitnesses(witnesses.filter((_, j) => j !== i))
-                }
-                className="text-destructive"
-              >
-                Remove
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-end gap-3 pt-2 border-t">
-        <Button type="button" variant="ghost" onClick={onClose}>
+      )}
+      <FormField label="Opening Note (optional)">
+        <textarea
+          className={inputCls}
+          rows={3}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Initial investigation remarks..."
+          style={{ resize: "vertical" }}
+        />
+      </FormField>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={loading}>
-          {loading && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-2" />
+        <Button
+          type="submit"
+          disabled={loading}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          {loading ? (
+            <Loader2 size={14} className="animate-spin mr-2" />
+          ) : (
+            <PlayCircle size={14} className="mr-2" />
           )}
-          Add Parties
+          Begin Investigation
         </Button>
       </div>
     </form>
   );
 }
 
-// ─── Submit to SO modal ───────────────────────────────────────────────────────
+// ─── Submit to SO Modal ────────────────────────────────────────────────────────
 function SubmitSOModal({
   caseItem,
   onSuccess,
@@ -682,7 +618,7 @@ function SubmitSOModal({
           }),
         });
       }
-      toast.success("Case submitted to Station Officer");
+      toast.success("Submitted to Station Officer — notification sent");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -693,70 +629,62 @@ function SubmitSOModal({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-xs font-mono text-primary mb-1">
-            {caseItem.caseNumber}
-          </p>
-          <p className="font-bold text-foreground text-sm">{caseItem.title}</p>
-          <Pill className={PRIORITY_BADGE[caseItem.priority] || ""}>
-            {caseItem.priority}
-          </Pill>
-        </CardContent>
-      </Card>
-
-      <Field label="Assign Station Officer *">
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <p className="text-xs font-mono font-bold text-blue-700 mb-1">
+          {caseItem.caseNumber}
+        </p>
+        <p className="font-semibold text-gray-900 text-sm">{caseItem.title}</p>
+      </div>
+      <FormField label="Assign Station Officer *">
         <select
-          className={inputBase}
+          className={inputCls}
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
           required
         >
-          <option value="" className="bg-background">
-            — Select Officer —
-          </option>
+          <option value="">— Select Station Officer —</option>
           {officers.map((o) => (
-            <option key={o._id} value={o._id} className="bg-background">
+            <option key={o._id} value={o._id}>
               {o.fullName} ({o.email})
             </option>
           ))}
         </select>
-      </Field>
-
-      <Field label="Submission Note (optional)">
+      </FormField>
+      <FormField label="Findings / Submission Note (optional)">
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={3}
           value={submissionNote}
           onChange={(e) => setSubmissionNote(e.target.value)}
           placeholder="Summary of investigation findings..."
           style={{ resize: "vertical" }}
         />
-      </Field>
-
-      <Field label="Additional Note (optional)">
+      </FormField>
+      <FormField label="Additional Internal Note (optional)">
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Any other notes..."
           style={{ resize: "vertical" }}
         />
-      </Field>
-
+      </FormField>
       <FilePicker files={files} onChange={setFiles} />
-
-      <div className="flex justify-end gap-3 pt-2 border-t">
-        <Button type="button" variant="ghost" onClick={onClose}>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={loading || !selected} className="gap-2">
+        <Button
+          type="submit"
+          disabled={loading || !selected}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
           {loading ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin mr-2" />
           ) : (
-            <Send size={14} />
+            <ArrowUpRight size={14} className="mr-2" />
           )}
           Submit to SO
         </Button>
@@ -765,7 +693,7 @@ function SubmitSOModal({
   );
 }
 
-// ─── Detail modal ─────────────────────────────────────────────────────────────
+// ─── Detail Modal ─────────────────────────────────────────────────────────────
 function DetailModal({
   caseItem,
   userId,
@@ -780,13 +708,11 @@ function DetailModal({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<
-    "info" | "thread_nco" | "thread_so" | "notes" | "parties"
+    "info" | "nco_thread" | "so_thread" | "notes" | "parties"
   >("info");
   const [noteContent, setNC] = useState("");
   const [noteFiles, setNF] = useState<File[]>([]);
   const [addingNote, setAN] = useState(false);
-
-  const s = STATUS_MAP[caseItem.status] || STATUS_MAP.open;
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -824,95 +750,95 @@ function DetailModal({
   const ncoUnread = (caseItem.threadMessages || []).filter(
     (m) =>
       m.thread === "nco_cid" &&
-      m.fromRole !== userRole &&
+      m.fromRole !== "cid" &&
       !m.readBy?.includes(userId),
   ).length;
-
   const soUnread = (caseItem.threadMessages || []).filter(
     (m) =>
       m.thread === "cid_so" &&
-      m.fromRole !== userRole &&
+      m.fromRole !== "cid" &&
       !m.readBy?.includes(userId),
   ).length;
 
-  const tabs = [
+  const TABS = [
     { id: "info", label: "Info" },
     {
-      id: "thread_nco",
+      id: "nco_thread",
       label: `NCO Chat${ncoUnread > 0 ? ` (${ncoUnread})` : ""}`,
     },
     {
-      id: "thread_so",
+      id: "so_thread",
       label: `SO Chat${soUnread > 0 ? ` (${soUnread})` : ""}`,
     },
     { id: "notes", label: `Notes (${caseItem.notes.length})` },
-    {
-      id: "parties",
-      label: `Parties (${caseItem.suspects.length + caseItem.witnesses.length})`,
-    },
+    { id: "parties", label: "Parties" },
   ] as const;
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-start gap-2">
+      <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
-          <p className="text-xs font-mono text-primary mb-1">
+          <p className="text-xs font-mono font-bold text-blue-600 mb-1">
             {caseItem.caseNumber}
           </p>
-          <h3 className="text-base font-bold text-foreground">
+          <h3 className="text-base font-bold text-gray-900">
             {caseItem.title}
           </h3>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">
+          <p className="text-xs text-gray-500 mt-1 line-clamp-2">
             {caseItem.description}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <Pill className={s.color}>
-            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-            {s.label}
-          </Pill>
-          <Pill className={PRIORITY_BADGE[caseItem.priority] || ""}>
-            {caseItem.priority}
-          </Pill>
+          <StatusBadge status={caseItem.status} />
+          <PriorityBadge priority={caseItem.priority} />
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-0.5 bg-muted rounded-lg p-1 overflow-x-auto">
-        {tabs.map((t) => (
+      {caseItem.soDirective && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
+          <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-bold text-red-700 uppercase tracking-wider mb-1">
+              SO Directive — Further Action Required
+            </p>
+            <p className="text-sm text-red-800">{caseItem.soDirective}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+        {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 whitespace-nowrap py-1.5 px-2 rounded-md text-xs font-semibold transition-all ${tab === t.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Tab: Info */}
       {tab === "info" && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             {[
               {
-                icon: <MapPin size={11} />,
+                icon: <MapPin size={12} />,
                 label: "Location",
                 val: caseItem.location,
               },
               {
-                icon: <Calendar size={11} />,
+                icon: <Calendar size={12} />,
                 label: "Date Occurred",
                 val: new Date(caseItem.dateOccurred).toLocaleDateString(),
               },
               {
-                icon: <User size={11} />,
+                icon: <User size={12} />,
                 label: "Reported By",
                 val: caseItem.reportedBy.name,
               },
               {
-                icon: <FileText size={11} />,
+                icon: <FileText size={12} />,
                 label: "Category",
                 val: caseItem.category,
                 cap: true,
@@ -920,7 +846,7 @@ function DetailModal({
               ...(caseItem.loggedBy
                 ? [
                     {
-                      icon: <User size={11} />,
+                      icon: <User size={12} />,
                       label: "Logged By",
                       val: caseItem.loggedBy.fullName,
                     },
@@ -929,123 +855,100 @@ function DetailModal({
               ...(caseItem.assignedSO
                 ? [
                     {
-                      icon: <Users size={11} />,
+                      icon: <Users size={12} />,
                       label: "Station Officer",
                       val: caseItem.assignedSO.fullName,
                     },
                   ]
                 : []),
             ].map(({ icon, label, val, cap }) => (
-              <div key={label} className="bg-muted/50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">
+              <div
+                key={label}
+                className="bg-gray-50 rounded-lg p-3 border border-gray-100"
+              >
+                <div className="flex items-center gap-1.5 text-gray-400 text-xs mb-1">
                   {icon}
                   <span>{label}</span>
                 </div>
                 <p
-                  className={`text-foreground text-sm font-medium ${cap ? "capitalize" : ""}`}
+                  className={`text-gray-800 text-sm font-medium ${cap ? "capitalize" : ""}`}
                 >
                   {val}
                 </p>
               </div>
             ))}
           </div>
-
-          {/* Handoff notes */}
           {caseItem.ncoReferralNote && (
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-blue-700 uppercase mb-1">
                 NCO Referral Note
               </p>
-              <p className="text-sm text-foreground">
+              <p className="text-sm text-gray-700">
                 {caseItem.ncoReferralNote}
               </p>
             </div>
           )}
-          {caseItem.soDirective && (
-            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-destructive uppercase tracking-wider mb-1">
-                SO Directive
+          {caseItem.cidSubmissionNote && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-yellow-700 uppercase mb-1">
+                Your Submission Note
               </p>
-              <p className="text-sm text-foreground">{caseItem.soDirective}</p>
+              <p className="text-sm text-gray-700">
+                {caseItem.cidSubmissionNote}
+              </p>
             </div>
           )}
-          {caseItem.attachments?.length ? (
-            <div>
-              <p className={labelBase}>Case Attachments</p>
-              <AttachmentList attachments={caseItem.attachments} />
-            </div>
-          ) : null}
         </div>
       )}
 
-      {/* Tab: NCO Thread */}
-      {tab === "thread_nco" && (
-        <ThreadPanel
+      {tab === "nco_thread" && (
+        <NCOThread
           caseItem={caseItem}
-          userId={userId}
           userRole={userRole}
-          thread="nco_cid"
           onRefresh={onRefresh}
         />
       )}
-
-      {/* Tab: SO Thread */}
-      {tab === "thread_so" && (
-        <div>
-          {!caseItem.assignedSO ? (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <MessageSquare size={28} className="mb-2 opacity-40" />
-              <p className="text-xs text-center">
-                Submit this case to a Station Officer first.
-              </p>
-            </div>
-          ) : (
-            <ThreadPanel
-              caseItem={caseItem}
-              userId={userId}
-              userRole={userRole}
-              thread="cid_so"
-              onRefresh={onRefresh}
-            />
-          )}
-        </div>
+      {tab === "so_thread" && (
+        <SOThread caseItem={caseItem} onRefresh={onRefresh} />
       )}
 
-      {/* Tab: Notes */}
       {tab === "notes" && (
         <div className="space-y-3">
-          <div className="space-y-2 max-h-52 overflow-y-auto">
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {caseItem.notes.length === 0 ? (
-              <p className="text-muted-foreground text-xs text-center py-8">
+              <p className="text-gray-400 text-xs text-center py-6">
                 No notes yet.
               </p>
             ) : (
               caseItem.notes.map((n) => (
-                <div key={n._id} className="bg-muted/50 rounded-lg p-3 border">
-                  <div className="flex justify-between items-start mb-1.5">
-                    <span className="text-xs font-semibold text-primary">
+                <div
+                  key={n._id}
+                  className="bg-gray-50 rounded-lg p-3 border border-gray-100"
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-xs font-semibold text-blue-700">
                       {n.addedBy?.fullName || "Unknown"}
                       {n.roleSnapshot && (
-                        <span className="ml-1 font-normal text-muted-foreground">
-                          ({ROLE_LABELS[n.roleSnapshot] || n.roleSnapshot})
+                        <span className="ml-1 font-normal text-gray-400">
+                          ({ROLE_LABELS[n.roleSnapshot]})
                         </span>
                       )}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-gray-400">
                       {new Date(n.addedAt).toLocaleString()}
                     </span>
                   </div>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {n.content}
-                  </p>
-                  <AttachmentList attachments={n.attachments} />
+                  <p className="text-sm text-gray-700">{n.content}</p>
                 </div>
               ))
             )}
           </div>
-          <form onSubmit={addNote} className="border-t pt-3 space-y-3">
+          <form
+            onSubmit={addNote}
+            className="border-t border-gray-100 pt-3 space-y-3"
+          >
             <textarea
-              className={inputBase}
+              className={inputCls}
               rows={2}
               value={noteContent}
               onChange={(e) => setNC(e.target.value)}
@@ -1056,14 +959,14 @@ function DetailModal({
             <div className="flex justify-end">
               <Button
                 type="submit"
-                disabled={addingNote || !noteContent.trim()}
                 size="sm"
-                className="gap-2"
+                disabled={addingNote || !noteContent.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {addingNote ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin mr-1" />
                 ) : (
-                  <StickyNote size={12} />
+                  <StickyNote size={12} className="mr-1" />
                 )}
                 Add Note
               </Button>
@@ -1072,81 +975,71 @@ function DetailModal({
         </div>
       )}
 
-      {/* Tab: Parties */}
       {tab === "parties" && (
         <div className="space-y-4">
           <div>
-            <p className={labelBase}>Suspects ({caseItem.suspects.length})</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+              Suspects ({caseItem.suspects.length})
+            </p>
             {caseItem.suspects.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                No suspects recorded.
-              </p>
+              <p className="text-gray-400 text-xs">None recorded.</p>
             ) : (
-              <div className="space-y-2">
-                {caseItem.suspects.map((s, i) => (
-                  <div
-                    key={i}
-                    className="bg-destructive/5 border border-destructive/20 rounded-lg p-3"
-                  >
-                    <p className="font-semibold text-sm text-foreground">
-                      {s.name}
-                      {s.age && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          Age {s.age}
-                        </span>
-                      )}
+              caseItem.suspects.map((s, i) => (
+                <div
+                  key={i}
+                  className="bg-red-50 border border-red-200 rounded-lg p-3 mb-2"
+                >
+                  <p className="font-semibold text-sm text-gray-900">
+                    {s.name}
+                    {s.age && (
+                      <span className="ml-2 text-xs text-gray-500">
+                        Age {s.age}
+                      </span>
+                    )}
+                  </p>
+                  {s.description && (
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {s.description}
                     </p>
-                    {s.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {s.description}
-                      </p>
-                    )}
-                    {s.address && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        📍 {s.address}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  )}
+                </div>
+              ))
             )}
           </div>
           <div>
-            <p className={labelBase}>Witnesses ({caseItem.witnesses.length})</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+              Witnesses ({caseItem.witnesses.length})
+            </p>
             {caseItem.witnesses.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                No witnesses recorded.
-              </p>
+              <p className="text-gray-400 text-xs">None recorded.</p>
             ) : (
-              <div className="space-y-2">
-                {caseItem.witnesses.map((w, i) => (
-                  <div
-                    key={i}
-                    className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3"
-                  >
-                    <p className="font-semibold text-sm text-foreground">
-                      {w.name}
-                      {w.phone && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {w.phone}
-                        </span>
-                      )}
-                    </p>
-                    {w.statement && (
-                      <p className="text-xs text-muted-foreground mt-0.5 italic">
-                        "{w.statement}"
-                      </p>
+              caseItem.witnesses.map((w, i) => (
+                <div
+                  key={i}
+                  className="bg-green-50 border border-green-200 rounded-lg p-3 mb-2"
+                >
+                  <p className="font-semibold text-sm text-gray-900">
+                    {w.name}
+                    {w.phone && (
+                      <span className="ml-2 text-xs text-gray-500">
+                        {w.phone}
+                      </span>
                     )}
-                  </div>
-                ))}
-              </div>
+                  </p>
+                  {w.statement && (
+                    <p className="text-xs text-gray-600 mt-0.5 italic">
+                      "{w.statement}"
+                    </p>
+                  )}
+                </div>
+              ))
             )}
           </div>
         </div>
       )}
 
-      <div className="flex justify-end border-t pt-3">
-        <Button variant="ghost" onClick={onClose}>
+      <div className="flex justify-end border-t border-gray-100 pt-3">
+        <Button variant="outline" onClick={onClose}>
           Close
         </Button>
       </div>
@@ -1154,33 +1047,36 @@ function DetailModal({
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
   sub,
   icon,
   iconBg,
+  valueColor,
 }: {
   label: string;
   value: number | string;
   sub?: string;
   icon: React.ReactNode;
   iconBg: string;
+  valueColor?: string;
 }) {
   return (
-    <Card className="hover:shadow-md transition-shadow duration-200">
+    <Card>
       <CardContent className="pt-6">
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold tracking-tight">
-              {typeof value === "number" ? value.toLocaleString() : value}
+          <div>
+            <p className="text-sm font-medium text-gray-600">{label}</p>
+            <p
+              className={`text-2xl font-bold mt-1 ${valueColor || "text-gray-900"}`}
+            >
+              {value}
             </p>
-            {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+            {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
           </div>
           <div
-            className={`h-12 w-12 rounded-xl flex items-center justify-center ${iconBg}`}
+            className={`h-12 w-12 ${iconBg} rounded-full flex items-center justify-center shrink-0`}
           >
             {icon}
           </div>
@@ -1190,7 +1086,6 @@ function StatCard({
   );
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function CIDCasesPage() {
   const userId = "CURRENT_USER_ID";
   const userRole = "cid";
@@ -1202,8 +1097,7 @@ export default function CIDCasesPage() {
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
-
-  const [addPartiesCase, setAddPartiesCase] = useState<CaseData | null>(null);
+  const [startCase, setStartCase] = useState<CaseData | null>(null);
   const [submitCase, setSubmitCase] = useState<CaseData | null>(null);
   const [detailCase, setDetailCase] = useState<CaseData | null>(null);
 
@@ -1241,310 +1135,277 @@ export default function CIDCasesPage() {
   }
 
   const total = pagination?.total || 0;
-  const investigating = cases.filter(
+  const referredCount = cases.filter((c) => c.status === "referred").length;
+  const investigatingCount = cases.filter(
     (c) => c.status === "investigating",
   ).length;
-  const returnedCount = cases.filter((c) => c.status === "referred").length;
-  const unreadCount = cases.reduce(
-    (acc, c) =>
-      acc +
-      (c.threadMessages || []).filter(
-        (m) =>
-          (m.thread === "nco_cid" || m.thread === "cid_so") &&
-          m.fromRole !== "cid" &&
-          !m.readBy?.includes(userId),
-      ).length,
-    0,
-  );
+  const directiveCount = cases.filter(
+    (c) => !!c.soDirective && c.currentStage === "cid",
+  ).length;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        {/* Page header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Shield size={14} className="text-primary" />
-              <span className="text-xs font-bold text-primary uppercase tracking-widest">
-                CID Investigator
-              </span>
-            </div>
-            <h1 className="text-2xl font-black tracking-tight text-foreground">
-              My Investigations
-            </h1>
+    <div className="space-y-6 pt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Microscope size={16} className="text-blue-600" />
+            <span className="text-sm font-semibold text-blue-600">
+              CID Investigator
+            </span>
           </div>
-          <Button
-            onClick={fetchCases}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            <RefreshCw size={13} /> Refresh
-          </Button>
+          <h1 className="text-2xl font-bold text-gray-900">
+            My Investigations
+          </h1>
         </div>
+        <Button
+          variant="outline"
+          onClick={fetchCases}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw size={13} /> Refresh
+        </Button>
+      </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Total Assigned"
-            value={total}
-            sub="Cases assigned to you"
-            icon={<FileText className="h-5 w-5 text-blue-600" />}
-            iconBg="bg-blue-100"
-          />
-          <StatCard
-            label="Investigating"
-            value={investigating}
-            sub="Active investigations"
-            icon={<Clock className="h-5 w-5 text-emerald-600" />}
-            iconBg="bg-emerald-100"
-          />
-          <StatCard
-            label="Returned by SO"
-            value={returnedCount}
-            sub="Need further action"
-            icon={<AlertTriangle className="h-5 w-5 text-amber-600" />}
-            iconBg="bg-amber-100"
-          />
-          <StatCard
-            label="Unread Messages"
-            value={unreadCount}
-            sub="From NCO & SO"
-            icon={<MessageSquare className="h-5 w-5 text-sky-600" />}
-            iconBg="bg-sky-100"
-          />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Assigned Cases"
+          value={total}
+          sub="All cases"
+          icon={<FileText className="h-6 w-6 text-blue-600" />}
+          iconBg="bg-blue-100"
+        />
+        <StatCard
+          label="Awaiting Start"
+          value={referredCount}
+          sub="Referred, not started"
+          icon={<Clock className="h-6 w-6 text-yellow-600" />}
+          iconBg="bg-yellow-100"
+          valueColor="text-yellow-600"
+        />
+        <StatCard
+          label="Investigating"
+          value={investigatingCount}
+          sub="Active cases"
+          icon={<Microscope className="h-6 w-6 text-green-600" />}
+          iconBg="bg-green-100"
+          valueColor="text-green-600"
+        />
+        <StatCard
+          label="SO Directives"
+          value={directiveCount}
+          sub="Need further action"
+          icon={<AlertTriangle className="h-6 w-6 text-red-600" />}
+          iconBg="bg-red-100"
+          valueColor={directiveCount > 0 ? "text-red-600" : "text-gray-900"}
+        />
+      </div>
 
-        {/* Filters */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-3">
-              <div className="relative flex-1 min-w-48">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                  className={`${inputBase} pl-9`}
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search case number, title, reporter…"
-                />
-              </div>
-              <select
-                className={`${inputBase} min-w-40`}
-                value={status}
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-48">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                className={`${inputCls} pl-9`}
+                value={search}
                 onChange={(e) => {
-                  setStatus(e.target.value);
+                  setSearch(e.target.value);
                   setPage(1);
                 }}
-              >
-                <option value="all" className="bg-background">
-                  All Statuses
-                </option>
-                {Object.entries(STATUS_MAP).map(([k, v]) => (
-                  <option key={k} value={k} className="bg-background">
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className={`${inputBase} min-w-36`}
-                value={category}
-                onChange={(e) => {
-                  setCategory(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="all" className="bg-background">
-                  All Categories
-                </option>
-                {CATEGORIES.map((c) => (
-                  <option
-                    key={c}
-                    value={c}
-                    className="bg-background capitalize"
-                  >
-                    {c}
-                  </option>
-                ))}
-              </select>
+                placeholder="Search cases…"
+              />
             </div>
-          </CardContent>
-        </Card>
+            <select
+              className={`${inputCls} min-w-40`}
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">All Statuses</option>
+              {Object.entries(STATUS_MAP).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={`${inputCls} min-w-36`}
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">All Categories</option>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c} className="capitalize">
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Cases list */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <FileText size={16} className="text-muted-foreground" />
-              My Cases ({total})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-7 w-7 animate-spin text-primary" />
-              </div>
-            ) : cases.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <FileText size={36} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm">No cases assigned to you yet.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {cases.map((c) => {
-                  const s = STATUS_MAP[c.status] || STATUS_MAP.open;
-                  const canInvestigate = ["referred", "investigating"].includes(
-                    c.status,
-                  );
-                  const canSubmit = c.status === "investigating";
-                  const unread = (c.threadMessages || []).filter(
-                    (m) =>
-                      (m.thread === "nco_cid" || m.thread === "cid_so") &&
-                      m.fromRole !== "cid" &&
-                      !m.readBy?.includes(userId),
-                  ).length;
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Microscope size={16} className="text-blue-600" />
+            Assigned Cases ({total})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+            </div>
+          ) : cases.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <Microscope size={36} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No cases assigned to you.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {cases.map((c) => {
+                const canStart = c.status === "referred";
+                const canSubmit = c.status === "investigating";
+                const hasDirective =
+                  !!c.soDirective && c.currentStage === "cid";
+                const ncoUnread = (c.threadMessages || []).filter(
+                  (m) => m.thread === "nco_cid" && m.fromRole !== "cid",
+                ).length;
+                const soUnread = (c.threadMessages || []).filter(
+                  (m) => m.thread === "cid_so" && m.fromRole !== "cid",
+                ).length;
+                const totalUnread = ncoUnread + soUnread;
 
-                  return (
+                return (
+                  <div
+                    key={c._id}
+                    className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${hasDirective ? "bg-red-50 border-red-200" : "bg-white border-gray-200 hover:border-blue-200 hover:shadow-sm"}`}
+                  >
                     <div
-                      key={c._id}
-                      className="flex items-center gap-3 p-4 bg-muted/40 rounded-xl border hover:border-border transition-all group"
-                    >
-                      <div
-                        className={`w-0.5 h-10 rounded-full shrink-0 ${PRIORITY_STRIPE[c.priority] || "bg-muted-foreground/30"}`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center flex-wrap gap-2 mb-1">
-                          <span className="text-xs font-mono font-bold text-primary">
-                            {c.caseNumber}
+                      className={`w-1 h-12 rounded-full shrink-0 ${PRIORITY_LEFT[c.priority] || "bg-gray-300"}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center flex-wrap gap-2 mb-1">
+                        <span className="text-xs font-mono font-bold text-blue-600">
+                          {c.caseNumber}
+                        </span>
+                        <PriorityBadge priority={c.priority} />
+                        <StatusBadge status={c.status} />
+                        {hasDirective && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                            <AlertTriangle size={9} />
+                            SO Directive
                           </span>
-                          <Pill className={PRIORITY_BADGE[c.priority] || ""}>
-                            {c.priority}
-                          </Pill>
-                          <Pill className={s.color}>
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${s.dot}`}
-                            />
-                            {s.label}
-                          </Pill>
-                          {c.status === "referred" && c.soDirective && (
-                            <Pill className="text-destructive bg-destructive/10 border-destructive/20">
-                              <AlertTriangle size={9} />
-                              SO Directive
-                            </Pill>
-                          )}
-                          {unread > 0 && (
-                            <Pill className="text-primary bg-primary/10 border-primary/20">
-                              <MessageSquare size={9} />
-                              {unread} new
-                            </Pill>
-                          )}
-                        </div>
-                        <p className="font-bold text-foreground text-sm truncate">
-                          {c.title}
-                        </p>
-                        <div className="flex flex-wrap gap-3 mt-0.5">
-                          <span className="text-xs text-muted-foreground capitalize">
-                            {c.category}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            📍 {c.location}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            👤 {c.reportedBy.name}
-                          </span>
-                          {c.assignedSO && (
-                            <span className="text-xs text-muted-foreground">
-                              👮 {c.assignedSO.fullName}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 hidden sm:block">
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(c.createdAt).toLocaleDateString()}
-                        </p>
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">
-                          {c.notes.length} note{c.notes.length !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          title="View"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDetailCase(c)}
-                          className="h-9 w-9"
-                        >
-                          <Eye size={15} />
-                        </Button>
-                        {canInvestigate && (
-                          <Button
-                            onClick={() => setAddPartiesCase(c)}
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5"
-                          >
-                            <UserPlus size={12} /> Parties
-                          </Button>
                         )}
-                        {canSubmit && (
-                          <Button
-                            onClick={() => setSubmitCase(c)}
-                            size="sm"
-                            className="gap-1.5"
-                          >
-                            <Send size={12} /> Submit
-                          </Button>
+                        {totalUnread > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-600 text-white">
+                            <MessageSquare size={9} />
+                            {totalUnread} new
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-semibold text-gray-900 text-sm truncate">
+                        {c.title}
+                      </p>
+                      <div className="flex flex-wrap gap-3 mt-0.5">
+                        <span className="text-xs text-gray-500 capitalize">
+                          {c.category}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          📍 {c.location}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          👤 {c.reportedBy.name}
+                        </span>
+                        {c.loggedBy && (
+                          <span className="text-xs text-gray-400">
+                            🔖 {c.loggedBy.fullName}
+                          </span>
                         )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <div className="text-right shrink-0 hidden sm:block">
+                      <p className="text-xs text-gray-400">
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </p>
+                      <p className="text-xs text-gray-300 mt-0.5">
+                        {c.notes.length} notes
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => setDetailCase(c)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <Eye size={15} />
+                      </button>
+                      {canStart && (
+                        <Button
+                          size="sm"
+                          onClick={() => setStartCase(c)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 px-3"
+                        >
+                          <PlayCircle size={12} className="mr-1" />
+                          Start
+                        </Button>
+                      )}
+                      {canSubmit && (
+                        <Button
+                          size="sm"
+                          onClick={() => setSubmitCase(c)}
+                          className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 px-3"
+                        >
+                          <ArrowUpRight size={12} className="mr-1" />
+                          Submit
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {pagination && pagination.pages > 1 && (
+            <div className="flex justify-center gap-1 mt-6">
+              {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
+                (p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${p === page ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-            {pagination && pagination.pages > 1 && (
-              <div className="flex justify-center gap-1 mt-6">
-                {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
-                  (p) => (
-                    <Button
-                      key={p}
-                      variant={p === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPage(p)}
-                      className="w-8 h-8 text-xs font-bold"
-                    >
-                      {p}
-                    </Button>
-                  ),
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Modals */}
-      {addPartiesCase && (
+      {startCase && (
         <Modal
-          title={`Add Parties — ${addPartiesCase.caseNumber}`}
-          onClose={() => setAddPartiesCase(null)}
+          title={`Begin Investigation — ${startCase.caseNumber}`}
+          onClose={() => setStartCase(null)}
         >
-          <AddPartiesModal
-            caseItem={addPartiesCase}
+          <StartModal
+            caseItem={startCase}
             onSuccess={fetchCases}
-            onClose={() => setAddPartiesCase(null)}
+            onClose={() => setStartCase(null)}
           />
         </Modal>
       )}
       {submitCase && (
         <Modal
-          title={`Submit to SO — ${submitCase.caseNumber}`}
+          title={`Submit to Station Officer — ${submitCase.caseNumber}`}
           onClose={() => setSubmitCase(null)}
         >
           <SubmitSOModal

@@ -1,11 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import CidSidebar from "@/components/CidSidebar";
+import NcoNavbar from "@/components/NcoNavbar";
+import NcoSidebar from "@/components/NcoSidebar";
 import SoNavbar from "@/components/SoNavbar";
 import SoSidebar from "@/components/SoSidebar";
 
-const SoLayout = ({ children }: { children: React.ReactNode }) => {
+const StationOfficerDashboard = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const toggleSidebar = () => {
@@ -37,7 +42,7 @@ const SoLayout = ({ children }: { children: React.ReactNode }) => {
             </svg>
           </button>
           <div className="flex-1 px-4">
-            <SoSidebar toggleSidebar={toggleSidebar} />
+            <SoNavbar />
           </div>
         </div>
       </div>
@@ -57,7 +62,7 @@ const SoLayout = ({ children }: { children: React.ReactNode }) => {
         >
           <div className="flex flex-col h-full">
             <div className="flex-1 overflow-hidden">
-              <CidSidebar toggleSidebar={toggleSidebar} />
+              <SoSidebar toggleSidebar={toggleSidebar} />
             </div>
           </div>
         </aside>
@@ -74,7 +79,7 @@ const SoLayout = ({ children }: { children: React.ReactNode }) => {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Desktop navbar - full width */}
           <header className="hidden md:block sticky top-0 z-20 h-16">
-            <SoNavbar />
+            <NcoNavbar />
           </header>
 
           {/* Page content - this is the only part that should scroll */}
@@ -87,4 +92,4 @@ const SoLayout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default SoLayout;
+export default StationOfficerDashboard;

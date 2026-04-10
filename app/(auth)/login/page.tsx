@@ -14,7 +14,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import { ROLE_DASHBOARDS, UserRole } from "@/constants/roles";
+
+export type UserRole = "admin" | "nco" | "cid" | "so" | "dc";
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -24,6 +25,23 @@ export default function LoginPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const getDashboardByRole = (role: UserRole): string => {
+    switch (role) {
+      case "admin":
+        return "/admin-dashboard";
+      case "nco":
+        return "/nco-dashboard";
+      case "cid":
+        return "/cid-dashboard";
+      case "so":
+        return "/so-dashboard";
+      case "dc":
+        return "/dc-dashboard";
+      default:
+        return "/";
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,8 +68,8 @@ export default function LoginPage() {
 
       toast.success(`Welcome back, ${data.user.fullName.split(" ")[0]}!`);
 
-      // Redirect based on role
-      const destination = ROLE_DASHBOARDS[data.user.role as UserRole];
+      // Redirect based on role using switch statement
+      const destination = getDashboardByRole(data.user.role as UserRole);
       router.push(destination);
     } catch {
       toast.error("Network error. Please try again.");

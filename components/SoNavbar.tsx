@@ -15,7 +15,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ROLE_LABELS, ROLE_DASHBOARDS, UserRole } from "@/constants/roles";
+import { ROLE_LABELS, UserRole } from "@/constants/roles";
 
 interface StoredUser {
   _id: string;

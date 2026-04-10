@@ -73,7 +73,7 @@ export const DcLinks = [
   { id: 12, url: "/", title: "Home", icon: HomeIcon },
 ];
 
-export const SoLinks = [
+export const StationOfficerLinks = [
   { id: 1, url: "/so-dashboard", title: "Dashboard", icon: Home },
   { id: 2, url: "/so-dashboard/cases", title: "Cases", icon: FileText },
   { id: 3, url: "/so-dashboard/profile", title: "Profile", icon: Users },

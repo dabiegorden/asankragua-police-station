@@ -21,12 +21,15 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle2,
-  TrendingDown,
+  XCircle,
   Star,
   Shield,
   BarChart3,
+  TrendingDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   api,
   CaseData,
@@ -34,41 +37,37 @@ import {
   UserRef,
   Attachment,
   STATUS_MAP,
-  PRIORITY_STRIPE,
   PRIORITY_BADGE,
+  PRIORITY_LEFT,
   ROLE_LABELS,
   CATEGORIES,
   formatBytes,
 } from "@/components/cases/shared";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
-// ─── Base styles ──────────────────────────────────────────────────────────────
-const inputBase = `w-full bg-background border rounded-lg px-3 py-2.5 text-sm text-foreground
-   placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition`;
-const labelBase =
-  "block text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5";
+const inputCls =
+  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition";
 
-// ─── Pill badge ───────────────────────────────────────────────────────────────
-function Pill({
-  className,
-  children,
-}: {
-  className: string;
-  children: React.ReactNode;
-}) {
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_MAP[status] || STATUS_MAP.open;
   return (
-    <Badge
-      variant="outline"
-      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${className}`}
+    <span
+      className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full border ${s.color}`}
     >
-      {children}
-    </Badge>
+      {s.label}
+    </span>
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+function PriorityBadge({ priority }: { priority: string }) {
+  return (
+    <span
+      className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full border ${PRIORITY_BADGE[priority] || ""}`}
+    >
+      {priority}
+    </span>
+  );
+}
+
 function Modal({
   title,
   onClose,
@@ -86,15 +85,13 @@ function Modal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`bg-card border rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh]`}
+        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-          <h2 className="font-bold text-foreground text-sm tracking-wide">
-            {title}
-          </h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <X size={16} />
           </button>
@@ -105,8 +102,7 @@ function Modal({
   );
 }
 
-// ─── Field wrapper ────────────────────────────────────────────────────────────
-function Field({
+function FormField({
   label,
   children,
 }: {
@@ -115,13 +111,14 @@ function Field({
 }) {
   return (
     <div>
-      <label className={labelBase}>{label}</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+        {label}
+      </label>
       {children}
     </div>
   );
 }
 
-// ─── Attachment display ───────────────────────────────────────────────────────
 function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
   if (!attachments?.length) return null;
   return (
@@ -132,12 +129,12 @@ function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
           href={a.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1 transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 transition-colors"
         >
           <Download size={11} />
           {a.originalName || `file-${i + 1}`}
           {a.bytes && (
-            <span className="text-primary/70">{formatBytes(a.bytes)}</span>
+            <span className="text-blue-400">{formatBytes(a.bytes)}</span>
           )}
         </a>
       ))}
@@ -145,7 +142,6 @@ function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
   );
 }
 
-// ─── File attachment picker ───────────────────────────────────────────────────
 function FilePicker({
   files,
   onChange,
@@ -156,16 +152,18 @@ function FilePicker({
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div>
-      <label className={labelBase}>Attachments (optional)</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+        Attachments (optional)
+      </label>
       <div
         onClick={() => ref.current?.click()}
-        className="flex items-center gap-3 border border-dashed rounded-lg px-4 py-3 cursor-pointer hover:border-primary/50 transition-colors group"
+        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors group"
       >
         <Paperclip
           size={14}
-          className="text-muted-foreground group-hover:text-primary transition-colors"
+          className="text-gray-400 group-hover:text-blue-500"
         />
-        <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+        <span className="text-xs text-gray-500">
           {files.length > 0
             ? `${files.length} file(s) selected`
             : "Click to attach files"}
@@ -183,12 +181,12 @@ function FilePicker({
           {files.map((f, i) => (
             <div
               key={i}
-              className="flex items-center justify-between text-xs text-muted-foreground bg-muted rounded-lg px-3 py-1.5"
+              className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 rounded-md px-3 py-1.5 border border-gray-100"
             >
               <span className="truncate">{f.name}</span>
               <button
                 onClick={() => onChange(files.filter((_, j) => j !== i))}
-                className="text-muted-foreground hover:text-destructive ml-2 shrink-0"
+                className="text-gray-400 hover:text-red-500 ml-2 shrink-0"
               >
                 <X size={12} />
               </button>
@@ -295,7 +293,7 @@ function DCThreadPanel({
     <div className="flex flex-col h-72">
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {msgs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <MessageSquare size={28} className="mb-2 opacity-40" />
             <p className="text-xs">
               No DC messages sent yet. Use this to communicate with the team.
@@ -310,24 +308,20 @@ function DCThreadPanel({
                 className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[78%] rounded-xl px-4 py-2.5 ${mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
+                  className={`max-w-[78%] rounded-xl px-4 py-2.5 ${mine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className={`text-xs font-semibold ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                      className={`text-xs font-semibold ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
                       {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
                     </span>
                     <ChevronRight
                       size={10}
-                      className={
-                        mine
-                          ? "text-primary-foreground/60"
-                          : "text-muted-foreground/60"
-                      }
+                      className={mine ? "text-blue-300" : "text-gray-400"}
                     />
                     <span
-                      className={`text-xs ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                      className={`text-xs ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
                       {ROLE_LABELS[m.toRole || ""] || m.toRole}
                     </span>
@@ -335,7 +329,7 @@ function DCThreadPanel({
                   <p className="text-sm leading-relaxed">{m.content}</p>
                   <AttachmentList attachments={m.attachments} />
                   <p
-                    className={`text-xs mt-1.5 ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                    className={`text-xs mt-1.5 ${mine ? "text-blue-300" : "text-gray-400"}`}
                   >
                     {new Date(m.sentAt).toLocaleString()}
                   </p>
@@ -348,41 +342,44 @@ function DCThreadPanel({
       </div>
 
       {recipients.length > 0 ? (
-        <form onSubmit={send} className="border-t pt-3 mt-3 space-y-2">
+        <form
+          onSubmit={send}
+          className="border-t border-gray-100 pt-3 mt-3 space-y-2"
+        >
           <FilePicker files={files} onChange={setFiles} />
           <div className="flex gap-2">
             <select
-              className={`${inputBase} shrink-0 w-48`}
+              className={`${inputCls} shrink-0 w-48`}
               value={toRole}
               onChange={(e) => setToRole(e.target.value)}
             >
               {recipients.map((r) => (
-                <option key={r.role} value={r.role} className="bg-background">
+                <option key={r.role} value={r.role}>
                   {r.label}
                 </option>
               ))}
             </select>
             <input
-              className={`${inputBase} flex-1`}
+              className={`${inputCls} flex-1`}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Send directive or message…"
             />
-            <Button
+            <button
               type="submit"
               disabled={sending || !content.trim()}
-              size="sm"
+              className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
             >
               {sending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 size={14} className="animate-spin" />
               ) : (
                 <Send size={14} />
               )}
-            </Button>
+            </button>
           </div>
         </form>
       ) : (
-        <p className="text-xs text-muted-foreground text-center pt-3 border-t">
+        <p className="text-xs text-gray-400 text-center pt-3 border-t border-gray-100">
           No participants assigned yet to message.
         </p>
       )}
@@ -443,7 +440,7 @@ function DCActionModal({
   return (
     <form onSubmit={submit} className="space-y-5">
       <div
-        className={`${isClose ? "bg-emerald-500/5 border-emerald-500/20" : "bg-orange-500/5 border-orange-500/20"} border rounded-xl p-4`}
+        className={`${isClose ? "bg-emerald-50 border-emerald-200" : "bg-orange-50 border-orange-200"} border rounded-xl p-4`}
       >
         <div className="flex items-start gap-3">
           {isClose ? (
@@ -463,7 +460,7 @@ function DCActionModal({
             >
               {isClose ? "Close This Case" : "Suspend This Case"}
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-gray-600 mt-0.5">
               {caseItem.caseNumber} — {caseItem.title}
             </p>
           </div>
@@ -473,38 +470,38 @@ function DCActionModal({
       {/* Full case summary for DC review */}
       <div className="space-y-2">
         {caseItem.ncoReferralNote && (
-          <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3">
-            <p className="text-xs font-bold text-sky-600 uppercase tracking-wider mb-1">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">
               NCO Referral Note
             </p>
-            <p className="text-xs text-foreground">
-              {caseItem.ncoReferralNote}
-            </p>
+            <p className="text-xs text-gray-700">{caseItem.ncoReferralNote}</p>
           </div>
         )}
         {caseItem.cidSubmissionNote && (
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
-            <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-1">
               CID Submission Note
             </p>
-            <p className="text-xs text-foreground">
+            <p className="text-xs text-gray-700">
               {caseItem.cidSubmissionNote}
             </p>
           </div>
         )}
         {caseItem.soReviewNote && (
-          <div className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3">
-            <p className="text-xs font-bold text-violet-600 uppercase tracking-wider mb-1">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <p className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">
               SO Review Note
             </p>
-            <p className="text-xs text-foreground">{caseItem.soReviewNote}</p>
+            <p className="text-xs text-gray-700">{caseItem.soReviewNote}</p>
           </div>
         )}
       </div>
 
-      <Field label={`${isClose ? "Closure" : "Suspension"} Note (optional)`}>
+      <FormField
+        label={`${isClose ? "Closure" : "Suspension"} Note (optional)`}
+      >
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={4}
           value={dcNote}
           onChange={(e) => setDcNote(e.target.value)}
@@ -515,43 +512,39 @@ function DCActionModal({
           }
           style={{ resize: "vertical" }}
         />
-      </Field>
+      </FormField>
 
-      <Field label="Internal Note (optional)">
+      <FormField label="Internal Note (optional)">
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Additional internal notes..."
           style={{ resize: "vertical" }}
         />
-      </Field>
+      </FormField>
 
       <FilePicker files={files} onChange={setFiles} />
 
-      <div className="flex justify-end gap-3 pt-2 border-t">
-        <Button type="button" variant="ghost" onClick={onClose}>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button
+        <button
           type="submit"
           disabled={loading}
-          variant={isClose ? "default" : "destructive"}
+          className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 ${isClose ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-orange-500 hover:bg-orange-600 text-white"}`}
         >
-          {loading && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-2" />
-          )}
-          {isClose ? (
-            <>
-              <CheckCircle2 size={14} className="mr-1.5" /> Close Case
-            </>
+          {loading ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : isClose ? (
+            <CheckCircle2 size={14} />
           ) : (
-            <>
-              <TrendingDown size={14} className="mr-1.5" /> Suspend Case
-            </>
+            <TrendingDown size={14} />
           )}
-        </Button>
+          {isClose ? "Close Case" : "Suspend Case"}
+        </button>
       </div>
     </form>
   );
@@ -575,8 +568,6 @@ function DetailModal({
   const [noteContent, setNC] = useState("");
   const [noteFiles, setNF] = useState<File[]>([]);
   const [addingNote, setAN] = useState(false);
-
-  const s = STATUS_MAP[caseItem.status] || STATUS_MAP.open;
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -625,9 +616,9 @@ function DetailModal({
   ] as const;
 
   const THREAD_BADGE: Record<string, string> = {
-    nco_cid: "text-sky-600 bg-sky-50 border-sky-200",
-    cid_so: "text-amber-600 bg-amber-50 border-amber-200",
-    dc: "text-primary bg-primary/10 border-primary/20",
+    nco_cid: "text-blue-600 bg-blue-50 border-blue-200",
+    cid_so: "text-yellow-600 bg-yellow-50 border-yellow-200",
+    dc: "text-purple-600 bg-purple-50 border-purple-200",
   };
   const THREAD_LABEL: Record<string, string> = {
     nco_cid: "NCO ↔ CID",
@@ -639,33 +630,28 @@ function DetailModal({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start gap-2">
         <div className="flex-1">
-          <p className="text-xs font-mono text-primary mb-1">
+          <p className="text-xs font-mono text-blue-600 mb-1 font-bold">
             {caseItem.caseNumber}
           </p>
-          <h3 className="text-base font-bold text-foreground">
+          <h3 className="text-base font-bold text-gray-900">
             {caseItem.title}
           </h3>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">
             {caseItem.description}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <Pill className={s.color}>
-            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-            {s.label}
-          </Pill>
-          <Pill className={PRIORITY_BADGE[caseItem.priority] || ""}>
-            {caseItem.priority}
-          </Pill>
+          <StatusBadge status={caseItem.status} />
+          <PriorityBadge priority={caseItem.priority} />
         </div>
       </div>
 
-      <div className="flex gap-0.5 bg-muted rounded-lg p-1 overflow-x-auto">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${tab === t.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             {t.label}
           </button>
@@ -725,13 +711,16 @@ function DetailModal({
                   ]
                 : []),
             ].map(({ icon, label, val, cap }) => (
-              <div key={label} className="bg-muted/50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">
+              <div
+                key={label}
+                className="bg-gray-50 rounded-lg p-3 border border-gray-100"
+              >
+                <div className="flex items-center gap-1.5 text-gray-400 text-xs mb-1">
                   {icon}
                   <span>{label}</span>
                 </div>
                 <p
-                  className={`text-foreground text-sm font-medium ${cap ? "capitalize" : ""}`}
+                  className={`text-gray-800 text-sm font-medium ${cap ? "capitalize" : ""}`}
                 >
                   {val}
                 </p>
@@ -741,51 +730,47 @@ function DetailModal({
           {/* Full paper trail */}
           <div className="space-y-2">
             {caseItem.ncoReferralNote && (
-              <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3">
-                <p className="text-xs font-bold text-sky-600 uppercase tracking-wider mb-1">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">
                   NCO Referral Note
                 </p>
-                <p className="text-sm text-foreground">
+                <p className="text-sm text-gray-700">
                   {caseItem.ncoReferralNote}
                 </p>
               </div>
             )}
             {caseItem.cidSubmissionNote && (
-              <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
-                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-1">
                   CID Submission Note
                 </p>
-                <p className="text-sm text-foreground">
+                <p className="text-sm text-gray-700">
                   {caseItem.cidSubmissionNote}
                 </p>
               </div>
             )}
             {caseItem.soDirective && (
-              <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
-                <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-orange-700 uppercase tracking-wider mb-1">
                   SO Directive (Returned to CID)
                 </p>
-                <p className="text-sm text-foreground">
-                  {caseItem.soDirective}
-                </p>
+                <p className="text-sm text-gray-700">{caseItem.soDirective}</p>
               </div>
             )}
             {caseItem.soReviewNote && (
-              <div className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3">
-                <p className="text-xs font-bold text-violet-600 uppercase tracking-wider mb-1">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">
                   SO Review Note
                 </p>
-                <p className="text-sm text-foreground">
-                  {caseItem.soReviewNote}
-                </p>
+                <p className="text-sm text-gray-700">{caseItem.soReviewNote}</p>
               </div>
             )}
             {caseItem.dcNote && (
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-                <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">
                   DC Final Note
                 </p>
-                <p className="text-sm text-foreground">{caseItem.dcNote}</p>
+                <p className="text-sm text-gray-700">{caseItem.dcNote}</p>
               </div>
             )}
           </div>
@@ -804,30 +789,35 @@ function DetailModal({
       {tab === "all_msgs" && (
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {allThreadMsgs.length === 0 ? (
-            <p className="text-muted-foreground text-xs text-center py-8">
+            <p className="text-gray-400 text-xs text-center py-8">
               No messages across any thread.
             </p>
           ) : (
             allThreadMsgs.map((m) => (
-              <div key={m._id} className="bg-muted/50 rounded-lg p-3 border">
+              <div
+                key={m._id}
+                className="bg-gray-50 rounded-lg p-3 border border-gray-100"
+              >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
-                    <Pill className={THREAD_BADGE[m.thread] || ""}>
+                    <span
+                      className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border ${THREAD_BADGE[m.thread] || ""}`}
+                    >
                       {THREAD_LABEL[m.thread] || m.thread}
-                    </Pill>
-                    <span className="text-xs font-semibold text-foreground">
+                    </span>
+                    <span className="text-xs font-semibold text-gray-700">
                       {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
                     </span>
-                    <ChevronRight size={10} className="text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
+                    <ChevronRight size={10} className="text-gray-400" />
+                    <span className="text-xs text-gray-500">
                       {ROLE_LABELS[m.toRole || ""] || m.toRole}
                     </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-gray-400">
                     {new Date(m.sentAt).toLocaleString()}
                   </span>
                 </div>
-                <p className="text-sm text-foreground leading-relaxed">
+                <p className="text-sm text-gray-700 leading-relaxed">
                   {m.content}
                 </p>
                 <AttachmentList attachments={m.attachments} />
@@ -841,26 +831,29 @@ function DetailModal({
         <div className="space-y-3">
           <div className="space-y-2 max-h-52 overflow-y-auto">
             {caseItem.notes.length === 0 ? (
-              <p className="text-muted-foreground text-xs text-center py-8">
+              <p className="text-gray-400 text-xs text-center py-8">
                 No notes yet.
               </p>
             ) : (
               caseItem.notes.map((n) => (
-                <div key={n._id} className="bg-muted/50 rounded-lg p-3 border">
+                <div
+                  key={n._id}
+                  className="bg-gray-50 rounded-lg p-3 border border-gray-100"
+                >
                   <div className="flex justify-between items-start mb-1.5">
-                    <span className="text-xs font-semibold text-primary">
+                    <span className="text-xs font-semibold text-blue-700">
                       {n.addedBy?.fullName || "Unknown"}
                       {n.roleSnapshot && (
-                        <span className="ml-1 font-normal text-muted-foreground">
+                        <span className="ml-1 font-normal text-gray-500">
                           ({ROLE_LABELS[n.roleSnapshot] || n.roleSnapshot})
                         </span>
                       )}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-gray-400">
                       {new Date(n.addedAt).toLocaleString()}
                     </span>
                   </div>
-                  <p className="text-sm text-foreground leading-relaxed">
+                  <p className="text-sm text-gray-700 leading-relaxed">
                     {n.content}
                   </p>
                   <AttachmentList attachments={n.attachments} />
@@ -868,9 +861,12 @@ function DetailModal({
               ))
             )}
           </div>
-          <form onSubmit={addNote} className="border-t pt-3 space-y-3">
+          <form
+            onSubmit={addNote}
+            className="border-t border-gray-100 pt-3 space-y-3"
+          >
             <textarea
-              className={inputBase}
+              className={inputCls}
               rows={2}
               value={noteContent}
               onChange={(e) => setNC(e.target.value)}
@@ -881,14 +877,14 @@ function DetailModal({
             <div className="flex justify-end">
               <Button
                 type="submit"
-                disabled={addingNote || !noteContent.trim()}
                 size="sm"
-                className="gap-2"
+                disabled={addingNote || !noteContent.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {addingNote ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin mr-1" />
                 ) : (
-                  <StickyNote size={12} />
+                  <StickyNote size={12} className="mr-1" />
                 )}
                 Add Note
               </Button>
@@ -900,30 +896,32 @@ function DetailModal({
       {tab === "parties" && (
         <div className="space-y-4">
           <div>
-            <p className={labelBase}>Suspects ({caseItem.suspects.length})</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+              Suspects ({caseItem.suspects.length})
+            </p>
             {caseItem.suspects.length === 0 ? (
-              <p className="text-muted-foreground text-xs">None recorded.</p>
+              <p className="text-gray-400 text-xs">None recorded.</p>
             ) : (
               caseItem.suspects.map((s, i) => (
                 <div
                   key={i}
-                  className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 mb-2"
+                  className="bg-red-50 border border-red-200 rounded-lg p-3 mb-2"
                 >
-                  <p className="font-semibold text-sm text-foreground">
+                  <p className="font-semibold text-sm text-gray-900">
                     {s.name}
                     {s.age && (
-                      <span className="ml-2 text-xs text-muted-foreground">
+                      <span className="ml-2 text-xs text-gray-500">
                         Age {s.age}
                       </span>
                     )}
                   </p>
                   {s.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-gray-600 mt-0.5">
                       {s.description}
                     </p>
                   )}
                   {s.address && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-gray-500 mt-0.5">
                       📍 {s.address}
                     </p>
                   )}
@@ -932,25 +930,27 @@ function DetailModal({
             )}
           </div>
           <div>
-            <p className={labelBase}>Witnesses ({caseItem.witnesses.length})</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+              Witnesses ({caseItem.witnesses.length})
+            </p>
             {caseItem.witnesses.length === 0 ? (
-              <p className="text-muted-foreground text-xs">None recorded.</p>
+              <p className="text-gray-400 text-xs">None recorded.</p>
             ) : (
               caseItem.witnesses.map((w, i) => (
                 <div
                   key={i}
-                  className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 mb-2"
+                  className="bg-green-50 border border-green-200 rounded-lg p-3 mb-2"
                 >
-                  <p className="font-semibold text-sm text-foreground">
+                  <p className="font-semibold text-sm text-gray-900">
                     {w.name}
                     {w.phone && (
-                      <span className="ml-2 text-xs text-muted-foreground">
+                      <span className="ml-2 text-xs text-gray-500">
                         {w.phone}
                       </span>
                     )}
                   </p>
                   {w.statement && (
-                    <p className="text-xs text-muted-foreground mt-0.5 italic">
+                    <p className="text-xs text-gray-600 mt-0.5 italic">
                       "{w.statement}"
                     </p>
                   )}
@@ -961,8 +961,8 @@ function DetailModal({
         </div>
       )}
 
-      <div className="flex justify-end border-t pt-3">
-        <Button variant="ghost" onClick={onClose}>
+      <div className="flex justify-end border-t border-gray-100 pt-3">
+        <Button variant="outline" onClick={onClose}>
           Close
         </Button>
       </div>
@@ -970,33 +970,36 @@ function DetailModal({
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
   sub,
   icon,
   iconBg,
+  valueColor,
 }: {
   label: string;
   value: number | string;
   sub?: string;
   icon: React.ReactNode;
   iconBg: string;
+  valueColor?: string;
 }) {
   return (
-    <Card className="hover:shadow-md transition-shadow duration-200">
+    <Card>
       <CardContent className="pt-6">
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold tracking-tight">
-              {typeof value === "number" ? value.toLocaleString() : value}
+          <div>
+            <p className="text-sm font-medium text-gray-600">{label}</p>
+            <p
+              className={`text-2xl font-bold mt-1 ${valueColor || "text-gray-900"}`}
+            >
+              {value}
             </p>
-            {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+            {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
           </div>
           <div
-            className={`h-12 w-12 rounded-xl flex items-center justify-center ${iconBg}`}
+            className={`h-12 w-12 ${iconBg} rounded-full flex items-center justify-center shrink-0`}
           >
             {icon}
           </div>
@@ -1069,274 +1072,253 @@ export default function DCCasesPage() {
   ).length;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Shield size={14} className="text-primary" />
-              <span className="text-xs font-bold text-primary uppercase tracking-widest">
-                District Commander
-              </span>
-            </div>
-            <h1 className="text-2xl font-black tracking-tight text-foreground">
-              Command Overview
-            </h1>
+    <div className="space-y-6 pt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Star size={14} className="text-blue-600 fill-blue-600" />
+            <span className="text-sm font-semibold text-blue-600">
+              District Commander
+            </span>
           </div>
-          <Button
-            onClick={fetchCases}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            <RefreshCw size={13} /> Refresh
-          </Button>
+          <h1 className="text-2xl font-bold text-gray-900">Command Overview</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Full visibility across all cases and communications
+          </p>
         </div>
+        <Button
+          onClick={fetchCases}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <RefreshCw size={13} /> Refresh
+        </Button>
+      </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Total Cases"
-            value={total}
-            sub="Full district view"
-            icon={<BarChart3 className="h-5 w-5 text-blue-600" />}
-            iconBg="bg-blue-100"
-          />
-          <StatCard
-            label="Awaiting Decision"
-            value={commanderReview}
-            sub="Forwarded to you"
-            icon={<Clock className="h-5 w-5 text-rose-600" />}
-            iconBg="bg-rose-100"
-          />
-          <StatCard
-            label="Active Cases"
-            value={activeCount}
-            sub="In progress"
-            icon={<Shield className="h-5 w-5 text-sky-600" />}
-            iconBg="bg-sky-100"
-          />
-          <StatCard
-            label="Resolved"
-            value={closedCount + suspendedCount}
-            sub={`${closedCount} closed · ${suspendedCount} suspended`}
-            icon={<CheckCircle2 className="h-5 w-5 text-emerald-600" />}
-            iconBg="bg-emerald-100"
-          />
-        </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Cases"
+          value={total}
+          sub="Full district view"
+          icon={<BarChart3 className="h-6 w-6 text-blue-600" />}
+          iconBg="bg-blue-100"
+        />
+        <StatCard
+          label="Awaiting Decision"
+          value={commanderReview}
+          sub="Forwarded to you"
+          icon={<Clock className="h-6 w-6 text-yellow-600" />}
+          iconBg="bg-yellow-100"
+          valueColor={commanderReview > 0 ? "text-yellow-600" : "text-gray-900"}
+        />
+        <StatCard
+          label="Active Cases"
+          value={activeCount}
+          sub="In progress"
+          icon={<Shield className="h-6 w-6 text-purple-600" />}
+          iconBg="bg-purple-100"
+          valueColor="text-purple-600"
+        />
+        <StatCard
+          label="Resolved"
+          value={closedCount + suspendedCount}
+          sub={`${closedCount} closed · ${suspendedCount} suspended`}
+          icon={<CheckCircle2 className="h-6 w-6 text-green-600" />}
+          iconBg="bg-green-100"
+          valueColor="text-green-600"
+        />
+      </div>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-3">
-              <div className="relative flex-1 min-w-48">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                  className={`${inputBase} pl-9`}
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search all cases…"
-                />
-              </div>
-              <select
-                className={`${inputBase} min-w-40`}
-                value={status}
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-48">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                className={`${inputCls} pl-9`}
+                value={search}
                 onChange={(e) => {
-                  setStatus(e.target.value);
+                  setSearch(e.target.value);
                   setPage(1);
                 }}
-              >
-                <option value="all" className="bg-background">
-                  All Statuses
-                </option>
-                {Object.entries(STATUS_MAP).map(([k, v]) => (
-                  <option key={k} value={k} className="bg-background">
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className={`${inputBase} min-w-36`}
-                value={category}
-                onChange={(e) => {
-                  setCategory(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="all" className="bg-background">
-                  All Categories
-                </option>
-                {CATEGORIES.map((c) => (
-                  <option
-                    key={c}
-                    value={c}
-                    className="bg-background capitalize"
-                  >
-                    {c}
-                  </option>
-                ))}
-              </select>
+                placeholder="Search all cases…"
+              />
             </div>
-          </CardContent>
-        </Card>
+            <select
+              className={`${inputCls} min-w-40`}
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">All Statuses</option>
+              {Object.entries(STATUS_MAP).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={`${inputCls} min-w-36`}
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">All Categories</option>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c} className="capitalize">
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <FileText size={16} className="text-muted-foreground" />
-              District Cases ({total})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-7 w-7 animate-spin text-primary" />
-              </div>
-            ) : cases.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <FileText size={36} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm">No cases in the district.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {cases.map((c) => {
-                  const s = STATUS_MAP[c.status] || STATUS_MAP.open;
-                  const canDecide = c.status === "commander_review";
-                  const dcMsgCount = (c.threadMessages || []).filter(
-                    (m) => m.thread === "dc",
-                  ).length;
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Star size={16} className="text-blue-600 fill-blue-600" />
+            District Cases ({total})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+            </div>
+          ) : cases.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <Star size={36} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No cases in the district.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {cases.map((c) => {
+                const canDecide = c.status === "commander_review";
+                const dcMsgCount = (c.threadMessages || []).filter(
+                  (m) => m.thread === "dc",
+                ).length;
 
-                  return (
+                return (
+                  <div
+                    key={c._id}
+                    className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${canDecide ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200 hover:border-blue-200 hover:shadow-sm"}`}
+                  >
                     <div
-                      key={c._id}
-                      className={`flex items-center gap-3 p-4 bg-muted/40 rounded-xl border hover:border-border transition-all group ${canDecide ? "border-primary/30" : ""}`}
-                    >
-                      <div
-                        className={`w-0.5 h-10 rounded-full shrink-0 ${PRIORITY_STRIPE[c.priority] || "bg-muted-foreground/30"}`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center flex-wrap gap-2 mb-1">
-                          <span className="text-xs font-mono font-bold text-primary">
-                            {c.caseNumber}
-                          </span>
-                          <Pill className={PRIORITY_BADGE[c.priority] || ""}>
-                            {c.priority}
-                          </Pill>
-                          <Pill className={s.color}>
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${s.dot}`}
-                            />
-                            {s.label}
-                          </Pill>
-                          {canDecide && (
-                            <Pill className="text-primary bg-primary/10 border-primary/20">
-                              <Star size={9} className="fill-primary" />
-                              Decision Required
-                            </Pill>
-                          )}
-                          {dcMsgCount > 0 && (
-                            <Pill className="text-primary bg-primary/10 border-primary/20">
-                              <MessageSquare size={9} />
-                              {dcMsgCount} DC msgs
-                            </Pill>
-                          )}
-                        </div>
-                        <p className="font-bold text-foreground text-sm truncate">
-                          {c.title}
-                        </p>
-                        <div className="flex flex-wrap gap-3 mt-0.5">
-                          <span className="text-xs text-muted-foreground capitalize">
-                            {c.category}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            📍 {c.location}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            👤 {c.reportedBy.name}
-                          </span>
-                          {c.assignedSO && (
-                            <span className="text-xs text-muted-foreground">
-                              ⚖️ SO: {c.assignedSO.fullName}
-                            </span>
-                          )}
-                          {c.assignedOfficer && (
-                            <span className="text-xs text-muted-foreground">
-                              🔍 {c.assignedOfficer.fullName}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 hidden sm:block">
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(c.createdAt).toLocaleDateString()}
-                        </p>
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">
-                          {c.notes.length} note{c.notes.length !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          title="View"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDetailCase(c)}
-                          className="h-9 w-9"
-                        >
-                          <Eye size={15} />
-                        </Button>
+                      className={`w-1 h-12 rounded-full shrink-0 ${PRIORITY_LEFT[c.priority] || "bg-gray-300"}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center flex-wrap gap-2 mb-1">
+                        <span className="text-xs font-mono font-bold text-blue-600">
+                          {c.caseNumber}
+                        </span>
+                        <PriorityBadge priority={c.priority} />
+                        <StatusBadge status={c.status} />
                         {canDecide && (
-                          <>
-                            <Button
-                              onClick={() =>
-                                setActionCase({ case: c, action: "dc-close" })
-                              }
-                              size="sm"
-                              className="gap-1.5"
-                            >
-                              <CheckCircle2 size={12} /> Close
-                            </Button>
-                            <Button
-                              onClick={() =>
-                                setActionCase({ case: c, action: "dc-suspend" })
-                              }
-                              variant="outline"
-                              size="sm"
-                              className="gap-1.5"
-                            >
-                              <TrendingDown size={12} /> Suspend
-                            </Button>
-                          </>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200">
+                            <Star size={9} className="fill-yellow-700" />
+                            Decision Required
+                          </span>
+                        )}
+                        {dcMsgCount > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
+                            <MessageSquare size={9} />
+                            {dcMsgCount} DC msgs
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-semibold text-gray-900 text-sm truncate">
+                        {c.title}
+                      </p>
+                      <div className="flex flex-wrap gap-3 mt-0.5">
+                        <span className="text-xs text-gray-500 capitalize">
+                          {c.category}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          📍 {c.location}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          👤 {c.reportedBy.name}
+                        </span>
+                        {c.assignedSO && (
+                          <span className="text-xs text-gray-400">
+                            ⚖️ SO: {c.assignedSO.fullName}
+                          </span>
+                        )}
+                        {c.assignedOfficer && (
+                          <span className="text-xs text-gray-400">
+                            🔍 {c.assignedOfficer.fullName}
+                          </span>
                         )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-            {pagination && pagination.pages > 1 && (
-              <div className="flex justify-center gap-1 mt-6">
-                {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
-                  (p) => (
-                    <Button
-                      key={p}
-                      variant={p === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPage(p)}
-                      className="w-8 h-8 text-xs font-bold"
-                    >
-                      {p}
-                    </Button>
-                  ),
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                    <div className="text-right shrink-0 hidden sm:block">
+                      <p className="text-xs text-gray-400">
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </p>
+                      <p className="text-xs text-gray-300 mt-0.5">
+                        {c.notes.length} notes
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => setDetailCase(c)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <Eye size={15} />
+                      </button>
+                      {canDecide && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              setActionCase({ case: c, action: "dc-close" })
+                            }
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3"
+                          >
+                            <CheckCircle2 size={12} className="mr-1" /> Close
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              setActionCase({ case: c, action: "dc-suspend" })
+                            }
+                            className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8 px-3"
+                          >
+                            <TrendingDown size={12} className="mr-1" /> Suspend
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {pagination && pagination.pages > 1 && (
+            <div className="flex justify-center gap-1 mt-6">
+              {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
+                (p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${p === page ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {detailCase && (
         <Modal

@@ -18,14 +18,16 @@ import {
   ChevronRight,
   Paperclip,
   Download,
-  Shield,
   RefreshCw,
   ArrowUpRight,
+  AlertTriangle,
   RotateCcw,
   Scale,
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   api,
   CaseData,
@@ -33,41 +35,36 @@ import {
   UserRef,
   Attachment,
   STATUS_MAP,
-  PRIORITY_STRIPE,
   PRIORITY_BADGE,
+  PRIORITY_LEFT,
   ROLE_LABELS,
   CATEGORIES,
   formatBytes,
 } from "@/components/cases/shared";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
-// ─── Base styles ──────────────────────────────────────────────────────────────
-const inputBase = `w-full bg-background border rounded-lg px-3 py-2.5 text-sm text-foreground
-   placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition`;
-const labelBase =
-  "block text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5";
+const inputCls =
+  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition";
 
-// ─── Pill badge ───────────────────────────────────────────────────────────────
-function Pill({
-  className,
-  children,
-}: {
-  className: string;
-  children: React.ReactNode;
-}) {
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_MAP[status] || STATUS_MAP.open;
   return (
-    <Badge
-      variant="outline"
-      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${className}`}
+    <span
+      className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full border ${s.color}`}
     >
-      {children}
-    </Badge>
+      {s.label}
+    </span>
+  );
+}
+function PriorityBadge({ priority }: { priority: string }) {
+  return (
+    <span
+      className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full border ${PRIORITY_BADGE[priority] || ""}`}
+    >
+      {priority}
+    </span>
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
 function Modal({
   title,
   onClose,
@@ -85,15 +82,13 @@ function Modal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`bg-card border rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh]`}
+        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-          <h2 className="font-bold text-foreground text-sm tracking-wide">
-            {title}
-          </h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
           >
             <X size={16} />
           </button>
@@ -104,8 +99,7 @@ function Modal({
   );
 }
 
-// ─── Field wrapper ────────────────────────────────────────────────────────────
-function Field({
+function FormField({
   label,
   children,
 }: {
@@ -114,13 +108,37 @@ function Field({
 }) {
   return (
     <div>
-      <label className={labelBase}>{label}</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+        {label}
+      </label>
       {children}
     </div>
   );
 }
 
-// ─── File attachment picker ───────────────────────────────────────────────────
+function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
+  if (!attachments?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {attachments.map((a, i) => (
+        <a
+          key={i}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1"
+        >
+          <Download size={11} />
+          {a.originalName || `file-${i + 1}`}
+          {a.bytes && (
+            <span className="text-blue-400">{formatBytes(a.bytes)}</span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function FilePicker({
   files,
   onChange,
@@ -131,16 +149,15 @@ function FilePicker({
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div>
-      <label className={labelBase}>Attachments (optional)</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+        Attachments (optional)
+      </label>
       <div
         onClick={() => ref.current?.click()}
-        className="flex items-center gap-3 border border-dashed rounded-lg px-4 py-3 cursor-pointer hover:border-primary/50 transition-colors group"
+        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
       >
-        <Paperclip
-          size={14}
-          className="text-muted-foreground group-hover:text-primary transition-colors"
-        />
-        <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+        <Paperclip size={14} className="text-gray-400" />
+        <span className="text-xs text-gray-500">
           {files.length > 0
             ? `${files.length} file(s) selected`
             : "Click to attach files"}
@@ -158,12 +175,12 @@ function FilePicker({
           {files.map((f, i) => (
             <div
               key={i}
-              className="flex items-center justify-between text-xs text-muted-foreground bg-muted rounded-lg px-3 py-1.5"
+              className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 rounded-md px-3 py-1.5 border border-gray-100"
             >
               <span className="truncate">{f.name}</span>
               <button
                 onClick={() => onChange(files.filter((_, j) => j !== i))}
-                className="text-muted-foreground hover:text-destructive ml-2 shrink-0"
+                className="text-gray-400 hover:text-red-500 ml-2"
               >
                 <X size={12} />
               </button>
@@ -175,39 +192,13 @@ function FilePicker({
   );
 }
 
-// ─── Attachment display ───────────────────────────────────────────────────────
-function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {attachments.map((a, i) => (
-        <a
-          key={i}
-          href={a.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1 transition-colors"
-        >
-          <Download size={11} />
-          {a.originalName || `file-${i + 1}`}
-          {a.bytes && (
-            <span className="text-primary/70">{formatBytes(a.bytes)}</span>
-          )}
-        </a>
-      ))}
-    </div>
-  );
-}
-
-// ─── CID ↔ SO thread panel ────────────────────────────────────────────────────
-function SOThreadPanel({
+// ─── CID ↔ SO Thread ─────────────────────────────────────────────────────────
+function SOThread({
   caseItem,
-  userId,
   userRole,
   onRefresh,
 }: {
   caseItem: CaseData;
-  userId: string;
   userRole: string;
   onRefresh: () => void;
 }) {
@@ -215,18 +206,14 @@ function SOThreadPanel({
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-
   const msgs = (caseItem.threadMessages || [])
     .filter((m) => m.thread === "cid_so")
     .sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
     );
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs.length]);
-
-  const toRole = userRole === "so" ? "cid" : "so";
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -238,7 +225,7 @@ function SOThreadPanel({
         fd.append("action", "send-message");
         fd.append("thread", "cid_so");
         fd.append("content", content.trim());
-        fd.append("toRole", toRole);
+        fd.append("toRole", "cid");
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
           method: "PUT",
@@ -253,7 +240,7 @@ function SOThreadPanel({
             action: "send-message",
             thread: "cid_so",
             content: content.trim(),
-            toRole,
+            toRole: "cid",
           }),
         });
       }
@@ -268,41 +255,46 @@ function SOThreadPanel({
     }
   }
 
+  if (!caseItem.assignedOfficer) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+        <MessageSquare size={24} className="mb-2 opacity-40" />
+        <p className="text-xs">No CID officer assigned yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-64">
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {msgs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <MessageSquare size={28} className="mb-2 opacity-40" />
-            <p className="text-xs">No messages yet in this thread.</p>
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <MessageSquare size={24} className="mb-2 opacity-40" />
+            <p className="text-xs">No messages yet.</p>
           </div>
         ) : (
           msgs.map((m) => {
-            const mine = m.fromRole === userRole;
+            const mine = m.fromRole === "so";
             return (
               <div
                 key={m._id}
                 className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
+                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className={`text-xs font-semibold ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                      className={`text-xs font-semibold ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
                       {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
                     </span>
                     <ChevronRight
                       size={10}
-                      className={
-                        mine
-                          ? "text-primary-foreground/60"
-                          : "text-muted-foreground/60"
-                      }
+                      className={mine ? "text-blue-300" : "text-gray-400"}
                     />
                     <span
-                      className={`text-xs ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                      className={`text-xs ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
                       {ROLE_LABELS[m.toRole || ""] || m.toRole}
                     </span>
@@ -310,7 +302,7 @@ function SOThreadPanel({
                   <p className="text-sm leading-relaxed">{m.content}</p>
                   <AttachmentList attachments={m.attachments} />
                   <p
-                    className={`text-xs mt-1.5 ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                    className={`text-xs mt-1.5 ${mine ? "text-blue-300" : "text-gray-400"}`}
                   >
                     {new Date(m.sentAt).toLocaleString()}
                   </p>
@@ -321,29 +313,36 @@ function SOThreadPanel({
         )}
         <div ref={bottomRef} />
       </div>
-      <form onSubmit={send} className="border-t pt-3 mt-3 space-y-2">
+      <form
+        onSubmit={send}
+        className="border-t border-gray-100 pt-3 mt-3 space-y-2"
+      >
         <FilePicker files={files} onChange={setFiles} />
         <div className="flex gap-2">
           <input
-            className={`${inputBase} flex-1`}
+            className={`${inputCls} flex-1`}
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder={`Message ${ROLE_LABELS[toRole]}…`}
+            placeholder="Message CID Investigator..."
           />
-          <Button type="submit" disabled={sending || !content.trim()} size="sm">
+          <button
+            type="submit"
+            disabled={sending || !content.trim()}
+            className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
+          >
             {sending ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Send size={14} />
             )}
-          </Button>
+          </button>
         </div>
       </form>
     </div>
   );
 }
 
-// ─── Return to CID modal ──────────────────────────────────────────────────────
+// ─── Return to CID Modal ──────────────────────────────────────────────────────
 function ReturnModal({
   caseItem,
   onSuccess,
@@ -388,7 +387,7 @@ function ReturnModal({
           }),
         });
       }
-      toast.success("Case returned to CID with directive");
+      toast.success("Case returned to CID — notification sent");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -399,33 +398,29 @@ function ReturnModal({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-xs font-mono text-primary mb-1">
-            {caseItem.caseNumber}
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+        <p className="text-xs font-mono font-bold text-orange-700 mb-1">
+          {caseItem.caseNumber}
+        </p>
+        <p className="font-semibold text-gray-900 text-sm">{caseItem.title}</p>
+        {caseItem.assignedOfficer && (
+          <p className="text-xs text-gray-500 mt-1">
+            Investigator: {caseItem.assignedOfficer.fullName}
           </p>
-          <p className="font-bold text-foreground text-sm">{caseItem.title}</p>
-          {caseItem.assignedOfficer && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Investigator: {caseItem.assignedOfficer.fullName}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+        )}
+      </div>
       {caseItem.cidSubmissionNote && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-          <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <p className="text-xs font-bold text-yellow-700 uppercase mb-1">
             CID Submission Note
           </p>
-          <p className="text-sm text-foreground">
-            {caseItem.cidSubmissionNote}
-          </p>
+          <p className="text-sm text-gray-700">{caseItem.cidSubmissionNote}</p>
         </div>
       )}
-      <Field label="Directive for Investigator *">
+      <FormField label="Directive for Investigator *">
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={4}
           value={directive}
           onChange={(e) => setDirective(e.target.value)}
@@ -433,33 +428,32 @@ function ReturnModal({
           style={{ resize: "vertical" }}
           required
         />
-      </Field>
-      <Field label="Internal Note (optional)">
+      </FormField>
+      <FormField label="Internal Note (optional)">
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Additional notes..."
           style={{ resize: "vertical" }}
         />
-      </Field>
+      </FormField>
       <FilePicker files={files} onChange={setFiles} />
-      <div className="flex justify-end gap-3 pt-2 border-t">
-        <Button type="button" variant="ghost" onClick={onClose}>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
         <Button
           type="submit"
           disabled={loading}
-          variant="destructive"
-          className="gap-2"
+          className="bg-orange-500 hover:bg-orange-600 text-white"
         >
           {loading ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin mr-2" />
           ) : (
-            <RotateCcw size={14} />
-          )}{" "}
+            <RotateCcw size={14} className="mr-2" />
+          )}
           Return to CID
         </Button>
       </div>
@@ -467,7 +461,7 @@ function ReturnModal({
   );
 }
 
-// ─── Forward to DC modal ──────────────────────────────────────────────────────
+// ─── Forward to DC Modal ──────────────────────────────────────────────────────
 function ForwardDCModal({
   caseItem,
   onSuccess,
@@ -478,13 +472,8 @@ function ForwardDCModal({
   onClose: () => void;
 }) {
   const [commanders, setCommanders] = useState<UserRef[]>([]);
-  const [selected, setSelected] = useState(
-    // Pre-select the already-assigned DC if re-forwarding
-    (caseItem.assignedDC as any)?._id ||
-      (caseItem.assignedDC as unknown as string) ||
-      "",
-  );
-  const [reviewNote, setReviewNote] = useState(caseItem.soReviewNote || "");
+  const [selected, setSelected] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -494,8 +483,6 @@ function ForwardDCModal({
       .then((d) => setCommanders(d.users))
       .catch(() => toast.error("Failed to load District Commanders"));
   }, []);
-
-  const isReforward = caseItem.status === "commander_review";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -529,11 +516,7 @@ function ForwardDCModal({
           }),
         });
       }
-      toast.success(
-        isReforward
-          ? "Case re-forwarded to District Commander"
-          : "Forwarded to District Commander",
-      );
+      toast.success("Forwarded to District Commander — notification sent");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -544,105 +527,76 @@ function ForwardDCModal({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-xs font-mono text-primary mb-1">
-            {caseItem.caseNumber}
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+        <p className="text-xs font-mono font-bold text-purple-700 mb-1">
+          {caseItem.caseNumber}
+        </p>
+        <p className="font-semibold text-gray-900 text-sm">{caseItem.title}</p>
+        {caseItem.assignedOfficer && (
+          <p className="text-xs text-gray-500 mt-1">
+            Investigated by: {caseItem.assignedOfficer.fullName}
           </p>
-          <p className="font-bold text-foreground text-sm">{caseItem.title}</p>
-          {caseItem.assignedOfficer && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Investigated by: {caseItem.assignedOfficer.fullName}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Show existing handoff notes for context */}
-      {caseItem.cidSubmissionNote && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-          <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-            CID Submission Note
-          </p>
-          <p className="text-sm text-foreground">
-            {caseItem.cidSubmissionNote}
-          </p>
-        </div>
-      )}
-
-      {isReforward && (
-        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
-          <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">
-            Already forwarded to DC
-          </p>
-          <p className="text-sm text-muted-foreground">
-            This case is currently at commander review. You can re-assign it to
-            a different commander or update the review note.
-          </p>
-        </div>
-      )}
-
-      <Field label="Assign District Commander *">
+        )}
+      </div>
+      <FormField label="Assign District Commander *">
         <select
-          className={inputBase}
+          className={inputCls}
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
           required
         >
-          <option value="" className="bg-background">
-            — Select Commander —
-          </option>
+          <option value="">— Select Commander —</option>
           {commanders.map((c) => (
-            <option key={c._id} value={c._id} className="bg-background">
+            <option key={c._id} value={c._id}>
               {c.fullName} ({c.email})
             </option>
           ))}
         </select>
-      </Field>
-
-      <Field label="SO Review Note (optional)">
+      </FormField>
+      <FormField label="SO Review Note (optional)">
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={3}
           value={reviewNote}
           onChange={(e) => setReviewNote(e.target.value)}
           placeholder="Summary for the Commander..."
           style={{ resize: "vertical" }}
         />
-      </Field>
-
-      <Field label="Internal Note (optional)">
+      </FormField>
+      <FormField label="Internal Note (optional)">
         <textarea
-          className={inputBase}
+          className={inputCls}
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Additional notes..."
           style={{ resize: "vertical" }}
         />
-      </Field>
-
+      </FormField>
       <FilePicker files={files} onChange={setFiles} />
-
-      <div className="flex justify-end gap-3 pt-2 border-t">
-        <Button type="button" variant="ghost" onClick={onClose}>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={loading || !selected} className="gap-2">
+        <Button
+          type="submit"
+          disabled={loading || !selected}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
           {loading ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin mr-2" />
           ) : (
-            <ArrowUpRight size={14} />
-          )}{" "}
-          {isReforward ? "Re-forward to Commander" : "Forward to Commander"}
+            <ArrowUpRight size={14} className="mr-2" />
+          )}
+          Forward to Commander
         </Button>
       </div>
     </form>
   );
 }
 
-// ─── Detail modal ─────────────────────────────────────────────────────────────
+// ─── Detail Modal ─────────────────────────────────────────────────────────────
 function DetailModal({
   caseItem,
   userId,
@@ -662,8 +616,6 @@ function DetailModal({
   const [noteContent, setNC] = useState("");
   const [noteFiles, setNF] = useState<File[]>([]);
   const [addingNote, setAN] = useState(false);
-
-  const s = STATUS_MAP[caseItem.status] || STATUS_MAP.open;
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -704,8 +656,7 @@ function DetailModal({
       m.fromRole !== "so" &&
       !m.readBy?.includes(userId),
   ).length;
-
-  const tabs = [
+  const TABS = [
     { id: "info", label: "Info" },
     {
       id: "thread",
@@ -717,35 +668,30 @@ function DetailModal({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start gap-2">
+      <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
-          <p className="text-xs font-mono text-primary mb-1">
+          <p className="text-xs font-mono font-bold text-blue-600 mb-1">
             {caseItem.caseNumber}
           </p>
-          <h3 className="text-base font-bold text-foreground">
+          <h3 className="text-base font-bold text-gray-900">
             {caseItem.title}
           </h3>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">
+          <p className="text-xs text-gray-500 mt-1 line-clamp-2">
             {caseItem.description}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <Pill className={s.color}>
-            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-            {s.label}
-          </Pill>
-          <Pill className={PRIORITY_BADGE[caseItem.priority] || ""}>
-            {caseItem.priority}
-          </Pill>
+          <StatusBadge status={caseItem.status} />
+          <PriorityBadge priority={caseItem.priority} />
         </div>
       </div>
 
-      <div className="flex gap-0.5 bg-muted rounded-lg p-1">
-        {tabs.map((t) => (
+      <div className="flex gap-1 border-b border-gray-200">
+        {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold transition-all ${tab === t.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${tab === t.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             {t.label}
           </button>
@@ -756,165 +702,123 @@ function DetailModal({
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             {[
+              { label: "Location", val: caseItem.location },
               {
-                icon: <MapPin size={11} />,
-                label: "Location",
-                val: caseItem.location,
-              },
-              {
-                icon: <Calendar size={11} />,
                 label: "Date Occurred",
                 val: new Date(caseItem.dateOccurred).toLocaleDateString(),
               },
-              {
-                icon: <User size={11} />,
-                label: "Reported By",
-                val: caseItem.reportedBy.name,
-              },
-              {
-                icon: <FileText size={11} />,
-                label: "Category",
-                val: caseItem.category,
-                cap: true,
-              },
+              { label: "Reported By", val: caseItem.reportedBy.name },
+              { label: "Category", val: caseItem.category, cap: true },
               ...(caseItem.loggedBy
-                ? [
-                    {
-                      icon: <User size={11} />,
-                      label: "Logged By",
-                      val: caseItem.loggedBy.fullName,
-                    },
-                  ]
+                ? [{ label: "Logged By", val: caseItem.loggedBy.fullName }]
                 : []),
               ...(caseItem.assignedOfficer
                 ? [
                     {
-                      icon: <Users size={11} />,
                       label: "CID Investigator",
                       val: caseItem.assignedOfficer.fullName,
                     },
                   ]
                 : []),
-              ...(caseItem.assignedDC
-                ? [
-                    {
-                      icon: <Shield size={11} />,
-                      label: "District Commander",
-                      val: (caseItem.assignedDC as any).fullName || "Assigned",
-                    },
-                  ]
-                : []),
-            ].map(({ icon, label, val, cap }) => (
-              <div key={label} className="bg-muted/50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">
-                  {icon}
-                  <span>{label}</span>
-                </div>
+            ].map(({ label, val, cap }) => (
+              <div
+                key={label}
+                className="bg-gray-50 rounded-lg p-3 border border-gray-100"
+              >
+                <p className="text-xs text-gray-400 mb-1">{label}</p>
                 <p
-                  className={`text-foreground text-sm font-medium ${cap ? "capitalize" : ""}`}
+                  className={`text-gray-800 text-sm font-medium ${cap ? "capitalize" : ""}`}
                 >
                   {val}
                 </p>
               </div>
             ))}
           </div>
-
           {caseItem.ncoReferralNote && (
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-blue-700 uppercase mb-1">
                 NCO Referral Note
               </p>
-              <p className="text-sm text-foreground">
+              <p className="text-sm text-gray-700">
                 {caseItem.ncoReferralNote}
               </p>
             </div>
           )}
           {caseItem.cidSubmissionNote && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-yellow-700 uppercase mb-1">
                 CID Submission Note
               </p>
-              <p className="text-sm text-foreground">
+              <p className="text-sm text-gray-700">
                 {caseItem.cidSubmissionNote}
               </p>
             </div>
           )}
           {caseItem.soDirective && (
-            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-destructive uppercase tracking-wider mb-1">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-orange-700 uppercase mb-1">
                 Your Directive (Returned to CID)
               </p>
-              <p className="text-sm text-foreground">{caseItem.soDirective}</p>
+              <p className="text-sm text-gray-700">{caseItem.soDirective}</p>
             </div>
           )}
           {caseItem.soReviewNote && (
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-purple-700 uppercase mb-1">
                 Your Review Note
               </p>
-              <p className="text-sm text-foreground">{caseItem.soReviewNote}</p>
-            </div>
-          )}
-          {caseItem.dcNote && (
-            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
-              <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">
-                DC Decision Note
-              </p>
-              <p className="text-sm text-foreground">{caseItem.dcNote}</p>
+              <p className="text-sm text-gray-700">{caseItem.soReviewNote}</p>
             </div>
           )}
         </div>
       )}
 
-      {tab === "thread" &&
-        (!caseItem.assignedOfficer ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <MessageSquare size={28} className="mb-2 opacity-40" />
-            <p className="text-xs">No CID officer assigned yet.</p>
-          </div>
-        ) : (
-          <SOThreadPanel
-            caseItem={caseItem}
-            userId={userId}
-            userRole={userRole}
-            onRefresh={onRefresh}
-          />
-        ))}
+      {tab === "thread" && (
+        <SOThread
+          caseItem={caseItem}
+          userRole={userRole}
+          onRefresh={onRefresh}
+        />
+      )}
 
       {tab === "notes" && (
         <div className="space-y-3">
-          <div className="space-y-2 max-h-52 overflow-y-auto">
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {caseItem.notes.length === 0 ? (
-              <p className="text-muted-foreground text-xs text-center py-8">
+              <p className="text-gray-400 text-xs text-center py-6">
                 No notes yet.
               </p>
             ) : (
               caseItem.notes.map((n) => (
-                <div key={n._id} className="bg-muted/50 rounded-lg p-3 border">
-                  <div className="flex justify-between items-start mb-1.5">
-                    <span className="text-xs font-semibold text-primary">
+                <div
+                  key={n._id}
+                  className="bg-gray-50 rounded-lg p-3 border border-gray-100"
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-xs font-semibold text-blue-700">
                       {n.addedBy?.fullName || "Unknown"}
                       {n.roleSnapshot && (
-                        <span className="ml-1 font-normal text-muted-foreground">
-                          ({ROLE_LABELS[n.roleSnapshot] || n.roleSnapshot})
+                        <span className="ml-1 font-normal text-gray-400">
+                          ({ROLE_LABELS[n.roleSnapshot]})
                         </span>
                       )}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-gray-400">
                       {new Date(n.addedAt).toLocaleString()}
                     </span>
                   </div>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {n.content}
-                  </p>
+                  <p className="text-sm text-gray-700">{n.content}</p>
                   <AttachmentList attachments={n.attachments} />
                 </div>
               ))
             )}
           </div>
-          <form onSubmit={addNote} className="border-t pt-3 space-y-3">
+          <form
+            onSubmit={addNote}
+            className="border-t border-gray-100 pt-3 space-y-3"
+          >
             <textarea
-              className={inputBase}
+              className={inputCls}
               rows={2}
               value={noteContent}
               onChange={(e) => setNC(e.target.value)}
@@ -925,15 +829,15 @@ function DetailModal({
             <div className="flex justify-end">
               <Button
                 type="submit"
-                disabled={addingNote || !noteContent.trim()}
                 size="sm"
-                className="gap-2"
+                disabled={addingNote || !noteContent.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {addingNote ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin mr-1" />
                 ) : (
-                  <StickyNote size={12} />
-                )}{" "}
+                  <StickyNote size={12} className="mr-1" />
+                )}
                 Add Note
               </Button>
             </div>
@@ -944,31 +848,28 @@ function DetailModal({
       {tab === "parties" && (
         <div className="space-y-4">
           <div>
-            <p className={labelBase}>Suspects ({caseItem.suspects.length})</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+              Suspects ({caseItem.suspects.length})
+            </p>
             {caseItem.suspects.length === 0 ? (
-              <p className="text-muted-foreground text-xs">None recorded.</p>
+              <p className="text-gray-400 text-xs">None recorded.</p>
             ) : (
               caseItem.suspects.map((s, i) => (
                 <div
                   key={i}
-                  className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 mb-2"
+                  className="bg-red-50 border border-red-200 rounded-lg p-3 mb-2"
                 >
-                  <p className="font-semibold text-sm text-foreground">
+                  <p className="font-semibold text-sm">
                     {s.name}
                     {s.age && (
-                      <span className="ml-2 text-xs text-muted-foreground">
+                      <span className="ml-2 text-xs text-gray-500">
                         Age {s.age}
                       </span>
                     )}
                   </p>
                   {s.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-gray-600 mt-0.5">
                       {s.description}
-                    </p>
-                  )}
-                  {s.address && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      📍 {s.address}
                     </p>
                   )}
                 </div>
@@ -976,25 +877,27 @@ function DetailModal({
             )}
           </div>
           <div>
-            <p className={labelBase}>Witnesses ({caseItem.witnesses.length})</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+              Witnesses ({caseItem.witnesses.length})
+            </p>
             {caseItem.witnesses.length === 0 ? (
-              <p className="text-muted-foreground text-xs">None recorded.</p>
+              <p className="text-gray-400 text-xs">None recorded.</p>
             ) : (
               caseItem.witnesses.map((w, i) => (
                 <div
                   key={i}
-                  className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 mb-2"
+                  className="bg-green-50 border border-green-200 rounded-lg p-3 mb-2"
                 >
-                  <p className="font-semibold text-sm text-foreground">
+                  <p className="font-semibold text-sm">
                     {w.name}
                     {w.phone && (
-                      <span className="ml-2 text-xs text-muted-foreground">
+                      <span className="ml-2 text-xs text-gray-500">
                         {w.phone}
                       </span>
                     )}
                   </p>
                   {w.statement && (
-                    <p className="text-xs text-muted-foreground mt-0.5 italic">
+                    <p className="text-xs text-gray-600 mt-0.5 italic">
                       "{w.statement}"
                     </p>
                   )}
@@ -1005,8 +908,8 @@ function DetailModal({
         </div>
       )}
 
-      <div className="flex justify-end border-t pt-3">
-        <Button variant="ghost" onClick={onClose}>
+      <div className="flex justify-end border-t border-gray-100 pt-3">
+        <Button variant="outline" onClick={onClose}>
           Close
         </Button>
       </div>
@@ -1014,33 +917,36 @@ function DetailModal({
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
   sub,
   icon,
   iconBg,
+  valueColor,
 }: {
   label: string;
   value: number | string;
   sub?: string;
   icon: React.ReactNode;
   iconBg: string;
+  valueColor?: string;
 }) {
   return (
-    <Card className="hover:shadow-md transition-shadow duration-200">
+    <Card>
       <CardContent className="pt-6">
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold tracking-tight">
-              {typeof value === "number" ? value.toLocaleString() : value}
+          <div>
+            <p className="text-sm font-medium text-gray-600">{label}</p>
+            <p
+              className={`text-2xl font-bold mt-1 ${valueColor || "text-gray-900"}`}
+            >
+              {value}
             </p>
-            {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+            {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
           </div>
           <div
-            className={`h-12 w-12 rounded-xl flex items-center justify-center ${iconBg}`}
+            className={`h-12 w-12 ${iconBg} rounded-full flex items-center justify-center shrink-0`}
           >
             {icon}
           </div>
@@ -1050,8 +956,7 @@ function StatCard({
   );
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-export default function SoCasesPage() {
+export default function SOCasesPage() {
   const userId = "CURRENT_USER_ID";
   const userRole = "so";
 
@@ -1062,7 +967,6 @@ export default function SoCasesPage() {
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
-
   const [returnCase, setReturnCase] = useState<CaseData | null>(null);
   const [forwardCase, setForwardCase] = useState<CaseData | null>(null);
   const [detailCase, setDetailCase] = useState<CaseData | null>(null);
@@ -1101,9 +1005,6 @@ export default function SoCasesPage() {
   }
 
   const total = pagination?.total || 0;
-
-  // Cases awaiting SO action: either just submitted by CID or already at commander
-  // but the SO may still want to re-forward or return
   const awaitingReview = cases.filter(
     (c) => c.status === "under_review",
   ).length;
@@ -1123,316 +1024,247 @@ export default function SoCasesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        {/* Page header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Scale size={14} className="text-primary" />
-              <span className="text-xs font-bold text-primary uppercase tracking-widest">
-                Station Officer
-              </span>
-            </div>
-            <h1 className="text-2xl font-black tracking-tight text-foreground">
-              Case Reviews
-            </h1>
+    <div className="space-y-6 pt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Scale size={16} className="text-blue-600" />
+            <span className="text-sm font-semibold text-blue-600">
+              Station Officer
+            </span>
           </div>
-          <Button
-            onClick={fetchCases}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            <RefreshCw size={13} /> Refresh
-          </Button>
+          <h1 className="text-2xl font-bold text-gray-900">Case Reviews</h1>
         </div>
+        <Button
+          variant="outline"
+          onClick={fetchCases}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw size={13} /> Refresh
+        </Button>
+      </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Total Cases"
-            value={total}
-            sub="Assigned to you"
-            icon={<Scale className="h-5 w-5 text-blue-600" />}
-            iconBg="bg-blue-100"
-          />
-          <StatCard
-            label="Awaiting Review"
-            value={awaitingReview}
-            sub="Submitted by CID"
-            icon={<Clock className="h-5 w-5 text-violet-600" />}
-            iconBg="bg-violet-100"
-          />
-          <StatCard
-            label="Forwarded to DC"
-            value={forwardedCount}
-            sub="At Commander stage"
-            icon={<ArrowUpRight className="h-5 w-5 text-pink-600" />}
-            iconBg="bg-pink-100"
-          />
-          <StatCard
-            label="Unread Messages"
-            value={unreadCount}
-            sub="From CID"
-            icon={<MessageSquare className="h-5 w-5 text-amber-600" />}
-            iconBg="bg-amber-100"
-          />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Cases"
+          value={total}
+          sub="Assigned to you"
+          icon={<Scale className="h-6 w-6 text-blue-600" />}
+          iconBg="bg-blue-100"
+        />
+        <StatCard
+          label="Awaiting Review"
+          value={awaitingReview}
+          sub="Submitted by CID"
+          icon={<Clock className="h-6 w-6 text-purple-600" />}
+          iconBg="bg-purple-100"
+          valueColor="text-purple-600"
+        />
+        <StatCard
+          label="Forwarded to DC"
+          value={forwardedCount}
+          sub="At Commander stage"
+          icon={<ArrowUpRight className="h-6 w-6 text-orange-600" />}
+          iconBg="bg-orange-100"
+          valueColor="text-orange-600"
+        />
+        <StatCard
+          label="Unread Messages"
+          value={unreadCount}
+          sub="From CID"
+          icon={<MessageSquare className="h-6 w-6 text-yellow-600" />}
+          iconBg="bg-yellow-100"
+          valueColor={unreadCount > 0 ? "text-yellow-600" : "text-gray-900"}
+        />
+      </div>
 
-        {/* Filters */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-3">
-              <div className="relative flex-1 min-w-48">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                  className={`${inputBase} pl-9`}
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search cases…"
-                />
-              </div>
-              <select
-                className={`${inputBase} min-w-40`}
-                value={status}
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-48">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                className={`${inputCls} pl-9`}
+                value={search}
                 onChange={(e) => {
-                  setStatus(e.target.value);
+                  setSearch(e.target.value);
                   setPage(1);
                 }}
-              >
-                <option value="all" className="bg-background">
-                  All Statuses
-                </option>
-                {Object.entries(STATUS_MAP).map(([k, v]) => (
-                  <option key={k} value={k} className="bg-background">
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className={`${inputBase} min-w-36`}
-                value={category}
-                onChange={(e) => {
-                  setCategory(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="all" className="bg-background">
-                  All Categories
-                </option>
-                {CATEGORIES.map((c) => (
-                  <option
-                    key={c}
-                    value={c}
-                    className="bg-background capitalize"
-                  >
-                    {c}
-                  </option>
-                ))}
-              </select>
+                placeholder="Search cases…"
+              />
             </div>
-          </CardContent>
-        </Card>
+            <select
+              className={`${inputCls} min-w-40`}
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">All Statuses</option>
+              {Object.entries(STATUS_MAP).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={`${inputCls} min-w-36`}
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">All Categories</option>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c} className="capitalize">
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Cases list */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Scale size={16} className="text-muted-foreground" />
-              Cases Under Review ({total})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-7 w-7 animate-spin text-primary" />
-              </div>
-            ) : cases.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <Scale size={36} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm">No cases assigned to you for review.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {cases.map((c) => {
-                  const s = STATUS_MAP[c.status] || STATUS_MAP.open;
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Scale size={16} className="text-blue-600" />
+            Cases Under Review ({total})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+            </div>
+          ) : cases.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <Scale size={36} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No cases assigned to you for review.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {cases.map((c) => {
+                const canReview = c.status === "under_review";
+                const unread = (c.threadMessages || []).filter(
+                  (m) =>
+                    m.thread === "cid_so" &&
+                    m.fromRole !== "so" &&
+                    !m.readBy?.includes(userId),
+                ).length;
 
-                  // SO can act on a case when:
-                  //  - CID just submitted it for review (under_review) → Return or Forward
-                  //  - Already forwarded to DC (commander_review) → can still re-forward
-                  //    to a different commander or update the review note
-                  const canReturn = c.status === "under_review";
-                  const canForward =
-                    c.status === "under_review" ||
-                    c.status === "commander_review";
-
-                  const unread = (c.threadMessages || []).filter(
-                    (m) =>
-                      m.thread === "cid_so" &&
-                      m.fromRole !== "so" &&
-                      !m.readBy?.includes(userId),
-                  ).length;
-
-                  return (
+                return (
+                  <div
+                    key={c._id}
+                    className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${canReview ? "bg-purple-50 border-purple-200" : "bg-white border-gray-200 hover:border-blue-200 hover:shadow-sm"}`}
+                  >
                     <div
-                      key={c._id}
-                      className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
-                        c.status === "under_review"
-                          ? "bg-primary/5 border-primary/20"
-                          : c.status === "commander_review"
-                            ? "bg-indigo-500/5 border-indigo-500/20"
-                            : "bg-muted/40 hover:border-border"
-                      }`}
-                    >
-                      <div
-                        className={`w-0.5 h-10 rounded-full shrink-0 ${PRIORITY_STRIPE[c.priority] || "bg-muted-foreground/30"}`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center flex-wrap gap-2 mb-1">
-                          <span className="text-xs font-mono font-bold text-primary">
-                            {c.caseNumber}
+                      className={`w-1 h-12 rounded-full shrink-0 ${PRIORITY_LEFT[c.priority] || "bg-gray-300"}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center flex-wrap gap-2 mb-1">
+                        <span className="text-xs font-mono font-bold text-blue-600">
+                          {c.caseNumber}
+                        </span>
+                        <PriorityBadge priority={c.priority} />
+                        <StatusBadge status={c.status} />
+                        {canReview && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
+                            <CheckCircle2 size={9} />
+                            Needs Review
                           </span>
-                          <Pill className={PRIORITY_BADGE[c.priority] || ""}>
-                            {c.priority}
-                          </Pill>
-                          <Pill className={s.color}>
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${s.dot}`}
-                            />
-                            {s.label}
-                          </Pill>
-                          {c.status === "under_review" && (
-                            <Pill className="text-primary bg-primary/10 border-primary/20">
-                              <CheckCircle2 size={9} />
-                              Needs Review
-                            </Pill>
-                          )}
-                          {c.status === "commander_review" && (
-                            <Pill className="text-indigo-600 bg-indigo-500/10 border-indigo-500/20">
-                              <Shield size={9} />
-                              At Commander
-                            </Pill>
-                          )}
-                          {unread > 0 && (
-                            <Pill className="text-primary bg-primary/10 border-primary/20">
-                              <MessageSquare size={9} />
-                              {unread} new
-                            </Pill>
-                          )}
-                        </div>
-                        <p className="font-bold text-foreground text-sm truncate">
-                          {c.title}
-                        </p>
-                        <div className="flex flex-wrap gap-3 mt-0.5">
-                          <span className="text-xs text-muted-foreground capitalize">
-                            {c.category}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            📍 {c.location}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            👤 {c.reportedBy.name}
-                          </span>
-                          {c.assignedOfficer && (
-                            <span className="text-xs text-muted-foreground">
-                              🔍 {c.assignedOfficer.fullName}
-                            </span>
-                          )}
-                          {c.assignedDC && (
-                            <span className="text-xs text-muted-foreground">
-                              🎖️{" "}
-                              {(c.assignedDC as any).fullName || "DC Assigned"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 hidden sm:block">
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(c.createdAt).toLocaleDateString()}
-                        </p>
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">
-                          {c.notes.length} notes
-                        </p>
-                      </div>
-
-                      {/* ── Action buttons ────────────────────────────────── */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          title="View details"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDetailCase(c)}
-                          className="h-9 w-9"
-                        >
-                          <Eye size={15} />
-                        </Button>
-
-                        {/* Return to CID — only when case is under_review */}
-                        {canReturn && (
-                          <Button
-                            onClick={() => setReturnCase(c)}
-                            size="sm"
-                            variant="destructive"
-                            className="gap-1.5"
-                          >
-                            <RotateCcw size={12} /> Return
-                          </Button>
                         )}
-
-                        {/* Forward to DC — available for under_review AND commander_review */}
-                        {canForward && (
-                          <Button
-                            onClick={() => setForwardCase(c)}
-                            size="sm"
-                            variant={
-                              c.status === "commander_review"
-                                ? "outline"
-                                : "default"
-                            }
-                            className="gap-1.5"
-                          >
-                            <ArrowUpRight size={12} />
-                            {c.status === "commander_review"
-                              ? "Re-forward"
-                              : "Forward"}
-                          </Button>
+                        {unread > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-600 text-white">
+                            <MessageSquare size={9} />
+                            {unread} new
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-semibold text-gray-900 text-sm truncate">
+                        {c.title}
+                      </p>
+                      <div className="flex flex-wrap gap-3 mt-0.5">
+                        <span className="text-xs text-gray-500 capitalize">
+                          {c.category}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          📍 {c.location}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          👤 {c.reportedBy.name}
+                        </span>
+                        {c.assignedOfficer && (
+                          <span className="text-xs text-gray-400">
+                            🔍 {c.assignedOfficer.fullName}
+                          </span>
                         )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <div className="text-right shrink-0 hidden sm:block">
+                      <p className="text-xs text-gray-400">
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </p>
+                      <p className="text-xs text-gray-300 mt-0.5">
+                        {c.notes.length} notes
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => setDetailCase(c)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <Eye size={15} />
+                      </button>
+                      {canReview && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => setReturnCase(c)}
+                            className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8 px-3"
+                          >
+                            <RotateCcw size={12} className="mr-1" />
+                            Return
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => setForwardCase(c)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 px-3"
+                          >
+                            <ArrowUpRight size={12} className="mr-1" />
+                            Forward
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {pagination && pagination.pages > 1 && (
+            <div className="flex justify-center gap-1 mt-6">
+              {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
+                (p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${p === page ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-            {pagination && pagination.pages > 1 && (
-              <div className="flex justify-center gap-1 mt-6">
-                {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
-                  (p) => (
-                    <Button
-                      key={p}
-                      variant={p === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPage(p)}
-                      className="w-8 h-8 text-xs font-bold"
-                    >
-                      {p}
-                    </Button>
-                  ),
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Modals */}
       {returnCase && (
         <Modal
           title={`Return to CID — ${returnCase.caseNumber}`}
@@ -1447,11 +1279,7 @@ export default function SoCasesPage() {
       )}
       {forwardCase && (
         <Modal
-          title={
-            forwardCase.status === "commander_review"
-              ? `Re-forward to Commander — ${forwardCase.caseNumber}`
-              : `Forward to Commander — ${forwardCase.caseNumber}`
-          }
+          title={`Forward to Commander — ${forwardCase.caseNumber}`}
           onClose={() => setForwardCase(null)}
         >
           <ForwardDCModal

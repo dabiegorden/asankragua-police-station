@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CidLinks } from "@/constants";
+import { FileText, Home, HomeIcon, Users } from "lucide-react";
 
 interface toggleSidebar {
   toggleSidebar?: () => void;
@@ -12,12 +12,20 @@ interface toggleSidebar {
 const SoSidebar = ({ toggleSidebar }: toggleSidebar) => {
   const pathname = usePathname();
 
+  // Links defined directly in the component
+  const StationOfficerLinks = [
+    { id: 1, url: "/so-dashboard", title: "Dashboard", icon: Home },
+    { id: 2, url: "/so-dashboard/cases", title: "Cases", icon: FileText },
+    { id: 3, url: "/so-dashboard/profile", title: "Profile", icon: Users },
+    { id: 4, url: "/", title: "Home", icon: HomeIcon },
+  ];
+
   return (
     <div className="flex flex-col h-full w-full bg-slate-950 text-white shadow-xl">
       {/* Sidebar Content */}
       <div className="flex-1 py-6 h-full overflow-y-auto">
         <nav className="px-3 space-y-2">
-          {CidLinks.map((item) => {
+          {StationOfficerLinks.map((item) => {
             const isActive =
               pathname === item.url ||
               (pathname && pathname.startsWith(`${item.url}/`));

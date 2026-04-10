@@ -5,11 +5,7 @@ import { connectDB } from "@/lib/db";
 import Case from "@/models/Case";
 import { requireAuth } from "@/middleware/auth";
 import { parseAttachments } from "@/lib/parseAttachments";
-import mongoose from "mongoose";
 
-console.log("DB STATE:", mongoose.connection.readyState);
-
-// ─── Shared populate ──────────────────────────────────────────────────────────
 export async function populateCase(id: string) {
   return Case.findById(id)
     .populate("loggedBy", "fullName email role")
@@ -22,19 +18,8 @@ export async function populateCase(id: string) {
 
 // ─── GET — list cases (role-scoped) ──────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  // console.log("HEADERS:", req.headers.get("cookie"));
-  const auth = requireAuth(req);
-
-  if (!auth.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const { user, error } = requireAuth(req);
   if (error) return error;
-
-  if (error) {
-    console.error("AUTH ERROR:", error);
-    return error;
-  }
 
   try {
     await connectDB();
@@ -49,23 +34,18 @@ export async function GET(req: NextRequest) {
 
     const query: Record<string, unknown> = {};
 
-    // ── Role-scoped visibility ────────────────────────────────────────────────
     switch (user.role) {
       case "nco":
-        // NCO sees cases they logged OR cases still at NCO stage
         query.$or = [{ loggedBy: user.userId }, { currentStage: "nco" }];
         break;
       case "cid":
-        // CID only sees cases assigned to them
         query.assignedOfficer = user.userId;
         break;
       case "so":
-        // SO sees cases assigned to them or at SO stage
         query.$or = [{ assignedSO: user.userId }, { currentStage: "so" }];
         break;
       case "dc":
       case "admin":
-        // Full visibility
         break;
     }
 
@@ -118,13 +98,10 @@ export async function GET(req: NextRequest) {
 }
 
 // ─── POST — create new case ───────────────────────────────────────────────────
-// Accepts multipart/form-data OR application/json.
-// File fields: attachments[] (optional)
 export async function POST(req: NextRequest) {
   const { user, error } = requireAuth(req);
   if (error) return error;
 
-  // Only NCO, SO, and admin can log new cases
   if (!["nco", "so", "admin", "dc"].includes(user.role)) {
     return NextResponse.json(
       { error: "Only NCO or Station Officers can log new cases" },
@@ -148,23 +125,18 @@ export async function POST(req: NextRequest) {
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
-
-      // Extract scalar fields
       for (const [key, val] of formData.entries()) {
         if (typeof val === "string") {
           try {
-            fields[key] = JSON.parse(val); // handles arrays / objects sent as JSON strings
+            fields[key] = JSON.parse(val);
           } catch {
             fields[key] = val;
           }
         }
       }
-
-      // Upload any attached files to Cloudinary
       const files = formData.getAll("attachments") as File[];
-      if (files.length > 0) {
+      if (files.length > 0)
         uploadedAttachments = await parseAttachments(files, "cases");
-      }
     } else {
       fields = await req.json();
     }
@@ -209,7 +181,7 @@ export async function POST(req: NextRequest) {
       dateOccurred: new Date(dateOccurred),
       suspects: suspects || [],
       witnesses: witnesses || [],
-      loggedBy: user!.userId,
+      loggedBy: user.userId,
       currentStage: "nco",
       status: "open",
       attachments: uploadedAttachments,
@@ -218,8 +190,8 @@ export async function POST(req: NextRequest) {
     if (typeof initialNote === "string" && initialNote.trim()) {
       newCase.notes.push({
         content: initialNote.trim(),
-        addedBy: user!.userId,
-        roleSnapshot: user!.role,
+        addedBy: user.userId,
+        roleSnapshot: user.role,
         addedAt: new Date(),
         attachments: [],
       });
