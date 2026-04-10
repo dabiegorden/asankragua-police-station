@@ -361,7 +361,7 @@ const ContactManagement = () => {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px] relative">
+            <div className="flex-1 min-w-50 relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search contacts…"
@@ -372,7 +372,7 @@ const ContactManagement = () => {
             </div>
 
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
@@ -386,7 +386,7 @@ const ContactManagement = () => {
             </Select>
 
             <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="All Priorities" />
               </SelectTrigger>
               <SelectContent>
@@ -457,7 +457,7 @@ const ContactManagement = () => {
                           <div className="flex items-center space-x-2">
                             <User className="w-4 h-4 text-gray-400 shrink-0" />
                             <span
-                              className="truncate max-w-[120px]"
+                              className="truncate max-w-30"
                               title={contact.name}
                             >
                               {contact.name}
@@ -470,7 +470,7 @@ const ContactManagement = () => {
                           <div className="flex items-center space-x-2">
                             <Mail className="w-4 h-4 text-gray-400 shrink-0" />
                             <span
-                              className="text-sm truncate max-w-[150px]"
+                              className="text-sm truncate max-w-38"
                               title={contact.email}
                             >
                               {contact.email}
@@ -480,7 +480,7 @@ const ContactManagement = () => {
 
                         {/* Subject */}
                         <td
-                          className="p-2 max-w-[160px] truncate"
+                          className="p-2 max-w-40 truncate"
                           title={contact.subject}
                         >
                           {contact.subject}

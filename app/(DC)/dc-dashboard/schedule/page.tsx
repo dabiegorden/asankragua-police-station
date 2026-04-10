@@ -1015,7 +1015,7 @@ const SchedulePage = () => {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px] relative">
+            <div className="flex-1 min-w-50 relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search by title, location, description..."
@@ -1025,7 +1025,7 @@ const SchedulePage = () => {
               />
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-37.5">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
@@ -1038,7 +1038,7 @@ const SchedulePage = () => {
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -1122,7 +1122,7 @@ const SchedulePage = () => {
                           {schedule.title}
                         </p>
                         {schedule.description && (
-                          <p className="text-xs text-gray-400 truncate max-w-[180px]">
+                          <p className="text-xs text-gray-400 truncate max-w-45">
                             {schedule.description}
                           </p>
                         )}
@@ -1172,7 +1172,7 @@ const SchedulePage = () => {
                       <td className="p-3">
                         <div className="flex items-center gap-1.5 text-gray-600">
                           <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                          <span className="truncate max-w-[120px]">
+                          <span className="truncate max-w-30">
                             {schedule.location}
                           </span>
                         </div>

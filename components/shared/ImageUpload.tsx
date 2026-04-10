@@ -6,15 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
+interface ImageUploadProps {
+  value: string;
+  onChange: (url: string) => void;
+  folder?: string;
+  disabled?: boolean;
+}
+
 export default function ImageUpload({
   value,
   onChange,
   folder = "police-management",
   disabled = false,
-}) {
+}: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleUpload = (result) => {
+  const handleUpload = (result: any) => {
     if (result.event === "success") {
       onChange(result.info.secure_url);
       toast.success("Image uploaded successfully");
@@ -80,8 +87,8 @@ export default function ImageUpload({
               {isUploading
                 ? "Uploading..."
                 : value
-                ? "Change Image"
-                : "Upload Image"}
+                  ? "Change Image"
+                  : "Upload Image"}
             </Button>
           )}
         </CldUploadWidget>

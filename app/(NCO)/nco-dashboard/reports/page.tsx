@@ -296,7 +296,7 @@ const Reports = () => {
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-8 pt-12 pb-16 max-w-screen-xl mx-auto px-4">
+    <div className="space-y-8 pt-12 pb-16 max-w-7xl mx-auto px-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -639,7 +639,7 @@ const Reports = () => {
                               <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
                                 {str(item.caseNumber)}
                               </td>
-                              <td className="py-2 px-3 max-w-[200px] truncate">
+                              <td className="py-2 px-3 max-w-50 truncate">
                                 {str(item.title)}
                               </td>
                               <td className="py-2 px-3">
