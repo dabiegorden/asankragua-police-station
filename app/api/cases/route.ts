@@ -22,7 +22,7 @@ export async function populateCase(id: string) {
 
 // ─── GET — list cases (role-scoped) ──────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  console.log("HEADERS:", req.headers.get("cookie"));
+  // console.log("HEADERS:", req.headers.get("cookie"));
   const auth = requireAuth(req);
 
   if (!auth.user) {
