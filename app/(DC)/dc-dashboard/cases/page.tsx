@@ -225,7 +225,6 @@ function DCThreadPanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs.length]);
 
-  // Build selectable recipients based on who's been assigned
   const recipients: { role: string; label: string }[] = [];
   if (caseItem.loggedBy)
     recipients.push({
@@ -290,12 +289,13 @@ function DCThreadPanel({
   }
 
   return (
-    <div className="flex flex-col h-72">
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+    <div className="flex flex-col min-h-0" style={{ height: "100%" }}>
+      {/* Message list — scrolls independently, never bleeds out */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pr-1 min-h-40 max-h-80">
         {msgs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+          <div className="flex flex-col items-center justify-center h-full py-8 text-gray-400">
             <MessageSquare size={28} className="mb-2 opacity-40" />
-            <p className="text-xs">
+            <p className="text-xs text-center">
               No DC messages sent yet. Use this to communicate with the team.
             </p>
           </div>
@@ -341,32 +341,38 @@ function DCThreadPanel({
         <div ref={bottomRef} />
       </div>
 
+      {/* Compose area — fixed at bottom, never squished */}
       {recipients.length > 0 ? (
-        <form
-          onSubmit={send}
-          className="border-t border-gray-100 pt-3 mt-3 space-y-2"
-        >
+        <div className="border-t border-gray-100 pt-3 mt-3 space-y-2 shrink-0">
           <FilePicker files={files} onChange={setFiles} />
+          {/* Recipient selector — full width on its own row */}
+          <select
+            className={`${inputCls} w-full`}
+            value={toRole}
+            onChange={(e) => setToRole(e.target.value)}
+          >
+            {recipients.map((r) => (
+              <option key={r.role} value={r.role}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          {/* Message input + send on its own row */}
           <div className="flex gap-2">
-            <select
-              className={`${inputCls} shrink-0 w-48`}
-              value={toRole}
-              onChange={(e) => setToRole(e.target.value)}
-            >
-              {recipients.map((r) => (
-                <option key={r.role} value={r.role}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
             <input
               className={`${inputCls} flex-1`}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Send directive or message…"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send(e as any);
+                }
+              }}
             />
             <button
-              type="submit"
+              onClick={send}
               disabled={sending || !content.trim()}
               className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
             >
@@ -377,9 +383,9 @@ function DCThreadPanel({
               )}
             </button>
           </div>
-        </form>
+        </div>
       ) : (
-        <p className="text-xs text-gray-400 text-center pt-3 border-t border-gray-100">
+        <p className="text-xs text-gray-400 text-center pt-3 mt-3 border-t border-gray-100 shrink-0">
           No participants assigned yet to message.
         </p>
       )}
@@ -1305,7 +1311,7 @@ export default function DCCasesPage() {
           {pagination && pagination.pages > 1 && (
             <div className="flex justify-center gap-1 mt-6">
               {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
-                (p) => (
+                (p: any) => (
                   <button
                     key={p}
                     onClick={() => setPage(p)}
