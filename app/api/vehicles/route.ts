@@ -81,24 +81,18 @@ async function createVehicle(request: NextRequest) {
       licensePlate,
       make,
       model,
-      year,
-      color,
       type,
-      vin,
       mileage,
       fuelLevel,
       status,
-      insuranceDetails,
-      registrationDetails,
       equipment,
       notes,
     } = body;
 
-    if (!licensePlate || !make || !model || !year || !color || !type) {
+    if (!licensePlate || !make || !model || !type) {
       return NextResponse.json(
         {
-          error:
-            "Required fields: licensePlate, make, model, year, color, type",
+          error: "Required fields: licensePlate, make, model, type",
         },
         { status: 400 },
       );
@@ -112,16 +106,6 @@ async function createVehicle(request: NextRequest) {
       );
     }
 
-    if (vin) {
-      const vinExists = await Vehicle.findOne({ vin });
-      if (vinExists) {
-        return NextResponse.json(
-          { error: "Vehicle with this VIN already exists" },
-          { status: 400 },
-        );
-      }
-    }
-
     const yearNow = new Date().getFullYear();
     const count = await Vehicle.countDocuments();
     const vehicleNumber = `VEH-${yearNow}-${String(count + 1).padStart(4, "0")}`;
@@ -131,15 +115,10 @@ async function createVehicle(request: NextRequest) {
       licensePlate,
       make,
       model,
-      year,
-      color,
       type,
-      vin: vin || undefined,
       mileage: mileage || 0,
-      fuelLevel: fuelLevel !== undefined ? fuelLevel : 100,
+      fuelLevel: fuelLevel || "",
       status: status || "available",
-      insuranceDetails: insuranceDetails || {},
-      registrationDetails: registrationDetails || {},
       equipment: equipment || [],
       notes: notes || "",
     });
@@ -154,7 +133,9 @@ async function createVehicle(request: NextRequest) {
     console.error("Create vehicle error:", err);
 
     if (err instanceof Error && err.name === "ValidationError") {
-      const messages = Object.values((err as any).errors).map((e: any) => (e as any).message);
+      const messages = Object.values((err as any).errors).map(
+        (e: any) => (e as any).message,
+      );
       return NextResponse.json(
         { error: `Validation failed: ${messages.join(", ")}` },
         { status: 400 },

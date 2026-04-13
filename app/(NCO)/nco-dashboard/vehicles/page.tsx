@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,38 +36,23 @@ import {
   Wrench,
   Droplet,
   ClipboardList,
-  Shield,
-  CreditCard,
-  Hash,
-  PaintBucket,
-  Gauge,
   Package,
   AlertCircle,
-  CheckCircle,
   Clock,
+  MapPin,
+  RotateCcw,
+  Hash,
+  Gauge,
 } from "lucide-react";
 
 // ==================== TypeScript Interfaces ====================
 
-interface User {
+interface UserRef {
   _id: string;
   firstName: string;
   lastName: string;
   badgeNumber?: string;
   email?: string;
-}
-
-interface InsuranceDetails {
-  provider: string;
-  policyNumber: string;
-  expiryDate: string;
-  coverage: string;
-}
-
-interface RegistrationDetails {
-  registrationNumber: string;
-  expiryDate: string;
-  registeredTo: string;
 }
 
 interface MaintenanceRecord {
@@ -87,17 +72,29 @@ interface FuelRecord {
   amount: number;
   cost: number;
   mileage: number;
-  filledBy: User | string;
+  filledBy: UserRef | string;
 }
 
 interface AssignmentRecord {
   _id?: string;
-  assignedTo: User | string;
+  assignedTo: UserRef | string;
   assignedDate: string;
   returnedDate?: string;
   purpose: string;
   startMileage: number;
   endMileage?: number;
+}
+
+interface ReturnRecord {
+  _id?: string;
+  returnedDate: string;
+  location: string;
+  driverName: string;
+  duty: string;
+  fuelLevelOnReturn: string;
+  returnTime: string;
+  conditionNotes: string;
+  returnedBy?: UserRef | string;
 }
 
 interface Equipment {
@@ -112,19 +109,15 @@ interface Vehicle {
   licensePlate: string;
   make: string;
   model: string;
-  year: number;
-  color: string;
   type: "patrol-car" | "motorcycle" | "van" | "truck" | "suv" | "other";
-  vin?: string;
   mileage: number;
-  fuelLevel: number;
+  fuelLevel: string;
   status: "available" | "in-use" | "maintenance" | "out-of-service";
-  currentDriver?: User | string;
-  insuranceDetails: InsuranceDetails;
-  registrationDetails: RegistrationDetails;
+  currentDriver?: UserRef | string;
   maintenanceHistory: MaintenanceRecord[];
   fuelHistory: FuelRecord[];
   assignmentHistory: AssignmentRecord[];
+  returnHistory: ReturnRecord[];
   equipment: Equipment[];
   notes: string;
   createdAt?: string;
@@ -135,17 +128,22 @@ interface VehicleFormData {
   licensePlate: string;
   make: string;
   model: string;
-  year: string;
-  color: string;
   type: string;
-  vin: string;
   mileage: number;
-  fuelLevel: number;
+  fuelLevel: string;
   status: string;
-  insuranceDetails: InsuranceDetails;
-  registrationDetails: RegistrationDetails;
   equipment: Equipment[];
   notes: string;
+}
+
+interface ReturnFormData {
+  location: string;
+  driverName: string;
+  duty: string;
+  fuelLevelOnReturn: string;
+  returnTime: string;
+  conditionNotes: string;
+  endMileage: number;
 }
 
 interface VehiclesResponse {
@@ -159,7 +157,7 @@ interface VehiclesResponse {
 }
 
 interface PersonnelResponse {
-  personnel: User[];
+  personnel: UserRef[];
 }
 
 // ==================== Constants ====================
@@ -168,26 +166,22 @@ const EMPTY_FORM: VehicleFormData = {
   licensePlate: "",
   make: "",
   model: "",
-  year: "",
-  color: "",
   type: "",
-  vin: "",
   mileage: 0,
-  fuelLevel: 100,
+  fuelLevel: "",
   status: "available",
-  insuranceDetails: {
-    provider: "",
-    policyNumber: "",
-    expiryDate: "",
-    coverage: "",
-  },
-  registrationDetails: {
-    registrationNumber: "",
-    expiryDate: "",
-    registeredTo: "",
-  },
   equipment: [],
   notes: "",
+};
+
+const EMPTY_RETURN_FORM: ReturnFormData = {
+  location: "",
+  driverName: "",
+  duty: "",
+  fuelLevelOnReturn: "",
+  returnTime: "",
+  conditionNotes: "",
+  endMileage: 0,
 };
 
 const VEHICLE_TYPES = [
@@ -206,7 +200,6 @@ const STATUSES = [
   "out-of-service",
 ] as const;
 
-type VehicleType = (typeof VEHICLE_TYPES)[number];
 type VehicleStatus = (typeof STATUSES)[number];
 
 const STATUS_COLORS: Record<VehicleStatus, string> = {
@@ -232,19 +225,11 @@ const EQUIPMENT_CONDITION_COLORS = {
 
 // ==================== Helper Functions ====================
 
-const formatStatus = (status: string): string => {
-  return status.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-};
+const formatStatus = (status: string): string =>
+  status.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-const getStatusColor = (status: VehicleStatus): string => {
-  return STATUS_COLORS[status] || "bg-gray-100 text-gray-800";
-};
-
-const getFuelLevelColor = (level: number): string => {
-  if (level > 50) return "text-green-600";
-  if (level > 25) return "text-yellow-600";
-  return "text-red-600";
-};
+const getStatusColor = (status: VehicleStatus): string =>
+  STATUS_COLORS[status] || "bg-gray-100 text-gray-800";
 
 const getToken = (): string | null => localStorage.getItem("token");
 
@@ -253,11 +238,190 @@ const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString();
 };
 
-const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
+const formatCurrency = (amount: number): string =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    amount,
+  );
+
+// ==================== Vehicle Return Modal ====================
+
+interface VehicleReturnModalProps {
+  vehicle: Vehicle | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (vehicleId: string, data: ReturnFormData) => Promise<void>;
+  submitting: boolean;
+}
+
+const VehicleReturnModal = ({
+  vehicle,
+  open,
+  onOpenChange,
+  onSubmit,
+  submitting,
+}: VehicleReturnModalProps) => {
+  const [form, setForm] = useState<ReturnFormData>(EMPTY_RETURN_FORM);
+
+  useEffect(() => {
+    if (open && vehicle) {
+      setForm({
+        ...EMPTY_RETURN_FORM,
+        endMileage: vehicle.mileage,
+        returnTime: new Date().toTimeString().slice(0, 5),
+      });
+    }
+  }, [open, vehicle]);
+
+  if (!vehicle) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.location || !form.driverName || !form.duty) {
+      toast.error("Location, driver name and duty are required");
+      return;
+    }
+    await onSubmit(vehicle._id, form);
+    setForm(EMPTY_RETURN_FORM);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <RotateCcw className="w-5 h-5 text-blue-600" />
+            Return Vehicle — {vehicle.licensePlate}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <Label htmlFor="ret-location">
+                Return Location <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative mt-1">
+                <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                <Input
+                  id="ret-location"
+                  className="pl-9"
+                  placeholder="e.g. Central Station, Depot A"
+                  value={form.location}
+                  onChange={(e) =>
+                    setForm({ ...form, location: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-driver">
+                Name of Driver <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative mt-1">
+                <User className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                <Input
+                  id="ret-driver"
+                  className="pl-9"
+                  placeholder="Full name of returning driver"
+                  value={form.driverName}
+                  onChange={(e) =>
+                    setForm({ ...form, driverName: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-duty">
+                Duty / Assignment <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="ret-duty"
+                placeholder="e.g. Town Patrol, Airport Escort"
+                value={form.duty}
+                onChange={(e) => setForm({ ...form, duty: e.target.value })}
+                required
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="ret-fuel">Fuel Level on Return</Label>
+              <Input
+                id="ret-fuel"
+                placeholder="e.g. Half, Full, Quarter"
+                value={form.fuelLevelOnReturn}
+                onChange={(e) =>
+                  setForm({ ...form, fuelLevelOnReturn: e.target.value })
+                }
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="ret-time">Return Time</Label>
+              <Input
+                id="ret-time"
+                type="time"
+                value={form.returnTime}
+                onChange={(e) =>
+                  setForm({ ...form, returnTime: e.target.value })
+                }
+                className="mt-1"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-mileage">End Mileage (km)</Label>
+              <Input
+                id="ret-mileage"
+                type="number"
+                min={vehicle.mileage}
+                value={form.endMileage}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    endMileage: parseInt(e.target.value) || 0,
+                  })
+                }
+                className="mt-1"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-notes">Condition Notes</Label>
+              <Textarea
+                id="ret-notes"
+                placeholder="Any damage, issues, or observations..."
+                value={form.conditionNotes}
+                onChange={(e) =>
+                  setForm({ ...form, conditionNotes: e.target.value })
+                }
+                rows={3}
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Return
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 };
 
 // ==================== Vehicle Details Modal ====================
@@ -274,7 +438,7 @@ const VehicleDetailsModal = ({
   onOpenChange,
 }: VehicleDetailsModalProps) => {
   const [activeTab, setActiveTab] = useState<
-    "details" | "maintenance" | "fuel" | "assignments" | "equipment"
+    "details" | "maintenance" | "fuel" | "assignments" | "returns" | "equipment"
   >("details");
 
   if (!vehicle) return null;
@@ -282,46 +446,32 @@ const VehicleDetailsModal = ({
   const driver =
     typeof vehicle.currentDriver === "object" ? vehicle.currentDriver : null;
 
-  const isExpiringSoon = (date: string) => {
-    if (!date) return false;
-    const expiryDate = new Date(date);
-    const today = new Date();
-    const daysUntilExpiry = Math.ceil(
-      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    return daysUntilExpiry <= 30 && daysUntilExpiry > 0;
-  };
-
-  const isExpired = (date: string) => {
-    if (!date) return false;
-    return new Date(date) < new Date();
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-2xl">
             <Car className="w-6 h-6" />
-            {vehicle.licensePlate} - {vehicle.make} {vehicle.model}
+            {vehicle.licensePlate} — {vehicle.make} {vehicle.model}
           </DialogTitle>
         </DialogHeader>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b pb-2">
+        <div className="flex flex-wrap gap-2 border-b pb-2">
           {[
             { id: "details", label: "Details", icon: FileText },
             { id: "maintenance", label: "Maintenance", icon: Wrench },
             { id: "fuel", label: "Fuel Records", icon: Droplet },
             { id: "assignments", label: "Assignments", icon: ClipboardList },
+            { id: "returns", label: "Returns", icon: RotateCcw },
             { id: "equipment", label: "Equipment", icon: Package },
           ].map((tab) => (
             <Button
               key={tab.id}
               variant={activeTab === tab.id ? "default" : "outline"}
               size="sm"
-              onClick={() => setActiveTab(tab.id as any)}
-              className="gap-2"
+              onClick={() => setActiveTab(tab.id as typeof activeTab)}
+              className="gap-1"
             >
               <tab.icon className="w-4 h-4" />
               {tab.label}
@@ -329,11 +479,11 @@ const VehicleDetailsModal = ({
           ))}
         </div>
 
-        {/* Content */}
+        {/* Tab Content */}
         <div className="space-y-4">
+          {/* ---- DETAILS ---- */}
           {activeTab === "details" && (
             <div className="space-y-6">
-              {/* Basic Info */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs text-gray-500 flex items-center gap-1">
@@ -350,20 +500,10 @@ const VehicleDetailsModal = ({
                   <p className="font-medium">{vehicle.licensePlate}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-500 flex items-center gap-1">
-                    <PaintBucket className="w-3 h-3" /> Color
-                  </Label>
-                  <p>{vehicle.color}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500">Make/Model</Label>
+                  <Label className="text-xs text-gray-500">Make / Model</Label>
                   <p>
                     {vehicle.make} {vehicle.model}
                   </p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500">Year</Label>
-                  <p>{vehicle.year}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-gray-500">Type</Label>
@@ -379,9 +519,7 @@ const VehicleDetailsModal = ({
                   <Label className="text-xs text-gray-500 flex items-center gap-1">
                     <Fuel className="w-3 h-3" /> Fuel Level
                   </Label>
-                  <p className={getFuelLevelColor(vehicle.fuelLevel)}>
-                    {vehicle.fuelLevel}%
-                  </p>
+                  <p className="font-medium">{vehicle.fuelLevel || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-gray-500">Status</Label>
@@ -391,12 +529,6 @@ const VehicleDetailsModal = ({
                     {formatStatus(vehicle.status)}
                   </Badge>
                 </div>
-                {vehicle.vin && (
-                  <div className="space-y-1 col-span-2">
-                    <Label className="text-xs text-gray-500">VIN</Label>
-                    <p className="font-mono text-sm">{vehicle.vin}</p>
-                  </div>
-                )}
                 {driver && (
                   <div className="space-y-1 col-span-2">
                     <Label className="text-xs text-gray-500 flex items-center gap-1">
@@ -409,107 +541,6 @@ const VehicleDetailsModal = ({
                 )}
               </div>
 
-              {/* Insurance Details */}
-              <div className="border-t pt-4">
-                <h3 className="font-semibold flex items-center gap-2 mb-3">
-                  <Shield className="w-4 h-4" /> Insurance Details
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Provider</Label>
-                    <p>{vehicle.insuranceDetails?.provider || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">
-                      Policy Number
-                    </Label>
-                    <p>{vehicle.insuranceDetails?.policyNumber || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> Expiry Date
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <span>
-                        {formatDate(vehicle.insuranceDetails?.expiryDate)}
-                      </span>
-                      {isExpiringSoon(vehicle.insuranceDetails?.expiryDate) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-yellow-100 text-yellow-800"
-                        >
-                          Expiring Soon
-                        </Badge>
-                      )}
-                      {isExpired(vehicle.insuranceDetails?.expiryDate) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-red-100 text-red-800"
-                        >
-                          Expired
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Coverage</Label>
-                    <p>{vehicle.insuranceDetails?.coverage || "N/A"}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Registration Details */}
-              <div className="border-t pt-4">
-                <h3 className="font-semibold flex items-center gap-2 mb-3">
-                  <CreditCard className="w-4 h-4" /> Registration Details
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">
-                      Registration Number
-                    </Label>
-                    <p>
-                      {vehicle.registrationDetails?.registrationNumber || "N/A"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">
-                      Registered To
-                    </Label>
-                    <p>{vehicle.registrationDetails?.registeredTo || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> Expiry Date
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <span>
-                        {formatDate(vehicle.registrationDetails?.expiryDate)}
-                      </span>
-                      {isExpiringSoon(
-                        vehicle.registrationDetails?.expiryDate,
-                      ) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-yellow-100 text-yellow-800"
-                        >
-                          Expiring Soon
-                        </Badge>
-                      )}
-                      {isExpired(vehicle.registrationDetails?.expiryDate) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-red-100 text-red-800"
-                        >
-                          Expired
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes */}
               {vehicle.notes && (
                 <div className="border-t pt-4">
                   <h3 className="font-semibold flex items-center gap-2 mb-3">
@@ -521,10 +552,10 @@ const VehicleDetailsModal = ({
             </div>
           )}
 
+          {/* ---- MAINTENANCE ---- */}
           {activeTab === "maintenance" && (
             <div className="space-y-4">
-              {vehicle.maintenanceHistory &&
-              vehicle.maintenanceHistory.length > 0 ? (
+              {vehicle.maintenanceHistory?.length > 0 ? (
                 vehicle.maintenanceHistory.map((record, index) => (
                   <Card key={record._id || index}>
                     <CardContent className="pt-4">
@@ -551,7 +582,7 @@ const VehicleDetailsModal = ({
                         <p>Performed By: {record.performedBy}</p>
                         <p>
                           Mileage at Service:{" "}
-                          {record.mileageAtService.toLocaleString()} km
+                          {record.mileageAtService?.toLocaleString()} km
                         </p>
                         {record.nextServiceDue && (
                           <p>
@@ -572,9 +603,10 @@ const VehicleDetailsModal = ({
             </div>
           )}
 
+          {/* ---- FUEL ---- */}
           {activeTab === "fuel" && (
             <div className="space-y-4">
-              {vehicle.fuelHistory && vehicle.fuelHistory.length > 0 ? (
+              {vehicle.fuelHistory?.length > 0 ? (
                 vehicle.fuelHistory.map((record, index) => {
                   const filledBy =
                     typeof record.filledBy === "object"
@@ -606,7 +638,7 @@ const VehicleDetailsModal = ({
                             <Label className="text-xs text-gray-500">
                               Mileage
                             </Label>
-                            <p>{record.mileage.toLocaleString()} km</p>
+                            <p>{record.mileage?.toLocaleString()} km</p>
                           </div>
                           {filledBy && (
                             <div className="col-span-2">
@@ -632,10 +664,10 @@ const VehicleDetailsModal = ({
             </div>
           )}
 
+          {/* ---- ASSIGNMENTS ---- */}
           {activeTab === "assignments" && (
             <div className="space-y-4">
-              {vehicle.assignmentHistory &&
-              vehicle.assignmentHistory.length > 0 ? (
+              {vehicle.assignmentHistory?.length > 0 ? (
                 vehicle.assignmentHistory.map((record, index) => {
                   const assignedTo =
                     typeof record.assignedTo === "object"
@@ -675,7 +707,7 @@ const VehicleDetailsModal = ({
                           <p>Purpose: {record.purpose}</p>
                           <p>
                             Start Mileage:{" "}
-                            {record.startMileage.toLocaleString()} km
+                            {record.startMileage?.toLocaleString()} km
                           </p>
                           {record.endMileage && (
                             <p>
@@ -697,9 +729,75 @@ const VehicleDetailsModal = ({
             </div>
           )}
 
+          {/* ---- RETURNS ---- */}
+          {activeTab === "returns" && (
+            <div className="space-y-4">
+              {vehicle.returnHistory?.length > 0 ? (
+                vehicle.returnHistory.map((record, index) => (
+                  <Card key={record._id || index}>
+                    <CardContent className="pt-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-2">
+                          <RotateCcw className="w-4 h-4 text-green-600" />
+                          <span className="font-semibold text-sm">
+                            {record.driverName}
+                          </span>
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          <Calendar className="inline w-3 h-3 mr-1" />
+                          {formatDate(record.returnedDate)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <Label className="text-xs text-gray-500 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> Location
+                          </Label>
+                          <p>{record.location}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">Duty</Label>
+                          <p>{record.duty}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500 flex items-center gap-1">
+                            <Fuel className="w-3 h-3" /> Fuel on Return
+                          </Label>
+                          <p>{record.fuelLevelOnReturn || "N/A"}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500 flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Return Time
+                          </Label>
+                          <p>{record.returnTime || "N/A"}</p>
+                        </div>
+                        {record.conditionNotes && (
+                          <div className="col-span-2">
+                            <Label className="text-xs text-gray-500">
+                              Condition Notes
+                            </Label>
+                            <p className="text-gray-700">
+                              {record.conditionNotes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <RotateCcw className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No return records found</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---- EQUIPMENT ---- */}
           {activeTab === "equipment" && (
             <div className="space-y-4">
-              {vehicle.equipment && vehicle.equipment.length > 0 ? (
+              {vehicle.equipment?.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {vehicle.equipment.map((item, index) => (
                     <Card key={index}>
@@ -735,7 +833,7 @@ const VehicleDetailsModal = ({
   );
 };
 
-// ==================== Vehicle Form Component ====================
+// ==================== Vehicle Form ====================
 
 interface VehicleFormProps {
   formData: VehicleFormData;
@@ -755,10 +853,11 @@ const VehicleForm = ({
   onClose,
 }: VehicleFormProps) => (
   <form onSubmit={onSubmit} className="space-y-4">
-    {/* Basic Info */}
     <div className="grid grid-cols-2 gap-4">
       <div>
-        <Label htmlFor="licensePlate">License Plate *</Label>
+        <Label htmlFor="licensePlate">
+          License Plate <span className="text-red-500">*</span>
+        </Label>
         <Input
           id="licensePlate"
           value={formData.licensePlate}
@@ -766,15 +865,18 @@ const VehicleForm = ({
             setFormData({ ...formData, licensePlate: e.target.value })
           }
           required
+          className="mt-1"
         />
       </div>
       <div>
-        <Label htmlFor="type">Vehicle Type *</Label>
+        <Label htmlFor="type">
+          Vehicle Type <span className="text-red-500">*</span>
+        </Label>
         <Select
           value={formData.type}
           onValueChange={(value) => setFormData({ ...formData, type: value })}
         >
-          <SelectTrigger>
+          <SelectTrigger className="mt-1">
             <SelectValue placeholder="Select type" />
           </SelectTrigger>
           <SelectContent>
@@ -788,220 +890,78 @@ const VehicleForm = ({
       </div>
     </div>
 
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 gap-4">
       <div>
-        <Label htmlFor="make">Make *</Label>
+        <Label htmlFor="make">
+          Make <span className="text-red-500">*</span>
+        </Label>
         <Input
           id="make"
           value={formData.make}
           onChange={(e) => setFormData({ ...formData, make: e.target.value })}
           required
+          className="mt-1"
         />
       </div>
       <div>
-        <Label htmlFor="model">Model *</Label>
+        <Label htmlFor="model">
+          Model <span className="text-red-500">*</span>
+        </Label>
         <Input
           id="model"
           value={formData.model}
           onChange={(e) => setFormData({ ...formData, model: e.target.value })}
           required
-        />
-      </div>
-      <div>
-        <Label htmlFor="year">Year *</Label>
-        <Input
-          id="year"
-          type="number"
-          min="1900"
-          max={new Date().getFullYear() + 1}
-          value={formData.year}
-          onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-          required
+          className="mt-1"
         />
       </div>
     </div>
 
     <div className="grid grid-cols-2 gap-4">
       <div>
-        <Label htmlFor="color">Color *</Label>
-        <Input
-          id="color"
-          value={formData.color}
-          onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="vin">VIN</Label>
-        <Input
-          id="vin"
-          value={formData.vin}
-          onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
-        />
-      </div>
-    </div>
-
-    <div className="grid grid-cols-3 gap-4">
-      <div>
-        <Label htmlFor="mileage">Mileage</Label>
+        <Label htmlFor="mileage">Mileage (km)</Label>
         <Input
           id="mileage"
           type="number"
           min="0"
           value={formData.mileage}
           onChange={(e) =>
-            setFormData({
-              ...formData,
-              mileage: parseInt(e.target.value) || 0,
-            })
+            setFormData({ ...formData, mileage: parseInt(e.target.value) || 0 })
           }
+          className="mt-1"
         />
       </div>
       <div>
-        <Label htmlFor="fuelLevel">Fuel Level (%)</Label>
+        <Label htmlFor="fuelLevel">Fuel Level</Label>
         <Input
           id="fuelLevel"
-          type="number"
-          min="0"
-          max="100"
+          placeholder="e.g. Full, Half, Quarter, Empty"
           value={formData.fuelLevel}
           onChange={(e) =>
-            setFormData({
-              ...formData,
-              fuelLevel: parseInt(e.target.value) || 0,
-            })
+            setFormData({ ...formData, fuelLevel: e.target.value })
           }
-        />
-      </div>
-      <div>
-        <Label htmlFor="status">Status</Label>
-        <Select
-          value={formData.status}
-          onValueChange={(value) => setFormData({ ...formData, status: value })}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {formatStatus(s)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-
-    {/* Insurance */}
-    <div>
-      <Label className="text-sm font-semibold">Insurance Details</Label>
-      <div className="grid grid-cols-2 gap-3 mt-2">
-        <Input
-          placeholder="Provider"
-          value={formData.insuranceDetails.provider}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              insuranceDetails: {
-                ...formData.insuranceDetails,
-                provider: e.target.value,
-              },
-            })
-          }
-        />
-        <Input
-          placeholder="Policy Number"
-          value={formData.insuranceDetails.policyNumber}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              insuranceDetails: {
-                ...formData.insuranceDetails,
-                policyNumber: e.target.value,
-              },
-            })
-          }
-        />
-        <div>
-          <Label className="text-xs text-gray-500">Expiry Date</Label>
-          <Input
-            type="date"
-            value={formData.insuranceDetails.expiryDate}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                insuranceDetails: {
-                  ...formData.insuranceDetails,
-                  expiryDate: e.target.value,
-                },
-              })
-            }
-          />
-        </div>
-        <Input
-          placeholder="Coverage"
-          value={formData.insuranceDetails.coverage}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              insuranceDetails: {
-                ...formData.insuranceDetails,
-                coverage: e.target.value,
-              },
-            })
-          }
+          className="mt-1"
         />
       </div>
     </div>
 
-    {/* Registration */}
     <div>
-      <Label className="text-sm font-semibold">Registration Details</Label>
-      <div className="grid grid-cols-2 gap-3 mt-2">
-        <Input
-          placeholder="Registration Number"
-          value={formData.registrationDetails.registrationNumber}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              registrationDetails: {
-                ...formData.registrationDetails,
-                registrationNumber: e.target.value,
-              },
-            })
-          }
-        />
-        <Input
-          placeholder="Registered To"
-          value={formData.registrationDetails.registeredTo}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              registrationDetails: {
-                ...formData.registrationDetails,
-                registeredTo: e.target.value,
-              },
-            })
-          }
-        />
-        <div>
-          <Label className="text-xs text-gray-500">Expiry Date</Label>
-          <Input
-            type="date"
-            value={formData.registrationDetails.expiryDate}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                registrationDetails: {
-                  ...formData.registrationDetails,
-                  expiryDate: e.target.value,
-                },
-              })
-            }
-          />
-        </div>
-      </div>
+      <Label htmlFor="status">Status</Label>
+      <Select
+        value={formData.status}
+        onValueChange={(value) => setFormData({ ...formData, status: value })}
+      >
+        <SelectTrigger className="mt-1">
+          <SelectValue placeholder="Select status" />
+        </SelectTrigger>
+        <SelectContent>
+          {STATUSES.map((s) => (
+            <SelectItem key={s} value={s}>
+              {formatStatus(s)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
 
     <div>
@@ -1011,10 +971,11 @@ const VehicleForm = ({
         value={formData.notes}
         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
         rows={3}
+        className="mt-1"
       />
     </div>
 
-    <div className="flex justify-end space-x-2 pt-2">
+    <div className="flex justify-end gap-2 pt-2 border-t">
       <Button type="button" variant="outline" onClick={onClose}>
         Cancel
       </Button>
@@ -1030,7 +991,7 @@ const VehicleForm = ({
 
 const Vehicles = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [personnel, setPersonnel] = useState<User[]>([]);
+  const [personnel, setPersonnel] = useState<UserRef[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>("");
@@ -1041,26 +1002,25 @@ const Vehicles = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState<boolean>(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [viewingVehicle, setViewingVehicle] = useState<Vehicle | null>(null);
+  const [returningVehicle, setReturningVehicle] = useState<Vehicle | null>(
+    null,
+  );
   const [formData, setFormData] = useState<VehicleFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [returnSubmitting, setReturnSubmitting] = useState<boolean>(false);
 
-  // Debounce search term
+  // Debounce search
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 500);
-
+    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Reset to page 1 when search term changes
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchTerm, statusFilter, typeFilter]);
-
-  // ==================== API Calls ====================
 
   useEffect(() => {
     fetchVehicles();
@@ -1070,6 +1030,8 @@ const Vehicles = () => {
     fetchPersonnel();
   }, []);
 
+  // ==================== API ====================
+
   const fetchVehicles = async (): Promise<void> => {
     try {
       setLoading(true);
@@ -1078,8 +1040,8 @@ const Vehicles = () => {
         page: currentPage.toString(),
         limit: "10",
         ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
-        ...(statusFilter && statusFilter !== "all" && { status: statusFilter }),
-        ...(typeFilter && typeFilter !== "all" && { type: typeFilter }),
+        ...(statusFilter !== "all" && { status: statusFilter }),
+        ...(typeFilter !== "all" && { type: typeFilter }),
       });
 
       const response = await fetch(`/api/vehicles?${params}`, {
@@ -1094,7 +1056,7 @@ const Vehicles = () => {
         const err = await response.json();
         toast.error(err.error || "Failed to fetch vehicles");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to fetch vehicles");
     } finally {
       setLoading(false);
@@ -1107,7 +1069,6 @@ const Vehicles = () => {
       const response = await fetch("/api/personnel?limit=200", {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (response.ok) {
         const data: PersonnelResponse = await response.json();
         setPersonnel(data.personnel || []);
@@ -1129,10 +1090,7 @@ const Vehicles = () => {
 
       const payload = {
         ...formData,
-        year: Number(formData.year),
         mileage: Number(formData.mileage),
-        fuelLevel: Number(formData.fuelLevel),
-        vin: formData.vin || undefined,
       };
 
       const response = await fetch(url, {
@@ -1165,14 +1123,12 @@ const Vehicles = () => {
 
   const handleDelete = async (vehicleId: string): Promise<void> => {
     if (!confirm("Are you sure you want to delete this vehicle?")) return;
-
     try {
       const token = getToken();
       const response = await fetch(`/api/vehicles/${vehicleId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (response.ok) {
         toast.success("Vehicle deleted successfully");
         fetchVehicles();
@@ -1203,7 +1159,6 @@ const Vehicles = () => {
           purpose: "Patrol duty",
         }),
       });
-
       if (response.ok) {
         toast.success("Driver assigned successfully");
         fetchVehicles();
@@ -1218,8 +1173,9 @@ const Vehicles = () => {
 
   const handleReturnVehicle = async (
     vehicleId: string,
-    endMileage: number,
+    data: ReturnFormData,
   ): Promise<void> => {
+    setReturnSubmitting(true);
     try {
       const token = getToken();
       const response = await fetch(`/api/vehicles/${vehicleId}`, {
@@ -1228,11 +1184,15 @@ const Vehicles = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ action: "return-vehicle", endMileage }),
+        body: JSON.stringify({
+          action: "return-vehicle",
+          ...data,
+        }),
       });
-
       if (response.ok) {
         toast.success("Vehicle returned successfully");
+        setIsReturnModalOpen(false);
+        setReturningVehicle(null);
         fetchVehicles();
       } else {
         const err = await response.json();
@@ -1240,6 +1200,8 @@ const Vehicles = () => {
       }
     } catch {
       toast.error("Failed to return vehicle");
+    } finally {
+      setReturnSubmitting(false);
     }
   };
 
@@ -1254,25 +1216,10 @@ const Vehicles = () => {
       licensePlate: vehicle.licensePlate,
       make: vehicle.make,
       model: vehicle.model,
-      year: vehicle.year.toString(),
-      color: vehicle.color,
       type: vehicle.type,
-      vin: vehicle.vin || "",
       mileage: vehicle.mileage,
-      fuelLevel: vehicle.fuelLevel,
+      fuelLevel: vehicle.fuelLevel || "",
       status: vehicle.status,
-      insuranceDetails: {
-        ...vehicle.insuranceDetails,
-        expiryDate: vehicle.insuranceDetails?.expiryDate
-          ? vehicle.insuranceDetails.expiryDate.slice(0, 10)
-          : "",
-      },
-      registrationDetails: {
-        ...vehicle.registrationDetails,
-        expiryDate: vehicle.registrationDetails?.expiryDate
-          ? vehicle.registrationDetails.expiryDate.slice(0, 10)
-          : "",
-      },
       equipment: vehicle.equipment || [],
       notes: vehicle.notes || "",
     });
@@ -1282,6 +1229,11 @@ const Vehicles = () => {
   const openViewModal = (vehicle: Vehicle): void => {
     setViewingVehicle(vehicle);
     setIsViewModalOpen(true);
+  };
+
+  const openReturnModal = (vehicle: Vehicle): void => {
+    setReturningVehicle(vehicle);
+    setIsReturnModalOpen(true);
   };
 
   // ==================== Render ====================
@@ -1332,19 +1284,12 @@ const Vehicles = () => {
                 <Input
                   placeholder="Search by plate, make, model..."
                   value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                  }}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
             </div>
-            <Select
-              value={statusFilter}
-              onValueChange={(v) => {
-                setStatusFilter(v);
-              }}
-            >
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
@@ -1357,12 +1302,7 @@ const Vehicles = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={typeFilter}
-              onValueChange={(v) => {
-                setTypeFilter(v);
-              }}
-            >
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
@@ -1394,7 +1334,6 @@ const Vehicles = () => {
                   <th className="text-left p-2">Make / Model</th>
                   <th className="text-left p-2">Type</th>
                   <th className="text-left p-2">Status</th>
-                  <th className="text-left p-2">Current Driver</th>
                   <th className="text-left p-2">Fuel</th>
                   <th className="text-left p-2">Actions</th>
                 </tr>
@@ -1402,132 +1341,89 @@ const Vehicles = () => {
               <tbody>
                 {vehicles.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center p-8 text-gray-500">
+                    <td colSpan={7} className="text-center p-8 text-gray-500">
                       No vehicles found.
                     </td>
                   </tr>
                 ) : (
-                  vehicles.map((vehicle) => {
-                    const driver =
-                      typeof vehicle.currentDriver === "object"
-                        ? vehicle.currentDriver
-                        : null;
-
-                    return (
-                      <tr
-                        key={vehicle._id}
-                        className="border-b hover:bg-gray-50"
-                      >
-                        <td className="p-2 font-mono text-sm">
-                          {vehicle.vehicleNumber}
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center space-x-2">
-                            <Car className="w-4 h-4 text-gray-400" />
-                            <span className="font-medium">
-                              {vehicle.licensePlate}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          {vehicle.make} {vehicle.model} ({vehicle.year})
-                        </td>
-                        <td className="p-2">
-                          <Badge variant="outline">
-                            {formatStatus(vehicle.type)}
-                          </Badge>
-                        </td>
-                        <td className="p-2">
-                          <Badge
-                            className={getStatusColor(
-                              vehicle.status as VehicleStatus,
-                            )}
-                          >
-                            {formatStatus(vehicle.status)}
-                          </Badge>
-                        </td>
-                        <td className="p-2">
-                          {driver ? (
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center space-x-1">
-                                <User className="w-4 h-4 text-gray-400" />
-                                <span className="text-sm">
-                                  {driver.firstName} {driver.lastName}
-                                </span>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs h-6 px-2"
-                                onClick={() =>
-                                  handleReturnVehicle(
-                                    vehicle._id,
-                                    vehicle.mileage,
-                                  )
-                                }
-                              >
-                                Return
-                              </Button>
-                            </div>
-                          ) : (
-                            <Select
-                              onValueChange={(value) =>
-                                handleAssignDriver(vehicle._id, value)
-                              }
-                            >
-                              <SelectTrigger className="w-36 h-8">
-                                <SelectValue placeholder="Assign driver" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {personnel.map((p) => (
-                                  <SelectItem key={p._id} value={p._id}>
-                                    {p.firstName} {p.lastName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                  vehicles.map((vehicle) => (
+                    <tr key={vehicle._id} className="border-b hover:bg-gray-50">
+                      <td className="p-2 font-mono text-sm">
+                        {vehicle.vehicleNumber}
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center space-x-2">
+                          <Car className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium">
+                            {vehicle.licensePlate}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        {vehicle.make} {vehicle.model}
+                      </td>
+                      <td className="p-2">
+                        <Badge variant="outline">
+                          {formatStatus(vehicle.type)}
+                        </Badge>
+                      </td>
+                      <td className="p-2">
+                        <Badge
+                          className={getStatusColor(
+                            vehicle.status as VehicleStatus,
                           )}
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center space-x-1">
-                            <Fuel className="w-4 h-4 text-gray-400" />
-                            <span
-                              className={`text-sm font-medium ${getFuelLevelColor(
-                                vehicle.fuelLevel,
-                              )}`}
-                            >
-                              {vehicle.fuelLevel}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openViewModal(vehicle)}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openEditModal(vehicle)}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDelete(vehicle._id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                        >
+                          {formatStatus(vehicle.status)}
+                        </Badge>
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center space-x-1">
+                          <Fuel className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm font-medium">
+                            {vehicle.fuelLevel || "—"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="View details"
+                            onClick={() => openViewModal(vehicle)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="Edit"
+                            onClick={() => openEditModal(vehicle)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="Return vehicle"
+                            onClick={() => openReturnModal(vehicle)}
+                            className="text-green-700 border-green-300 hover:bg-green-50"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="Delete"
+                            onClick={() => handleDelete(vehicle._id)}
+                            className="text-red-600 border-red-200 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -1584,6 +1480,15 @@ const Vehicles = () => {
         vehicle={viewingVehicle}
         open={isViewModalOpen}
         onOpenChange={setIsViewModalOpen}
+      />
+
+      {/* Return Vehicle Modal */}
+      <VehicleReturnModal
+        vehicle={returningVehicle}
+        open={isReturnModalOpen}
+        onOpenChange={setIsReturnModalOpen}
+        onSubmit={handleReturnVehicle}
+        submitting={returnSubmitting}
       />
     </div>
   );

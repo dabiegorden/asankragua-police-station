@@ -14,16 +14,13 @@ const VehicleSchema = new mongoose.Schema(
     },
     make: { type: String, required: true },
     model: { type: String, required: true },
-    year: { type: Number, required: true },
-    color: { type: String, required: true },
     type: {
       type: String,
       enum: ["patrol-car", "motorcycle", "van", "truck", "suv", "other"],
       required: true,
     },
-    vin: { type: String, unique: true, sparse: true },
     mileage: { type: Number, default: 0 },
-    fuelLevel: { type: Number, min: 0, max: 100, default: 100 },
+    fuelLevel: { type: String, default: "" },
     status: {
       type: String,
       enum: ["available", "in-use", "maintenance", "out-of-service"],
@@ -32,17 +29,6 @@ const VehicleSchema = new mongoose.Schema(
     currentDriver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-    },
-    insuranceDetails: {
-      provider: String,
-      policyNumber: String,
-      expiryDate: Date,
-      coverage: String,
-    },
-    registrationDetails: {
-      registrationNumber: String,
-      expiryDate: Date,
-      registeredTo: String,
     },
     maintenanceHistory: [
       {
@@ -84,6 +70,21 @@ const VehicleSchema = new mongoose.Schema(
         endMileage: Number,
       },
     ],
+    returnHistory: [
+      {
+        returnedDate: { type: Date, default: Date.now },
+        location: { type: String, required: true },
+        driverName: { type: String, required: true },
+        duty: { type: String, required: true },
+        fuelLevelOnReturn: { type: String },
+        returnTime: { type: String },
+        conditionNotes: { type: String },
+        returnedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+      },
+    ],
     equipment: [
       {
         name: String,
@@ -97,7 +98,7 @@ const VehicleSchema = new mongoose.Schema(
     ],
     notes: String,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.models.Vehicle ||

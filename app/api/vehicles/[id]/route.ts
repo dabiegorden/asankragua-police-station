@@ -30,7 +30,8 @@ async function getVehicleById(
         "assignmentHistory.assignedTo",
         "firstName lastName badgeNumber",
       )
-      .populate("fuelHistory.filledBy", "firstName lastName");
+      .populate("fuelHistory.filledBy", "firstName lastName")
+      .populate("returnHistory.returnedBy", "firstName lastName");
 
     if (!vehicle) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
@@ -101,6 +102,7 @@ async function updateVehicle(
         startMileage: vehicle.mileage,
       });
     } else if (action === "return-vehicle") {
+      // Update last open assignment
       const lastAssignment =
         vehicle.assignmentHistory[vehicle.assignmentHistory.length - 1];
       if (lastAssignment && !lastAssignment.returnedDate) {
@@ -112,19 +114,20 @@ async function updateVehicle(
       if (updateData.endMileage) {
         vehicle.mileage = updateData.endMileage;
       }
-    } else {
-      // Regular field update — mirror Personnel's $set approach
-      if (updateData.insuranceDetails?.expiryDate) {
-        updateData.insuranceDetails.expiryDate = new Date(
-          updateData.insuranceDetails.expiryDate,
-        );
-      }
-      if (updateData.registrationDetails?.expiryDate) {
-        updateData.registrationDetails.expiryDate = new Date(
-          updateData.registrationDetails.expiryDate,
-        );
-      }
 
+      // Log a full return record
+      vehicle.returnHistory.push({
+        returnedDate: new Date(),
+        location: updateData.location,
+        driverName: updateData.driverName,
+        duty: updateData.duty,
+        fuelLevelOnReturn: updateData.fuelLevelOnReturn || "",
+        returnTime: updateData.returnTime || "",
+        conditionNotes: updateData.conditionNotes || "",
+        returnedBy: user.userId,
+      });
+    } else {
+      // Regular field update
       Object.keys(updateData).forEach((key) => {
         if (updateData[key] !== undefined) {
           vehicle[key] = updateData[key];
@@ -140,7 +143,8 @@ async function updateVehicle(
         "assignmentHistory.assignedTo",
         "firstName lastName badgeNumber",
       )
-      .populate("fuelHistory.filledBy", "firstName lastName");
+      .populate("fuelHistory.filledBy", "firstName lastName")
+      .populate("returnHistory.returnedBy", "firstName lastName");
 
     return NextResponse.json({
       message: "Vehicle updated successfully",

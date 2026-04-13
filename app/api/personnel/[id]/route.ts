@@ -19,7 +19,7 @@ type UpdatePersonnelBody = Partial<
 
 export async function GET(
   request: NextRequest,
-  { params }: RouteContext
+  { params }: RouteContext,
 ): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
@@ -34,11 +34,14 @@ export async function GET(
 
     const personnel = await Personnel.findById(id).populate(
       "assignments.caseId",
-      "caseNumber title status"
+      "caseNumber title status",
     );
 
     if (!personnel) {
-      return NextResponse.json({ error: "Personnel not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Personnel not found" },
+        { status: 404 },
+      );
     }
 
     return NextResponse.json({ personnel });
@@ -46,14 +49,14 @@ export async function GET(
     console.error("Get personnel by ID error:", err);
     return NextResponse.json(
       { error: "Failed to fetch personnel" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: RouteContext
+  { params }: RouteContext,
 ): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
@@ -68,13 +71,15 @@ export async function PUT(
 
     const body = (await request.json()) as UpdatePersonnelBody;
 
-    // Coerce empty badge string to null so sparse unique index is not violated
-    if (body.badgeNumber === ("" as string)) {
-      (body as Record<string, unknown>).badgeNumber = null;
+    // Coerce empty serviceNumber string to null so sparse unique index is not violated
+    if ((body as Record<string, unknown>).serviceNumber === "") {
+      (body as Record<string, unknown>).serviceNumber = null;
     }
 
     if (body.dateOfBirth) {
-      (body as Record<string, unknown>).dateOfBirth = new Date(body.dateOfBirth);
+      (body as Record<string, unknown>).dateOfBirth = new Date(
+        body.dateOfBirth,
+      );
     }
     if (body.dateJoined) {
       (body as Record<string, unknown>).dateJoined = new Date(body.dateJoined);
@@ -83,26 +88,32 @@ export async function PUT(
     const personnel = await Personnel.findByIdAndUpdate(
       id,
       { $set: body },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!personnel) {
-      return NextResponse.json({ error: "Personnel not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Personnel not found" },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json({ message: "Personnel updated successfully", personnel });
+    return NextResponse.json({
+      message: "Personnel updated successfully",
+      personnel,
+    });
   } catch (err) {
     console.error("Update personnel error:", err);
     return NextResponse.json(
       { error: "Failed to update personnel" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: RouteContext
+  { params }: RouteContext,
 ): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
@@ -118,7 +129,10 @@ export async function DELETE(
     const personnel = await Personnel.findByIdAndDelete(id);
 
     if (!personnel) {
-      return NextResponse.json({ error: "Personnel not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Personnel not found" },
+        { status: 404 },
+      );
     }
 
     return NextResponse.json({ message: "Personnel deleted successfully" });
@@ -126,7 +140,7 @@ export async function DELETE(
     console.error("Delete personnel error:", err);
     return NextResponse.json(
       { error: "Failed to delete personnel" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

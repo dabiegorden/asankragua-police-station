@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { firstName: { $regex: search, $options: "i" } },
         { lastName: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
-        { badgeNumber: { $regex: search, $options: "i" } },
+        { serviceNumber: { $regex: search, $options: "i" } },
         { username: { $regex: search, $options: "i" } },
       ];
     }
@@ -76,15 +76,13 @@ interface CreatePersonnelBody extends Pick<
   | "rank"
   | "phoneNumber"
 > {
-  badgeNumber?: string;
+  serviceNumber?: string;
   specialization?: IPersonnel["specialization"];
   emergencyContact?: IPersonnel["emergencyContact"];
   address?: IPersonnel["address"];
   dateOfBirth: string;
   dateJoined?: string;
-  shift?: IPersonnel["shift"];
   status?: IPersonnel["status"];
-  department?: string;
   certifications?: IPersonnel["certifications"];
   profileImage?: string;
 }
@@ -106,7 +104,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       email,
       username,
       role,
-      badgeNumber,
+      serviceNumber,
       rank,
       specialization,
       phoneNumber,
@@ -114,8 +112,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       address,
       dateOfBirth,
       dateJoined,
-      shift,
-      department,
       certifications,
       profileImage,
       status,
@@ -150,11 +146,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (badgeNumber) {
-      const badgeExists = await Personnel.findOne({ badgeNumber });
-      if (badgeExists) {
+    if (serviceNumber) {
+      const serviceNumberExists = await Personnel.findOne({ serviceNumber });
+      if (serviceNumberExists) {
         return NextResponse.json(
-          { error: "Badge number already exists" },
+          { error: "Service number already exists" },
           { status: 400 },
         );
       }
@@ -166,7 +162,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       email,
       username,
       role,
-      badgeNumber: badgeNumber ?? null,
+      serviceNumber: serviceNumber ?? null,
       rank,
       specialization: specialization ?? "General",
       phoneNumber,
@@ -174,9 +170,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       address: address ?? {},
       dateOfBirth: new Date(dateOfBirth),
       dateJoined: dateJoined ? new Date(dateJoined) : new Date(),
-      shift: shift ?? "morning",
       status: status ?? "active",
-      department: department ?? "General",
       certifications: certifications ?? [],
       profileImage: profileImage ?? null,
     });

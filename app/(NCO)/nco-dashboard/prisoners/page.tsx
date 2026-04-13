@@ -66,7 +66,9 @@ interface ArrestDetails {
         email: string;
         role: string;
         stationId: string;
-      };
+      }
+    | null;
+  otherArrestingOfficer?: string;
   charges: Charge[];
 }
 
@@ -132,6 +134,7 @@ interface Prisoner {
   fingerprints?: string | null;
   arrestDetails: ArrestDetails;
   caseId?: Case | string | null;
+  otherCase?: string;
   cellNumber: "Male" | "Female";
   status: "Jailed" | "Bailed" | "Remanded" | "Transferred";
   releaseDetails?: ReleaseDetails;
@@ -143,20 +146,13 @@ interface Prisoner {
   updatedAt: string;
 }
 
-interface User {
+interface UserModel {
   _id: string;
   firstName: string;
   lastName: string;
-  fullName: string; // Add this
+  fullName: string;
   email: string;
   role: string;
-}
-
-interface PaginationData {
-  page: number;
-  limit: number;
-  total: number;
-  pages: number;
 }
 
 interface PrisonerFormData {
@@ -172,10 +168,16 @@ interface PrisonerFormData {
   arrestDetails: {
     arrestDate: string;
     arrestLocation: string;
+    /** ObjectId string, "others", or "" */
     arrestingOfficer: string;
+    /** free-text name shown when arrestingOfficer === "others" */
+    otherArrestingOfficer: string;
     charges: Charge[];
   };
+  /** ObjectId string, "none", "others", or "" */
   caseId: string;
+  /** free-text description shown when caseId === "others" */
+  otherCase: string;
   cellNumber: "Male" | "Female";
   status: "Jailed" | "Bailed" | "Remanded" | "Transferred";
   briefNote: string;
@@ -216,31 +218,583 @@ function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
   }, [value, delay]);
 
   return debouncedValue;
 }
 
+// ==================== Default form state ====================
+
+const defaultForm = (): PrisonerFormData => ({
+  firstName: "",
+  lastName: "",
+  middleName: "",
+  dateOfBirth: "",
+  gender: "male",
+  nationality: "Ghanaian",
+  address: { street: "", city: "", region: "" },
+  phoneNumber: "",
+  emergencyContact: { name: "", relationship: "", phone: "" },
+  arrestDetails: {
+    arrestDate: "",
+    arrestLocation: "",
+    arrestingOfficer: "",
+    otherArrestingOfficer: "",
+    charges: [],
+  },
+  caseId: "",
+  otherCase: "",
+  cellNumber: "Male",
+  status: "Jailed",
+  briefNote: "",
+  medicalInfo: { allergies: [], medications: [], medicalConditions: [] },
+  personalEffects: [],
+  mugshot: null,
+});
+
+// ==================== Shared Form Fields Component ====================
+
+interface PrisonerFormFieldsProps {
+  formData: PrisonerFormData;
+  setFormData: React.Dispatch<React.SetStateAction<PrisonerFormData>>;
+  users: UserModel[];
+  cases: Case[];
+  uploadingImage: boolean;
+  handleImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isEdit?: boolean;
+}
+
+const PrisonerFormFields = ({
+  formData,
+  setFormData,
+  users,
+  cases,
+  uploadingImage,
+  handleImageUpload,
+  isEdit = false,
+}: PrisonerFormFieldsProps) => {
+  const prefix = isEdit ? "edit-" : "";
+  const isOtherOfficer = formData.arrestDetails.arrestingOfficer === "others";
+  const isOtherCase = formData.caseId === "others";
+
+  return (
+    <div className="space-y-4">
+      {/* ── Image Upload ── */}
+      {!isEdit && (
+        <div>
+          <Label>Inmate Photo (Max 5MB)</Label>
+          <div className="mt-2">
+            {formData.mugshot && (
+              <div className="mb-4">
+                <img
+                  src={formData.mugshot}
+                  alt="Inmate photo"
+                  className="w-24 h-24 rounded-lg object-cover"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFormData((p) => ({ ...p, mugshot: null }))}
+                  className="mt-2"
+                >
+                  Remove Image
+                </Button>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                disabled={uploadingImage}
+                className="flex-1"
+              />
+              {uploadingImage && <Loader2 className="w-4 h-4 animate-spin" />}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Photo for edit modal ── */}
+      {isEdit && (
+        <div>
+          <Label>Inmate Photo (Max 5MB)</Label>
+          <div className="mt-2">
+            {formData.mugshot && (
+              <div className="mb-4">
+                <img
+                  src={formData.mugshot}
+                  alt="Inmate photo"
+                  className="w-24 h-24 rounded-lg object-cover"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFormData((p) => ({ ...p, mugshot: null }))}
+                  className="mt-2"
+                >
+                  Remove Image
+                </Button>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                disabled={uploadingImage}
+                className="flex-1"
+              />
+              {uploadingImage && <Loader2 className="w-4 h-4 animate-spin" />}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Name ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${prefix}firstName`}>First Name *</Label>
+          <Input
+            id={`${prefix}firstName`}
+            value={formData.firstName}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, firstName: e.target.value }))
+            }
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${prefix}lastName`}>Last Name *</Label>
+          <Input
+            id={`${prefix}lastName`}
+            value={formData.lastName}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, lastName: e.target.value }))
+            }
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${prefix}middleName`}>Middle Name</Label>
+          <Input
+            id={`${prefix}middleName`}
+            value={formData.middleName}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, middleName: e.target.value }))
+            }
+          />
+        </div>
+      </div>
+
+      {/* ── Personal Info ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${prefix}dateOfBirth`}>Date of Birth *</Label>
+          <Input
+            id={`${prefix}dateOfBirth`}
+            type="date"
+            value={formData.dateOfBirth}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, dateOfBirth: e.target.value }))
+            }
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${prefix}gender`}>Gender *</Label>
+          <Select
+            value={formData.gender}
+            onValueChange={(value: "male" | "female" | "other") =>
+              setFormData((p) => ({ ...p, gender: value }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {GENDERS.map((g) => (
+                <SelectItem key={g} value={g}>
+                  {g.charAt(0).toUpperCase() + g.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${prefix}phoneNumber`}>Phone Number</Label>
+          <Input
+            id={`${prefix}phoneNumber`}
+            value={formData.phoneNumber}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, phoneNumber: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${prefix}cellNumber`}>Cell Type *</Label>
+          <Select
+            value={formData.cellNumber}
+            onValueChange={(value: "Male" | "Female") =>
+              setFormData((p) => ({ ...p, cellNumber: value }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CELL_NUMBERS.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* ── Address ── */}
+      <div>
+        <Label>Address</Label>
+        <div className="grid grid-cols-3 gap-4 mt-2">
+          <Input
+            placeholder="Street"
+            value={formData.address.street}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                address: { ...p.address, street: e.target.value },
+              }))
+            }
+          />
+          <Input
+            placeholder="City"
+            value={formData.address.city}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                address: { ...p.address, city: e.target.value },
+              }))
+            }
+          />
+          <Input
+            placeholder="Region"
+            value={formData.address.region}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                address: { ...p.address, region: e.target.value },
+              }))
+            }
+          />
+        </div>
+      </div>
+
+      {/* ── Arrest Details ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${prefix}arrestDate`}>Arrest Date *</Label>
+          <Input
+            id={`${prefix}arrestDate`}
+            type="date"
+            value={formData.arrestDetails.arrestDate}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                arrestDetails: {
+                  ...p.arrestDetails,
+                  arrestDate: e.target.value,
+                },
+              }))
+            }
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${prefix}arrestLocation`}>Arrest Location *</Label>
+          <Input
+            id={`${prefix}arrestLocation`}
+            value={formData.arrestDetails.arrestLocation}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                arrestDetails: {
+                  ...p.arrestDetails,
+                  arrestLocation: e.target.value,
+                },
+              }))
+            }
+            required
+          />
+        </div>
+      </div>
+
+      {/* ── Arresting Officer (with Others) ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}arrestingOfficer`}>
+            Arresting Officer *
+          </Label>
+          <Select
+            value={formData.arrestDetails.arrestingOfficer}
+            onValueChange={(value) =>
+              setFormData((p) => ({
+                ...p,
+                arrestDetails: {
+                  ...p.arrestDetails,
+                  arrestingOfficer: value,
+                  // Clear the free-text field when switching back to a real officer
+                  otherArrestingOfficer:
+                    value === "others"
+                      ? p.arrestDetails.otherArrestingOfficer
+                      : "",
+                },
+              }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select arresting officer" />
+            </SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u._id} value={u._id}>
+                  {u.fullName} ({u.role.toUpperCase()})
+                </SelectItem>
+              ))}
+              {/* ── Others option ── */}
+              <SelectItem value="others">Others</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Free-text field revealed when "Others" is selected */}
+          {isOtherOfficer && (
+            <Input
+              placeholder="Enter arresting officer name"
+              value={formData.arrestDetails.otherArrestingOfficer}
+              onChange={(e) =>
+                setFormData((p) => ({
+                  ...p,
+                  arrestDetails: {
+                    ...p.arrestDetails,
+                    otherArrestingOfficer: e.target.value,
+                  },
+                }))
+              }
+              required
+              autoFocus
+            />
+          )}
+        </div>
+
+        {/* ── Related Case (with Others) ── */}
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}relatedCase`}>Related Case</Label>
+          <Select
+            value={formData.caseId || "none"}
+            onValueChange={(value) =>
+              setFormData((p) => ({
+                ...p,
+                caseId: value,
+                // Clear free-text when switching away from "others"
+                otherCase: value === "others" ? p.otherCase : "",
+              }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select case" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {cases.map((c) => (
+                <SelectItem key={c._id} value={c._id}>
+                  {c.caseNumber} – {c.title}
+                </SelectItem>
+              ))}
+              {/* ── Others option ── */}
+              <SelectItem value="others">Others</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Free-text field revealed when "Others" is selected */}
+          {isOtherCase && (
+            <Input
+              placeholder="Enter case reference / description"
+              value={formData.otherCase}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, otherCase: e.target.value }))
+              }
+              autoFocus
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ── Status ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${prefix}status`}>Status *</Label>
+          <Select
+            value={formData.status}
+            onValueChange={(value: Prisoner["status"]) =>
+              setFormData((p) => ({ ...p, status: value }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* ── Brief Note ── */}
+      <div>
+        <Label htmlFor={`${prefix}briefNote`}>Brief Note (Optional)</Label>
+        <textarea
+          id={`${prefix}briefNote`}
+          className="w-full p-2 border rounded-md"
+          rows={3}
+          placeholder="Add any additional notes about the inmate..."
+          value={formData.briefNote}
+          onChange={(e) =>
+            setFormData((p) => ({ ...p, briefNote: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ── Emergency Contact ── */}
+      <div>
+        <Label>Emergency Contact</Label>
+        <div className="grid grid-cols-3 gap-4 mt-2">
+          <Input
+            placeholder="Name"
+            value={formData.emergencyContact.name}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                emergencyContact: {
+                  ...p.emergencyContact,
+                  name: e.target.value,
+                },
+              }))
+            }
+          />
+          <Input
+            placeholder="Relationship"
+            value={formData.emergencyContact.relationship}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                emergencyContact: {
+                  ...p.emergencyContact,
+                  relationship: e.target.value,
+                },
+              }))
+            }
+          />
+          <Input
+            placeholder="Phone"
+            value={formData.emergencyContact.phone}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                emergencyContact: {
+                  ...p.emergencyContact,
+                  phone: e.target.value,
+                },
+              }))
+            }
+          />
+        </div>
+      </div>
+
+      {/* ── Medical Information ── */}
+      <div>
+        <Label>Medical Information</Label>
+        <div className="grid grid-cols-1 gap-4 mt-2">
+          <Input
+            placeholder="Allergies (comma-separated)"
+            value={formData.medicalInfo.allergies.join(", ")}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                medicalInfo: {
+                  ...p.medicalInfo,
+                  allergies: e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                },
+              }))
+            }
+          />
+          <Input
+            placeholder="Medications (comma-separated)"
+            value={formData.medicalInfo.medications.join(", ")}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                medicalInfo: {
+                  ...p.medicalInfo,
+                  medications: e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                },
+              }))
+            }
+          />
+          <Input
+            placeholder="Medical Conditions (comma-separated)"
+            value={formData.medicalInfo.medicalConditions.join(", ")}
+            onChange={(e) =>
+              setFormData((p) => ({
+                ...p,
+                medicalInfo: {
+                  ...p.medicalInfo,
+                  medicalConditions: e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                },
+              }))
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ==================== Main Component ====================
 
 const PrisonersContent = () => {
-  const searchParams = useSearchParams();
+  useSearchParams(); // keep router sync
 
-  // State
+  // Data state
   const [prisoners, setPrisoners] = useState<Prisoner[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserModel[]>([]);
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
 
-  // Search and filter state
+  // Filter state
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState<Prisoner["status"] | "all">(
     "all",
@@ -257,55 +811,25 @@ const PrisonersContent = () => {
   );
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Form state
-  const [formData, setFormData] = useState<PrisonerFormData>({
-    firstName: "",
-    lastName: "",
-    middleName: "",
-    dateOfBirth: "",
-    gender: "male",
-    nationality: "Ghanaian",
-    address: { street: "", city: "", region: "" },
-    phoneNumber: "",
-    emergencyContact: { name: "", relationship: "", phone: "" },
-    arrestDetails: {
-      arrestDate: "",
-      arrestLocation: "",
-      arrestingOfficer: "",
-      charges: [],
-    },
-    caseId: "",
-    cellNumber: "Male",
-    status: "Jailed",
-    briefNote: "",
-    medicalInfo: { allergies: [], medications: [], medicalConditions: [] },
-    personalEffects: [],
-    mugshot: null,
-  });
+  // Shared form state
+  const [formData, setFormData] = useState<PrisonerFormData>(defaultForm());
 
-  // Debounce search input
   const debouncedSearchTerm = useDebounce(searchInput, 500);
 
-  // Fetch prisoners with proper dependency management
+  // ── Fetch helpers ──
+
   const fetchPrisoners = useCallback(async () => {
     try {
       setSearching(true);
       const token = getToken();
-
       const params = new URLSearchParams({
         page: currentPage.toString(),
         limit: "10",
       });
-
-      // Only add search param if there's a search term
-      if (debouncedSearchTerm.trim()) {
+      if (debouncedSearchTerm.trim())
         params.append("search", debouncedSearchTerm.trim());
-      }
-
-      // Only add status filter if it's not "all"
-      if (statusFilter && statusFilter !== "all") {
+      if (statusFilter && statusFilter !== "all")
         params.append("status", statusFilter);
-      }
 
       const response = await fetch(`/api/prisoners?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -331,7 +855,6 @@ const PrisonersContent = () => {
     }
   }, [currentPage, debouncedSearchTerm, statusFilter]);
 
-  // Fetch users (officers)
   const fetchUsers = useCallback(async () => {
     try {
       const token = getToken();
@@ -340,7 +863,6 @@ const PrisonersContent = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        console.log("Fetched arresting officers:", data.users);
         setUsers(data.users || []);
       }
     } catch (error) {
@@ -348,7 +870,6 @@ const PrisonersContent = () => {
     }
   }, []);
 
-  // Fetch cases
   const fetchCases = useCallback(async () => {
     try {
       const token = getToken();
@@ -364,23 +885,19 @@ const PrisonersContent = () => {
     }
   }, []);
 
-  // Initial load - fetch users and cases only once
   useEffect(() => {
     fetchUsers();
     fetchCases();
   }, [fetchUsers, fetchCases]);
-
-  // Fetch prisoners when dependencies change
   useEffect(() => {
     fetchPrisoners();
   }, [fetchPrisoners]);
-
-  // Reset to page 1 when search term or filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchTerm, statusFilter]);
 
-  // Image upload handler
+  // ── Image upload ──
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -390,7 +907,6 @@ const PrisonersContent = () => {
       e.target.value = "";
       return;
     }
-
     if (file.size > 5 * 1024 * 1024) {
       toast.error("Image size must be less than 5MB");
       e.target.value = "";
@@ -399,27 +915,19 @@ const PrisonersContent = () => {
 
     try {
       setUploadingImage(true);
-      const formDataToSend = new FormData();
-      formDataToSend.append("file", file);
+      const fd = new FormData();
+      fd.append("file", file);
 
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formDataToSend,
-      });
-
+      const response = await fetch("/api/upload", { method: "POST", body: fd });
       if (response.ok) {
         const data = await response.json();
-        setFormData((prev) => ({
-          ...prev,
-          mugshot: data.url,
-        }));
+        setFormData((p) => ({ ...p, mugshot: data.url }));
         toast.success("Image uploaded successfully");
-        e.target.value = "";
       } else {
-        const error = await response.json();
-        toast.error(error.error || "Failed to upload image");
-        e.target.value = "";
+        const err = await response.json();
+        toast.error(err.error || "Failed to upload image");
       }
+      e.target.value = "";
     } catch (error) {
       console.error("Upload error:", error);
       toast.error("Failed to upload image");
@@ -429,9 +937,24 @@ const PrisonersContent = () => {
     }
   };
 
-  // Submit handler for create/update
+  // ── Submit (create / update) ──
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Client-side guard: officer must be supplied
+    const hasOfficerId =
+      formData.arrestDetails.arrestingOfficer &&
+      formData.arrestDetails.arrestingOfficer !== "others";
+    const hasOtherOfficer =
+      !!formData.arrestDetails.otherArrestingOfficer.trim();
+    if (!hasOfficerId && !hasOtherOfficer) {
+      toast.error(
+        "Please select an arresting officer or enter a name under 'Others'.",
+      );
+      return;
+    }
+
     try {
       const token = getToken();
       const url = selectedPrisoner
@@ -456,13 +979,25 @@ const PrisonersContent = () => {
             ? new Date(formData.arrestDetails.arrestDate).toISOString()
             : undefined,
           arrestLocation: formData.arrestDetails.arrestLocation,
-          arrestingOfficer: formData.arrestDetails.arrestingOfficer,
+          // Send ObjectId or null
+          arrestingOfficer: hasOfficerId
+            ? formData.arrestDetails.arrestingOfficer
+            : null,
+          // Send free-text only when "others"
+          otherArrestingOfficer: hasOfficerId
+            ? ""
+            : formData.arrestDetails.otherArrestingOfficer.trim(),
           charges: formData.arrestDetails.charges,
         },
+        // ObjectId, "others" sentinel, or null
         caseId:
           formData.caseId === "none" || !formData.caseId
             ? null
-            : formData.caseId,
+            : formData.caseId === "others"
+              ? "others"
+              : formData.caseId,
+        otherCase:
+          formData.caseId === "others" ? formData.otherCase.trim() : "",
         cellNumber: formData.cellNumber,
         status: formData.status,
         briefNote: formData.briefNote || undefined,
@@ -489,8 +1024,8 @@ const PrisonersContent = () => {
         resetForm();
         fetchPrisoners();
       } else {
-        const error = await response.json();
-        toast.error(error.error || "Operation failed");
+        const err = await response.json();
+        toast.error(err.error || "Operation failed");
       }
     } catch (error) {
       console.error("Submit error:", error);
@@ -498,20 +1033,19 @@ const PrisonersContent = () => {
     }
   };
 
-  // Delete handler
+  // ── Delete ──
+
   const handleDelete = async (prisonerId: string) => {
     if (
       !confirm("Are you sure you want to delete this person detained record?")
     )
       return;
-
     try {
       const token = getToken();
       const response = await fetch(`/api/prisoners/${prisonerId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (response.ok) {
         toast.success("Person detained deleted successfully");
         fetchPrisoners();
@@ -524,38 +1058,39 @@ const PrisonersContent = () => {
     }
   };
 
-  // Reset form
+  // ── Reset form ──
+
   const resetForm = () => {
-    setFormData({
-      firstName: "",
-      lastName: "",
-      middleName: "",
-      dateOfBirth: "",
-      gender: "male",
-      nationality: "Ghanaian",
-      address: { street: "", city: "", region: "" },
-      phoneNumber: "",
-      emergencyContact: { name: "", relationship: "", phone: "" },
-      arrestDetails: {
-        arrestDate: "",
-        arrestLocation: "",
-        arrestingOfficer: "",
-        charges: [],
-      },
-      caseId: "",
-      cellNumber: "Male",
-      status: "Jailed",
-      briefNote: "",
-      medicalInfo: { allergies: [], medications: [], medicalConditions: [] },
-      personalEffects: [],
-      mugshot: null,
-    });
+    setFormData(defaultForm());
     setSelectedPrisoner(null);
   };
 
-  // Open edit modal
+  // ── Open edit modal ──
+
   const openEditModal = (prisoner: Prisoner) => {
     setSelectedPrisoner(prisoner);
+
+    // Determine the arrestingOfficer value for the Select
+    let officerSelectValue = "";
+    if (
+      prisoner.arrestDetails?.arrestingOfficer &&
+      typeof prisoner.arrestDetails.arrestingOfficer === "object"
+    ) {
+      officerSelectValue = prisoner.arrestDetails.arrestingOfficer._id;
+    } else if (typeof prisoner.arrestDetails?.arrestingOfficer === "string") {
+      officerSelectValue = prisoner.arrestDetails.arrestingOfficer;
+    } else if (prisoner.arrestDetails?.otherArrestingOfficer) {
+      officerSelectValue = "others";
+    }
+
+    // Determine the caseId value for the Select
+    let caseSelectValue = "";
+    if (typeof prisoner.caseId === "object" && prisoner.caseId?._id) {
+      caseSelectValue = prisoner.caseId._id;
+    } else if (prisoner.otherCase) {
+      caseSelectValue = "others";
+    }
+
     setFormData({
       firstName: prisoner.firstName,
       lastName: prisoner.lastName,
@@ -577,16 +1112,13 @@ const PrisonersContent = () => {
           ? prisoner.arrestDetails.arrestDate.split("T")[0]
           : "",
         arrestLocation: prisoner.arrestDetails?.arrestLocation || "",
-        arrestingOfficer:
-          typeof prisoner.arrestDetails?.arrestingOfficer === "string"
-            ? prisoner.arrestDetails.arrestingOfficer
-            : prisoner.arrestDetails?.arrestingOfficer?._id || "",
+        arrestingOfficer: officerSelectValue,
+        otherArrestingOfficer:
+          prisoner.arrestDetails?.otherArrestingOfficer || "",
         charges: prisoner.arrestDetails?.charges || [],
       },
-      caseId:
-        typeof prisoner.caseId === "object" && prisoner.caseId?._id
-          ? prisoner.caseId._id
-          : "",
+      caseId: caseSelectValue,
+      otherCase: prisoner.otherCase || "",
       cellNumber: prisoner.cellNumber || "Male",
       status: prisoner.status || "Jailed",
       briefNote: prisoner.briefNote || "",
@@ -601,36 +1133,42 @@ const PrisonersContent = () => {
     setIsEditModalOpen(true);
   };
 
-  // Clear all filters
+  // ── Filter helpers ──
+
   const clearAllFilters = () => {
     setSearchInput("");
     setStatusFilter("all");
     setCurrentPage(1);
   };
 
-  // Clear search input
-  const clearSearch = () => {
-    setSearchInput("");
-  };
+  const clearSearch = () => setSearchInput("");
 
-  // Determine empty state type
   const showEmptyState = useMemo(() => {
     if (loading) return false;
     if (prisoners.length === 0) {
-      if (searchInput.trim() || (statusFilter && statusFilter !== "all")) {
+      if (searchInput.trim() || (statusFilter && statusFilter !== "all"))
         return "no-results";
-      }
       return "no-data";
     }
     return false;
   }, [loading, prisoners.length, searchInput, statusFilter]);
 
-  // Check if any filters are active
-  const hasActiveFilters = useMemo(() => {
-    return (
-      searchInput.trim() !== "" || (statusFilter && statusFilter !== "all")
-    );
-  }, [searchInput, statusFilter]);
+  const hasActiveFilters = useMemo(
+    () => searchInput.trim() !== "" || (statusFilter && statusFilter !== "all"),
+    [searchInput, statusFilter],
+  );
+
+  // ── Helper: display officer name in table ──
+
+  const getOfficerDisplay = (prisoner: Prisoner): string => {
+    const ad = prisoner.arrestDetails;
+    if (!ad) return "—";
+    if (ad.arrestingOfficer && typeof ad.arrestingOfficer === "object") {
+      return ad.arrestingOfficer.fullName;
+    }
+    if (ad.otherArrestingOfficer) return ad.otherArrestingOfficer;
+    return "—";
+  };
 
   if (loading) {
     return (
@@ -642,11 +1180,13 @@ const PrisonersContent = () => {
 
   return (
     <div className="space-y-6 mt-12">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">
           Person Detained or Inmate Management
         </h1>
+
+        {/* Create Modal */}
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>
@@ -659,426 +1199,14 @@ const PrisonersContent = () => {
               <DialogTitle>Add New Person Detained</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Image Upload */}
-              <div>
-                <Label>Inmate Photo (Max 5MB)</Label>
-                <div className="mt-2">
-                  {formData.mugshot && (
-                    <div className="mb-4">
-                      <img
-                        src={formData.mugshot}
-                        alt="Inmate photo"
-                        className="w-24 h-24 rounded-lg object-cover"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setFormData({ ...formData, mugshot: null })
-                        }
-                        className="mt-2"
-                      >
-                        Remove Image
-                      </Button>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      disabled={uploadingImage}
-                      className="flex-1"
-                    />
-                    {uploadingImage && (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Name Fields */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName">First Name *</Label>
-                  <Input
-                    id="firstName"
-                    value={formData.firstName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, firstName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="lastName">Last Name *</Label>
-                  <Input
-                    id="lastName"
-                    value={formData.lastName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, lastName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="middleName">Middle Name</Label>
-                  <Input
-                    id="middleName"
-                    value={formData.middleName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, middleName: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Personal Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth *</Label>
-                  <Input
-                    id="dateOfBirth"
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) =>
-                      setFormData({ ...formData, dateOfBirth: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="gender">Gender *</Label>
-                  <Select
-                    value={formData.gender}
-                    onValueChange={(value: "male" | "female" | "other") =>
-                      setFormData({ ...formData, gender: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GENDERS.map((gender) => (
-                        <SelectItem key={gender} value={gender}>
-                          {gender.charAt(0).toUpperCase() + gender.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="phoneNumber">Phone Number</Label>
-                  <Input
-                    id="phoneNumber"
-                    value={formData.phoneNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phoneNumber: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="cellNumber">Cell Type *</Label>
-                  <Select
-                    value={formData.cellNumber}
-                    onValueChange={(value: "Male" | "Female") =>
-                      setFormData({ ...formData, cellNumber: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CELL_NUMBERS.map((cell) => (
-                        <SelectItem key={cell} value={cell}>
-                          {cell}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Address */}
-              <div>
-                <Label>Address</Label>
-                <div className="grid grid-cols-3 gap-4 mt-2">
-                  <Input
-                    placeholder="Street"
-                    value={formData.address.street}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        address: {
-                          ...formData.address,
-                          street: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                  <Input
-                    placeholder="City"
-                    value={formData.address.city}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        address: { ...formData.address, city: e.target.value },
-                      })
-                    }
-                  />
-                  <Input
-                    placeholder="Region"
-                    value={formData.address.region}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        address: {
-                          ...formData.address,
-                          region: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Arrest Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="arrestDate">Arrest Date *</Label>
-                  <Input
-                    id="arrestDate"
-                    type="date"
-                    value={formData.arrestDetails.arrestDate}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        arrestDetails: {
-                          ...formData.arrestDetails,
-                          arrestDate: e.target.value,
-                        },
-                      })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="arrestLocation">Arrest Location *</Label>
-                  <Input
-                    id="arrestLocation"
-                    value={formData.arrestDetails.arrestLocation}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        arrestDetails: {
-                          ...formData.arrestDetails,
-                          arrestLocation: e.target.value,
-                        },
-                      })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="arrestingOfficer">Arresting Officer *</Label>
-                  <Select
-                    value={formData.arrestDetails.arrestingOfficer}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        arrestDetails: {
-                          ...formData.arrestDetails,
-                          arrestingOfficer: value,
-                        },
-                      })
-                    }
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select arresting officer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user._id} value={user._id}>
-                          {user.fullName} ({user.role.toUpperCase()})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="relatedCase">Related Case</Label>
-                  <Select
-                    value={formData.caseId || "none"}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, caseId: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select case" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {cases.map((caseItem) => (
-                        <SelectItem key={caseItem._id} value={caseItem._id}>
-                          {caseItem.caseNumber} - {caseItem.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="status">Status *</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value: Prisoner["status"]) =>
-                      setFormData({ ...formData, status: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUSES.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Brief Note */}
-              <div>
-                <Label htmlFor="briefNote">Brief Note (Optional)</Label>
-                <textarea
-                  id="briefNote"
-                  className="w-full p-2 border rounded-md"
-                  rows={3}
-                  placeholder="Add any additional notes about the inmate..."
-                  value={formData.briefNote}
-                  onChange={(e) =>
-                    setFormData({ ...formData, briefNote: e.target.value })
-                  }
-                />
-              </div>
-
-              {/* Emergency Contact */}
-              <div>
-                <Label>Emergency Contact</Label>
-                <div className="grid grid-cols-3 gap-4 mt-2">
-                  <Input
-                    placeholder="Name"
-                    value={formData.emergencyContact.name}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        emergencyContact: {
-                          ...formData.emergencyContact,
-                          name: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                  <Input
-                    placeholder="Relationship"
-                    value={formData.emergencyContact.relationship}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        emergencyContact: {
-                          ...formData.emergencyContact,
-                          relationship: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                  <Input
-                    placeholder="Phone"
-                    value={formData.emergencyContact.phone}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        emergencyContact: {
-                          ...formData.emergencyContact,
-                          phone: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Medical Information */}
-              <div>
-                <Label>Medical Information</Label>
-                <div className="grid grid-cols-1 gap-4 mt-2">
-                  <Input
-                    placeholder="Allergies (comma-separated)"
-                    value={formData.medicalInfo.allergies.join(", ")}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        medicalInfo: {
-                          ...formData.medicalInfo,
-                          allergies: e.target.value
-                            .split(",")
-                            .map((s) => s.trim())
-                            .filter(Boolean),
-                        },
-                      })
-                    }
-                  />
-                  <Input
-                    placeholder="Medications (comma-separated)"
-                    value={formData.medicalInfo.medications.join(", ")}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        medicalInfo: {
-                          ...formData.medicalInfo,
-                          medications: e.target.value
-                            .split(",")
-                            .map((s) => s.trim())
-                            .filter(Boolean),
-                        },
-                      })
-                    }
-                  />
-                  <Input
-                    placeholder="Medical Conditions (comma-separated)"
-                    value={formData.medicalInfo.medicalConditions.join(", ")}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        medicalInfo: {
-                          ...formData.medicalInfo,
-                          medicalConditions: e.target.value
-                            .split(",")
-                            .map((s) => s.trim())
-                            .filter(Boolean),
-                        },
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Form Actions */}
+              <PrisonerFormFields
+                formData={formData}
+                setFormData={setFormData}
+                users={users}
+                cases={cases}
+                uploadingImage={uploadingImage}
+                handleImageUpload={handleImageUpload}
+              />
               <div className="flex justify-end space-x-2">
                 <Button
                   type="button"
@@ -1094,12 +1222,12 @@ const PrisonersContent = () => {
         </Dialog>
       </div>
 
-      {/* Filters */}
+      {/* ── Filters ── */}
       <Card>
         <CardContent className="pt-6">
           <div className="space-y-4">
             <div className="flex flex-wrap gap-4">
-              {/* Search Input */}
+              {/* Search */}
               <div className="flex-1 min-w-75">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -1128,7 +1256,7 @@ const PrisonersContent = () => {
                 </div>
               </div>
 
-              {/* Status Filter */}
+              {/* Status filter */}
               <Select
                 value={statusFilter || "all"}
                 onValueChange={(value) =>
@@ -1140,16 +1268,15 @@ const PrisonersContent = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {STATUSES.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Active filters indicator */}
             {hasActiveFilters && (
               <div className="flex items-center justify-between pt-2 border-t">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -1168,7 +1295,7 @@ const PrisonersContent = () => {
         </CardContent>
       </Card>
 
-      {/* Table or Empty State */}
+      {/* ── Table or Empty State ── */}
       {showEmptyState ? (
         showEmptyState === "no-results" ? (
           <EmptyState
@@ -1183,7 +1310,7 @@ const PrisonersContent = () => {
           <EmptyState
             type="no-data"
             title="No persons detained yet"
-            description="Get started by adding your first person detained record. Record management helps you track inmates and their information."
+            description="Get started by adding your first person detained record."
             actionLabel="Add first record"
             onAction={() => setIsCreateModalOpen(true)}
           />
@@ -1203,6 +1330,7 @@ const PrisonersContent = () => {
                     <th className="text-left p-2">Name</th>
                     <th className="text-left p-2">Cell Type</th>
                     <th className="text-left p-2">Arrest Date</th>
+                    <th className="text-left p-2">Arresting Officer</th>
                     <th className="text-left p-2">Status</th>
                     <th className="text-left p-2">Related Case</th>
                     <th className="text-left p-2">Actions</th>
@@ -1254,16 +1382,25 @@ const PrisonersContent = () => {
                           </span>
                         </div>
                       </td>
+                      {/* ── Officer column shows free-text when "Others" was used ── */}
+                      <td className="p-2 text-sm">
+                        {getOfficerDisplay(prisoner)}
+                      </td>
                       <td className="p-2">
                         <Badge className={getStatusColor(prisoner.status)}>
                           {prisoner.status}
                         </Badge>
                       </td>
+                      {/* ── Case column shows free-text when "Others" was used ── */}
                       <td className="p-2">
                         {prisoner.caseId &&
                         typeof prisoner.caseId === "object" ? (
                           <span className="text-sm font-mono">
                             {prisoner.caseId.caseNumber}
+                          </span>
+                        ) : prisoner.otherCase ? (
+                          <span className="text-sm italic text-gray-600">
+                            {prisoner.otherCase}
                           </span>
                         ) : (
                           <span className="text-gray-400">None</span>
@@ -1304,9 +1441,7 @@ const PrisonersContent = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.max(prev - 1, 1))
-                    }
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                     disabled={currentPage === 1}
                   >
                     Previous
@@ -1315,7 +1450,7 @@ const PrisonersContent = () => {
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      setCurrentPage((p) => Math.min(p + 1, totalPages))
                     }
                     disabled={currentPage === totalPages}
                   >
@@ -1328,134 +1463,22 @@ const PrisonersContent = () => {
         </Card>
       )}
 
-      {/* Edit Modal */}
+      {/* ── Edit Modal ── */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Person Detained Record</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Image Upload */}
-            <div>
-              <Label>Inmate Photo (Max 5MB)</Label>
-              <div className="mt-2">
-                {formData.mugshot && (
-                  <div className="mb-4">
-                    <img
-                      src={formData.mugshot}
-                      alt="Inmate photo"
-                      className="w-24 h-24 rounded-lg object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setFormData({ ...formData, mugshot: null })
-                      }
-                      className="mt-2"
-                    >
-                      Remove Image
-                    </Button>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    disabled={uploadingImage}
-                    className="flex-1"
-                  />
-                  {uploadingImage && (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-firstName">First Name *</Label>
-                <Input
-                  id="edit-firstName"
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-lastName">Last Name *</Label>
-                <Input
-                  id="edit-lastName"
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-cellNumber">Cell Type *</Label>
-                <Select
-                  value={formData.cellNumber}
-                  onValueChange={(value: "Male" | "Female") =>
-                    setFormData({ ...formData, cellNumber: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CELL_NUMBERS.map((cell) => (
-                      <SelectItem key={cell} value={cell}>
-                        {cell}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-status">Status *</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value: Prisoner["status"]) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUSES.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit-briefNote">Brief Note (Optional)</Label>
-              <textarea
-                id="edit-briefNote"
-                className="w-full p-2 border rounded-md"
-                rows={3}
-                placeholder="Add any additional notes about the inmate..."
-                value={formData.briefNote}
-                onChange={(e) =>
-                  setFormData({ ...formData, briefNote: e.target.value })
-                }
-              />
-            </div>
-
+            <PrisonerFormFields
+              formData={formData}
+              setFormData={setFormData}
+              users={users}
+              cases={cases}
+              uploadingImage={uploadingImage}
+              handleImageUpload={handleImageUpload}
+              isEdit
+            />
             <div className="flex justify-end space-x-2">
               <Button
                 type="button"
@@ -1475,18 +1498,16 @@ const PrisonersContent = () => {
 
 // ==================== Page Export ====================
 
-const PrisonersPage = () => {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        </div>
-      }
-    >
-      <PrisonersContent />
-    </Suspense>
-  );
-};
+const PrisonersPage = () => (
+  <Suspense
+    fallback={
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    }
+  >
+    <PrisonersContent />
+  </Suspense>
+);
 
 export default PrisonersPage;

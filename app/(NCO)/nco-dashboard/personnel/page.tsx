@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, Loader2, AlertCircle, Upload } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, Upload } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
@@ -29,34 +29,41 @@ import { useSearchParams } from "next/navigation";
 
 // ==================== Type Definitions ====================
 
-// Enums matching backend schema
-type PersonnelRole = "District Commander" | "Station Officer" | "Counter NCO" | "Counter SO";
-type PersonnelRank = 
-  | "Constable" 
-  | "Lance Corporal" 
-  | "Sergeant" 
-  | "Inspector" 
-  | "Chief Inspector" 
-  | "Aspol" 
-  | "Desupol" 
-  | "Supol" 
-  | "Chief Supol" 
-  | "Acpol" 
-  | "Dipol" 
-  | "Cop" 
+type PersonnelRole =
+  | "District Commander"
+  | "Station Officer"
+  | "Counter NCO"
+  | "Counter SO";
+type PersonnelRank =
+  | "Constable"
+  | "Lance Corporal"
+  | "Sergeant"
+  | "Inspector"
+  | "Chief Inspector"
+  | "Aspol"
+  | "Desupol"
+  | "Supol"
+  | "Chief Supol"
+  | "Acpol"
+  | "Dipol"
+  | "Cop"
   | "Superintendent";
-type PersonnelSpecialization = "General" | "Traffic" | "Criminal Investigation" | "Cybercrime" | "Narcotics" | "K9 Unit";
-type PersonnelShift = "morning" | "afternoon" | "night";
-type PersonnelStatus = "active" | "on-leave" | "suspended" | "retired";
+type PersonnelSpecialization =
+  | "General"
+  | "Traffic"
+  | "Criminal Investigation"
+  | "Cybercrime"
+  | "Narcotics"
+  | "K9 Unit"
+  | "Others";
+type PersonnelStatus = "active" | "on-leave" | "suspended" | "retired" | "Sick";
 
-// Emergency Contact interface
 interface EmergencyContact {
   name: string;
   relationship: string;
   phone: string;
 }
 
-// Address interface
 interface Address {
   street: string;
   city: string;
@@ -64,7 +71,6 @@ interface Address {
   zipCode: string;
 }
 
-// Certification interface
 interface Certification {
   name: string;
   issuedBy: string;
@@ -72,7 +78,6 @@ interface Certification {
   expiryDate: Date;
 }
 
-// Assignment interface
 interface Assignment {
   caseId: {
     _id: string;
@@ -84,7 +89,6 @@ interface Assignment {
   status: "active" | "completed";
 }
 
-// Main Personnel interface matching backend model
 interface Personnel {
   _id: string;
   firstName: string;
@@ -92,7 +96,7 @@ interface Personnel {
   email: string;
   username: string;
   role: PersonnelRole;
-  badgeNumber: string | null;
+  serviceNumber: string | null;
   rank: PersonnelRank;
   specialization: PersonnelSpecialization;
   phoneNumber: string;
@@ -101,16 +105,13 @@ interface Personnel {
   dateOfBirth: Date;
   dateJoined: Date;
   profileImage: string | null;
-  shift: PersonnelShift;
   status: PersonnelStatus;
-  department: string;
   certifications: Certification[];
   assignments: Assignment[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-// API Response interfaces
 interface PersonnelListResponse {
   personnel: Personnel[];
   pagination: {
@@ -121,29 +122,19 @@ interface PersonnelListResponse {
   };
 }
 
-interface PersonnelSingleResponse {
-  personnel: Personnel;
-}
-
-interface PersonnelMutationResponse {
-  message: string;
-  personnel: Personnel;
-}
-
 interface UploadResponse {
   url?: string;
   public_id?: string;
   error?: string;
 }
 
-// Form data interface for create/edit
 interface PersonnelFormData {
   firstName: string;
   lastName: string;
   email: string;
   username: string;
   role: PersonnelRole | "";
-  badgeNumber: string;
+  serviceNumber: string;
   rank: PersonnelRank | "";
   specialization: PersonnelSpecialization;
   phoneNumber: string;
@@ -152,17 +143,8 @@ interface PersonnelFormData {
   dateOfBirth: string;
   dateJoined: string;
   profileImage: string;
-  shift: PersonnelShift;
   status: PersonnelStatus;
-  department: string;
   certifications: Certification[];
-}
-
-// Filter state interface
-interface Filters {
-  status: string;
-  rank: string;
-  role: string;
 }
 
 // ==================== Constants ====================
@@ -190,10 +172,17 @@ const SPECIALIZATIONS: PersonnelSpecialization[] = [
   "Cybercrime",
   "Narcotics",
   "K9 Unit",
+  "Others",
 ];
 
-const SHIFTS: PersonnelShift[] = ["morning", "afternoon", "night"];
-const STATUSES: PersonnelStatus[] = ["active", "on-leave", "suspended", "retired"];
+const STATUSES: PersonnelStatus[] = [
+  "active",
+  "on-leave",
+  "suspended",
+  "retired",
+  "Sick",
+];
+
 const ROLES: PersonnelRole[] = [
   "District Commander",
   "Station Officer",
@@ -211,6 +200,7 @@ const getStatusColor = (status: PersonnelStatus): string => {
     "on-leave": "bg-yellow-100 text-yellow-800",
     suspended: "bg-red-100 text-red-800",
     retired: "bg-gray-100 text-gray-800",
+    Sick: "bg-orange-100 text-orange-800",
   };
   return colors[status] || "bg-gray-100 text-gray-800";
 };
@@ -233,7 +223,7 @@ const INITIAL_FORM_DATA: PersonnelFormData = {
   email: "",
   username: "",
   role: "",
-  badgeNumber: "",
+  serviceNumber: "",
   rank: "",
   specialization: "General",
   phoneNumber: "",
@@ -242,9 +232,7 @@ const INITIAL_FORM_DATA: PersonnelFormData = {
   dateOfBirth: "",
   dateJoined: "",
   profileImage: "",
-  shift: "morning",
   status: "active",
-  department: "General",
   certifications: [],
 };
 
@@ -263,10 +251,13 @@ const PersonnelContent = () => {
   const [totalResults, setTotalResults] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedPersonnel, setSelectedPersonnel] = useState<Personnel | null>(null);
+  const [selectedPersonnel, setSelectedPersonnel] = useState<Personnel | null>(
+    null,
+  );
   const [lastSearchTerm, setLastSearchTerm] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [formData, setFormData] = useState<PersonnelFormData>(INITIAL_FORM_DATA);
+  const [formData, setFormData] =
+    useState<PersonnelFormData>(INITIAL_FORM_DATA);
 
   const searchParams = useSearchParams();
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -289,7 +280,8 @@ const PersonnelContent = () => {
           page: currentPage.toString(),
           limit: "10",
           ...(searchValue && { search: searchValue }),
-          ...(statusFilter && statusFilter !== "all" && { status: statusFilter }),
+          ...(statusFilter &&
+            statusFilter !== "all" && { status: statusFilter }),
           ...(rankFilter && rankFilter !== "all" && { rank: rankFilter }),
           ...(roleFilter && roleFilter !== "all" && { role: roleFilter }),
         });
@@ -310,25 +302,25 @@ const PersonnelContent = () => {
         setLastSearchTerm(searchValue);
       } catch (error) {
         console.error("Fetch personnel error:", error);
-        toast.error(error instanceof Error ? error.message : "Failed to fetch personnel");
+        toast.error(
+          error instanceof Error ? error.message : "Failed to fetch personnel",
+        );
       } finally {
         setLoading(false);
         setSearching(false);
       }
     },
-    [currentPage, statusFilter, rankFilter, roleFilter, lastSearchTerm]
+    [currentPage, statusFilter, rankFilter, roleFilter, lastSearchTerm],
   );
 
-  // Handle manual search (Enter key or search button)
   const handleManualSearch = useCallback(
     (searchValue: string) => {
       setCurrentPage(1);
       fetchPersonnel(searchValue, true);
     },
-    [fetchPersonnel]
+    [fetchPersonnel],
   );
 
-  // Handle debounced search
   useEffect(() => {
     if (debouncedSearchTerm !== lastSearchTerm) {
       setCurrentPage(1);
@@ -336,34 +328,29 @@ const PersonnelContent = () => {
     }
   }, [debouncedSearchTerm, fetchPersonnel, lastSearchTerm]);
 
-  // Handle filter changes
   useEffect(() => {
     setCurrentPage(1);
     fetchPersonnel(searchTerm);
   }, [statusFilter, rankFilter, roleFilter]);
 
-  // Handle page changes
   useEffect(() => {
     fetchPersonnel(searchTerm);
   }, [currentPage]);
 
-  // Initial load
   useEffect(() => {
     fetchPersonnel("");
   }, []);
 
   // Image upload handler
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
 
-    // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("File size must be less than 5MB");
       return;
@@ -379,15 +366,13 @@ const PersonnelContent = () => {
         body: formDataToSend,
       });
 
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
+      if (!response.ok) throw new Error("Upload failed");
 
       const data: UploadResponse = await response.json();
-      setFormData({
-        ...formData,
+      setFormData((prev) => ({
+        ...prev,
         profileImage: data.url || data.public_id || "",
-      });
+      }));
       toast.success("Image uploaded successfully");
     } catch (error) {
       console.error("Upload error:", error);
@@ -400,11 +385,17 @@ const PersonnelContent = () => {
   // Create or update personnel
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate required fields
-    if (!formData.firstName || !formData.lastName || !formData.email || 
-        !formData.username || !formData.role || !formData.rank || 
-        !formData.phoneNumber || !formData.dateOfBirth) {
+
+    if (
+      !formData.firstName ||
+      !formData.lastName ||
+      !formData.email ||
+      !formData.username ||
+      !formData.role ||
+      !formData.rank ||
+      !formData.phoneNumber ||
+      !formData.dateOfBirth
+    ) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -421,7 +412,6 @@ const PersonnelContent = () => {
         : "/api/personnel";
       const method = selectedPersonnel ? "PUT" : "POST";
 
-      // Prepare payload matching backend expectations
       const payload = {
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -431,12 +421,12 @@ const PersonnelContent = () => {
         rank: formData.rank,
         specialization: formData.specialization,
         phoneNumber: formData.phoneNumber,
-        badgeNumber: formData.badgeNumber || null,
+        serviceNumber: formData.serviceNumber || null,
         dateOfBirth: new Date(formData.dateOfBirth).toISOString(),
-        dateJoined: formData.dateJoined ? new Date(formData.dateJoined).toISOString() : undefined,
-        shift: formData.shift,
+        dateJoined: formData.dateJoined
+          ? new Date(formData.dateJoined).toISOString()
+          : undefined,
         status: formData.status,
-        department: formData.department,
         profileImage: formData.profileImage || null,
         emergencyContact: formData.emergencyContact,
         address: formData.address,
@@ -456,7 +446,7 @@ const PersonnelContent = () => {
 
       if (response.ok) {
         toast.success(
-          `Personnel ${selectedPersonnel ? "updated" : "created"} successfully`
+          `Personnel ${selectedPersonnel ? "updated" : "created"} successfully`,
         );
         setIsCreateModalOpen(false);
         setIsEditModalOpen(false);
@@ -471,9 +461,9 @@ const PersonnelContent = () => {
     }
   };
 
-  // Delete personnel
   const handleDelete = async (personnelId: string) => {
-    if (!confirm("Are you sure you want to delete this personnel record?")) return;
+    if (!confirm("Are you sure you want to delete this personnel record?"))
+      return;
 
     try {
       const token = getToken();
@@ -500,13 +490,11 @@ const PersonnelContent = () => {
     }
   };
 
-  // Reset form to initial state
   const resetForm = () => {
     setFormData(INITIAL_FORM_DATA);
     setSelectedPersonnel(null);
   };
 
-  // Open edit modal with personnel data
   const openEditModal = (personnelItem: Personnel) => {
     setSelectedPersonnel(personnelItem);
     setFormData({
@@ -515,12 +503,21 @@ const PersonnelContent = () => {
       email: personnelItem.email,
       username: personnelItem.username,
       role: personnelItem.role,
-      badgeNumber: personnelItem.badgeNumber || "",
+      serviceNumber: personnelItem.serviceNumber || "",
       rank: personnelItem.rank,
       specialization: personnelItem.specialization,
       phoneNumber: personnelItem.phoneNumber,
-      emergencyContact: personnelItem.emergencyContact || { name: "", relationship: "", phone: "" },
-      address: personnelItem.address || { street: "", city: "", state: "", zipCode: "" },
+      emergencyContact: personnelItem.emergencyContact || {
+        name: "",
+        relationship: "",
+        phone: "",
+      },
+      address: personnelItem.address || {
+        street: "",
+        city: "",
+        state: "",
+        zipCode: "",
+      },
       dateOfBirth: personnelItem.dateOfBirth
         ? new Date(personnelItem.dateOfBirth).toISOString().split("T")[0]
         : "",
@@ -528,15 +525,12 @@ const PersonnelContent = () => {
         ? new Date(personnelItem.dateJoined).toISOString().split("T")[0]
         : "",
       profileImage: personnelItem.profileImage || "",
-      shift: personnelItem.shift,
       status: personnelItem.status,
-      department: personnelItem.department,
       certifications: personnelItem.certifications || [],
     });
     setIsEditModalOpen(true);
   };
 
-  // Clear all filters
   const clearAllFilters = () => {
     setSearchTerm("");
     setStatusFilter("");
@@ -546,28 +540,36 @@ const PersonnelContent = () => {
     fetchPersonnel("");
   };
 
-  // Determine what to show
   const showEmptyState = useMemo(() => {
     if (loading) return false;
     if (personnel.length === 0) {
-      if (searchTerm || statusFilter || rankFilter || roleFilter) {
+      if (searchTerm || statusFilter || rankFilter || roleFilter)
         return "no-results";
-      }
       return "no-data";
     }
     return false;
-  }, [loading, personnel.length, searchTerm, statusFilter, rankFilter, roleFilter]);
+  }, [
+    loading,
+    personnel.length,
+    searchTerm,
+    statusFilter,
+    rankFilter,
+    roleFilter,
+  ]);
 
-  // Render form fields (reused for create and edit)
+  // ─── Shared form fields ────────────────────────────────────────────────────
   const renderFormFields = () => (
     <>
       <div className="grid grid-cols-2 gap-4">
+        {/* Basic Info */}
         <div>
           <Label htmlFor="firstName">First Name *</Label>
           <Input
             id="firstName"
             value={formData.firstName}
-            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, firstName: e.target.value })
+            }
             required
           />
         </div>
@@ -576,7 +578,9 @@ const PersonnelContent = () => {
           <Input
             id="lastName"
             value={formData.lastName}
-            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, lastName: e.target.value })
+            }
             required
           />
         </div>
@@ -586,7 +590,9 @@ const PersonnelContent = () => {
             id="email"
             type="email"
             value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, email: e.target.value })
+            }
             required
           />
         </div>
@@ -595,15 +601,21 @@ const PersonnelContent = () => {
           <Input
             id="username"
             value={formData.username}
-            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, username: e.target.value })
+            }
             required
           />
         </div>
+
+        {/* Role & Rank */}
         <div>
           <Label htmlFor="role">Role *</Label>
           <Select
             value={formData.role}
-            onValueChange={(value: PersonnelRole) => setFormData({ ...formData, role: value })}
+            onValueChange={(value: PersonnelRole) =>
+              setFormData({ ...formData, role: value })
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Select role" />
@@ -621,7 +633,9 @@ const PersonnelContent = () => {
           <Label htmlFor="rank">Rank *</Label>
           <Select
             value={formData.rank}
-            onValueChange={(value: PersonnelRank) => setFormData({ ...formData, rank: value })}
+            onValueChange={(value: PersonnelRank) =>
+              setFormData({ ...formData, rank: value })
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Select rank" />
@@ -635,19 +649,26 @@ const PersonnelContent = () => {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Service Number (formerly Badge Number) */}
         <div>
-          <Label htmlFor="badgeNumber">Badge Number (Optional)</Label>
+          <Label htmlFor="serviceNumber">Service / Pin Number</Label>
           <Input
-            id="badgeNumber"
-            value={formData.badgeNumber}
-            onChange={(e) => setFormData({ ...formData, badgeNumber: e.target.value })}
+            id="serviceNumber"
+            value={formData.serviceNumber}
+            onChange={(e) =>
+              setFormData({ ...formData, serviceNumber: e.target.value })
+            }
+            placeholder="e.g. SN-00123"
           />
         </div>
+
+        {/* Specialization */}
         <div>
           <Label htmlFor="specialization">Specialization</Label>
           <Select
             value={formData.specialization}
-            onValueChange={(value: PersonnelSpecialization) => 
+            onValueChange={(value: PersonnelSpecialization) =>
               setFormData({ ...formData, specialization: value })
             }
           >
@@ -663,30 +684,30 @@ const PersonnelContent = () => {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Contact */}
         <div>
           <Label htmlFor="phoneNumber">Phone Number *</Label>
           <Input
             id="phoneNumber"
             value={formData.phoneNumber}
-            onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, phoneNumber: e.target.value })
+            }
             required
           />
         </div>
-        <div>
-          <Label htmlFor="department">Department</Label>
-          <Input
-            id="department"
-            value={formData.department}
-            onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-          />
-        </div>
+
+        {/* Dates */}
         <div>
           <Label htmlFor="dateOfBirth">Date of Birth *</Label>
           <Input
             id="dateOfBirth"
             type="date"
             value={formData.dateOfBirth}
-            onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, dateOfBirth: e.target.value })
+            }
             required
           />
         </div>
@@ -696,32 +717,20 @@ const PersonnelContent = () => {
             id="dateJoined"
             type="date"
             value={formData.dateJoined}
-            onChange={(e) => setFormData({ ...formData, dateJoined: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, dateJoined: e.target.value })
+            }
           />
         </div>
-        <div>
-          <Label htmlFor="shift">Shift</Label>
-          <Select
-            value={formData.shift}
-            onValueChange={(value: PersonnelShift) => setFormData({ ...formData, shift: value })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SHIFTS.map((shift) => (
-                <SelectItem key={shift} value={shift}>
-                  {shift}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+
+        {/* Status */}
         <div>
           <Label htmlFor="status">Status</Label>
           <Select
             value={formData.status}
-            onValueChange={(value: PersonnelStatus) => setFormData({ ...formData, status: value })}
+            onValueChange={(value: PersonnelStatus) =>
+              setFormData({ ...formData, status: value })
+            }
           >
             <SelectTrigger>
               <SelectValue />
@@ -754,7 +763,7 @@ const PersonnelContent = () => {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => handleImageUpload(e)}
+              onChange={handleImageUpload}
               disabled={uploading}
               className="hidden"
               id="profile-upload"
@@ -810,7 +819,10 @@ const PersonnelContent = () => {
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  emergencyContact: { ...formData.emergencyContact, name: e.target.value },
+                  emergencyContact: {
+                    ...formData.emergencyContact,
+                    name: e.target.value,
+                  },
                 })
               }
             />
@@ -823,7 +835,10 @@ const PersonnelContent = () => {
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  emergencyContact: { ...formData.emergencyContact, relationship: e.target.value },
+                  emergencyContact: {
+                    ...formData.emergencyContact,
+                    relationship: e.target.value,
+                  },
                 })
               }
             />
@@ -836,7 +851,10 @@ const PersonnelContent = () => {
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  emergencyContact: { ...formData.emergencyContact, phone: e.target.value },
+                  emergencyContact: {
+                    ...formData.emergencyContact,
+                    phone: e.target.value,
+                  },
                 })
               }
             />
@@ -932,7 +950,11 @@ const PersonnelContent = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               {renderFormFields()}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCreateModalOpen(false)}
+                >
                   Cancel
                 </Button>
                 <Button type="submit">Create Personnel</Button>
@@ -947,7 +969,7 @@ const PersonnelContent = () => {
         <CardContent className="pt-6">
           <div className="space-y-4">
             <SearchInput
-              placeholder="Search personnel..."
+              placeholder="Search by name, email, service number..."
               value={searchTerm}
               onChange={setSearchTerm}
               onSearch={handleManualSearch}
@@ -1039,7 +1061,7 @@ const PersonnelContent = () => {
           {personnel.map((person) => (
             <Card key={person._id}>
               <CardHeader className="flex flex-row items-center gap-4">
-                <div className="relative w-16 h-16 rounded-full overflow-hidden bg-gray-200">
+                <div className="relative w-16 h-16 rounded-full overflow-hidden bg-gray-200 shrink-0">
                   {person.profileImage ? (
                     <img
                       src={person.profileImage}
@@ -1053,8 +1075,8 @@ const PersonnelContent = () => {
                     </div>
                   )}
                 </div>
-                <div className="flex-1">
-                  <CardTitle className="text-lg">
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-lg truncate">
                     {person.firstName} {person.lastName}
                   </CardTitle>
                   <p className="text-sm text-gray-600">{person.rank}</p>
@@ -1064,7 +1086,9 @@ const PersonnelContent = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Role:</span>
-                    <Badge className={getRoleColor(person.role)}>{person.role}</Badge>
+                    <Badge className={getRoleColor(person.role)}>
+                      {person.role}
+                    </Badge>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Status:</span>
@@ -1072,15 +1096,21 @@ const PersonnelContent = () => {
                       {person.status}
                     </Badge>
                   </div>
-                  {person.badgeNumber && (
+                  {person.serviceNumber && (
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Badge:</span>
-                      <span className="text-sm font-mono">{person.badgeNumber}</span>
+                      <span className="text-sm text-gray-600">
+                        Service No.:
+                      </span>
+                      <span className="text-sm font-mono">
+                        {person.serviceNumber}
+                      </span>
                     </div>
                   )}
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Email:</span>
-                    <span className="text-sm truncate">{person.email}</span>
+                    <span className="text-sm truncate max-w-40">
+                      {person.email}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Phone:</span>
@@ -1128,7 +1158,9 @@ const PersonnelContent = () => {
           </span>
           <Button
             variant="outline"
-            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+            onClick={() =>
+              setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+            }
             disabled={currentPage === totalPages}
           >
             Next
@@ -1145,7 +1177,11 @@ const PersonnelContent = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {renderFormFields()}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditModalOpen(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit">Update Personnel</Button>

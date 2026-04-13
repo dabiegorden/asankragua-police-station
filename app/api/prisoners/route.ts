@@ -1,29 +1,51 @@
-import { NextResponse } from "next/server";
+// app/api/prisoners/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
-import Prisoner from "@/models/Prisoner";
+import Prisoner, {
+  IPrisoner,
+  IArrestDetails,
+  IAddress,
+  IEmergencyContact,
+  IMedicalInfo,
+  IPersonalEffect,
+} from "@/models/Prisoner";
 
-// Roles allowed to manage prisoners (same as personnel management)
-const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
+import mongoose from "mongoose";
 
-async function getPrisoners(request) {
+const ALLOWED_ROLES = ["admin", "nco", "so", "dc"] as const;
+type AllowedRole = (typeof ALLOWED_ROLES)[number];
+
+// ─── Query params type ─────────────────────────────────────────────────────
+interface PrisonerQuery {
+  status?: string;
+  cellNumber?: string;
+  $or?: Array<{
+    firstName?: { $regex: string; $options: string };
+    lastName?: { $regex: string; $options: string };
+    prisonerNumber?: { $regex: string; $options: string };
+  }>;
+}
+
+// ─── GET /api/prisoners ────────────────────────────────────────────────────
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
-
-  if (!ALLOWED_ROLES.includes(user.role)) {
+  if (!ALLOWED_ROLES.includes(user.role as AllowedRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     await connectDB();
+
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page")) || 1;
-    const limit = parseInt(searchParams.get("limit")) || 10;
+    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+    const limit = Math.max(1, parseInt(searchParams.get("limit") ?? "10", 10));
     const status = searchParams.get("status");
     const cellNumber = searchParams.get("cellNumber");
     const search = searchParams.get("search");
 
-    const query = {};
+    const query: PrisonerQuery = {};
 
     if (status && status !== "all") query.status = status;
     if (cellNumber && cellNumber !== "all") query.cellNumber = cellNumber;
@@ -37,9 +59,11 @@ async function getPrisoners(request) {
     }
 
     const skip = (page - 1) * limit;
+
     const [prisoners, total] = await Promise.all([
       Prisoner.find(query)
         .populate("caseId", "caseNumber title status")
+        .populate("arrestDetails.arrestingOfficer", "fullName email role")
         .populate("releaseDetails.releasedBy", "firstName lastName")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -65,17 +89,48 @@ async function getPrisoners(request) {
   }
 }
 
-async function createPrisoner(request) {
+// ─── Request body types ────────────────────────────────────────────────────
+interface CreatePrisonerArrestDetails {
+  arrestDate: string;
+  arrestLocation: string;
+  arrestingOfficer?: string;
+  otherArrestingOfficer?: string;
+  charges?: Array<{ charge: string; severity?: "misdemeanor" | "felony" }>;
+}
+
+interface CreatePrisonerBody {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  dateOfBirth: string;
+  gender: "male" | "female" | "other";
+  nationality?: string;
+  address?: IAddress;
+  phoneNumber?: string;
+  emergencyContact?: IEmergencyContact;
+  arrestDetails: CreatePrisonerArrestDetails;
+  caseId?: string;
+  otherCase?: string;
+  cellNumber: "Male" | "Female";
+  status?: "Jailed" | "Bailed" | "Remanded" | "Transferred";
+  briefNote?: string;
+  medicalInfo?: IMedicalInfo;
+  personalEffects?: IPersonalEffect[];
+  mugshot?: string;
+}
+
+// ─── POST /api/prisoners ───────────────────────────────────────────────────
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
-
-  if (!ALLOWED_ROLES.includes(user.role)) {
+  if (!ALLOWED_ROLES.includes(user.role as AllowedRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     await connectDB();
-    const body = await request.json();
+
+    const body = (await request.json()) as CreatePrisonerBody;
     const {
       firstName,
       lastName,
@@ -88,6 +143,7 @@ async function createPrisoner(request) {
       emergencyContact,
       arrestDetails,
       caseId,
+      otherCase,
       cellNumber,
       status,
       briefNote,
@@ -96,7 +152,7 @@ async function createPrisoner(request) {
       mugshot,
     } = body;
 
-    // Validate top-level required fields
+    // Validate required fields
     if (!firstName || !lastName || !dateOfBirth || !gender || !arrestDetails) {
       return NextResponse.json(
         {
@@ -108,15 +164,26 @@ async function createPrisoner(request) {
     }
 
     // Validate nested arrest details
-    if (
-      !arrestDetails.arrestDate ||
-      !arrestDetails.arrestLocation ||
-      !arrestDetails.arrestingOfficer
-    ) {
+    if (!arrestDetails.arrestDate || !arrestDetails.arrestLocation) {
+      return NextResponse.json(
+        {
+          error: "Missing required arrest details: arrestDate, arrestLocation",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Must have EITHER a known officer id OR an "others" free-text name
+    const hasOfficerId =
+      arrestDetails.arrestingOfficer &&
+      arrestDetails.arrestingOfficer !== "others";
+    const hasOtherOfficer = !!arrestDetails.otherArrestingOfficer?.trim();
+
+    if (!hasOfficerId && !hasOtherOfficer) {
       return NextResponse.json(
         {
           error:
-            "Missing required arrest details: arrestDate, arrestLocation, arrestingOfficer",
+            "Please select an arresting officer or provide a name under 'Others'.",
         },
         { status: 400 },
       );
@@ -125,16 +192,14 @@ async function createPrisoner(request) {
     // Validate cellNumber
     if (!cellNumber || !["Male", "Female"].includes(cellNumber)) {
       return NextResponse.json(
-        {
-          error: "Invalid cellNumber. Must be either 'Male' or 'Female'",
-        },
+        { error: "Invalid cellNumber. Must be either 'Male' or 'Female'" },
         { status: 400 },
       );
     }
 
     // Validate status
     if (
-      !status ||
+      status &&
       !["Jailed", "Bailed", "Remanded", "Transferred"].includes(status)
     ) {
       return NextResponse.json(
@@ -163,12 +228,19 @@ async function createPrisoner(request) {
       phoneNumber,
       emergencyContact: emergencyContact || {},
       arrestDetails: {
-        ...arrestDetails,
         arrestDate: new Date(arrestDetails.arrestDate),
-      },
-      caseId: caseId || null,
+        arrestLocation: arrestDetails.arrestLocation,
+        arrestingOfficer: hasOfficerId ? arrestDetails.arrestingOfficer : null,
+        otherArrestingOfficer: hasOfficerId
+          ? ""
+          : (arrestDetails.otherArrestingOfficer?.trim() ?? ""),
+        charges: arrestDetails.charges || [],
+      } as IArrestDetails,
+      caseId:
+        caseId && caseId !== "none" && caseId !== "others" ? caseId : null,
+      otherCase: caseId === "others" ? (otherCase?.trim() ?? "") : "",
       cellNumber,
-      status,
+      status: status || "Jailed",
       briefNote: briefNote || "",
       medicalInfo: medicalInfo || {},
       personalEffects: personalEffects || [],
@@ -179,6 +251,7 @@ async function createPrisoner(request) {
 
     const populatedPrisoner = await Prisoner.findById(newPrisoner._id)
       .populate("caseId", "caseNumber title")
+      .populate("arrestDetails.arrestingOfficer", "fullName email role")
       .populate("releaseDetails.releasedBy", "firstName lastName");
 
     return NextResponse.json(
@@ -190,8 +263,11 @@ async function createPrisoner(request) {
     );
   } catch (err) {
     console.error("Create prisoner error:", err);
-    if (err.name === "ValidationError") {
-      const errors = Object.values(err.errors).map((e) => e.message);
+    if (err instanceof Error && err.name === "ValidationError") {
+      const validationError = err as mongoose.Error.ValidationError;
+      const errors = Object.values(validationError.errors).map(
+        (e: mongoose.Error.ValidatorError | mongoose.Error.CastError) => e.message,
+      );
       return NextResponse.json(
         { error: `Validation failed: ${errors.join(", ")}` },
         { status: 400 },
@@ -203,6 +279,3 @@ async function createPrisoner(request) {
     );
   }
 }
-
-export const GET = getPrisoners;
-export const POST = createPrisoner;

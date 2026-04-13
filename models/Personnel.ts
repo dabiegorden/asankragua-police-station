@@ -36,7 +36,7 @@ export interface IPersonnel extends Document {
   email: string;
   username: string;
   role: "District Commander" | "Station Officer" | "Counter NCO" | "Counter SO";
-  badgeNumber?: string | null;
+  serviceNumber?: string | null; // formerly badgeNumber
   rank:
     | "Constable"
     | "Lance Corporal"
@@ -57,16 +57,15 @@ export interface IPersonnel extends Document {
     | "Criminal Investigation"
     | "Cybercrime"
     | "Narcotics"
-    | "K9 Unit";
+    | "K9 Unit"
+    | "Others";
   phoneNumber: string;
   emergencyContact?: IEmergencyContact;
   address?: IAddress;
   dateOfBirth: Date;
   dateJoined?: Date;
   profileImage?: string | null;
-  shift: "morning" | "afternoon" | "night";
   status: "active" | "on-leave" | "suspended" | "retired" | "Sick";
-  department?: string;
   certifications?: ICertification[];
   assignments?: IAssignment[];
   createdAt: Date;
@@ -91,7 +90,7 @@ const PersonnelSchema = new Schema<IPersonnel>(
       ],
       required: true,
     },
-    badgeNumber: { type: String, unique: true, sparse: true, default: null },
+    serviceNumber: { type: String, unique: true, sparse: true, default: null },
     rank: {
       type: String,
       enum: [
@@ -120,6 +119,7 @@ const PersonnelSchema = new Schema<IPersonnel>(
         "Cybercrime",
         "Narcotics",
         "K9 Unit",
+        "Others",
       ],
       default: "General",
     },
@@ -138,17 +138,11 @@ const PersonnelSchema = new Schema<IPersonnel>(
     dateOfBirth: { type: Date, required: true },
     dateJoined: { type: Date, default: Date.now },
     profileImage: { type: String, default: null },
-    shift: {
-      type: String,
-      enum: ["morning", "afternoon", "night"],
-      default: "morning",
-    },
     status: {
       type: String,
       enum: ["active", "on-leave", "suspended", "retired", "Sick"],
       default: "active",
     },
-    department: { type: String, default: "General" },
     certifications: [
       {
         name: String,

@@ -13,7 +13,6 @@ import {
   Home,
   HomeIcon,
   MessageSquare,
-  Package,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -87,7 +86,7 @@ export const NcoLinks = [
   {
     id: 4,
     url: "/nco-dashboard/prisoners",
-    title: "Prisoners",
+    title: "Person Detained/Immates",
     icon: UserCheck,
   },
   // { id: 5, url: "/nco-dashboard/evidence", title: "Evidence", icon: Package },
