@@ -43,32 +43,55 @@ const STAGE_COLORS: Record<
 };
 
 function fmt(d?: Date | string | null): string {
-  if (!d) return "\u2014";
-  return new Date(d).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  if (!d) return "—";
+  try {
+    return new Date(d).toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
 }
 
 function fmtDate(d?: Date | string | null): string {
-  if (!d) return "\u2014";
-  return new Date(d).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  if (!d) return "—";
+  try {
+    return new Date(d).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  } catch {
+    return "—";
+  }
 }
 
-function cap(s: string): string {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+function cap(s?: string): string {
+  if (!s) return "—";
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function officerLabel(o: any): string {
-  if (!o) return "\u2014";
-  return `${o.fullName}${o.badgeNumber ? ` (${o.badgeNumber})` : ""}`;
+/**
+ * Extract the display name from an officer field.
+ * Works whether the field is:
+ *  - a populated object  { fullName, badgeNumber, ... }
+ *  - a lean plain object
+ *  - still an ObjectId   (population failed)
+ *  - null / undefined
+ */
+function officerName(o: any): string {
+  if (!o) return "—";
+  // Populated object (or lean object with fullName)
+  if (typeof o === "object" && o.fullName) {
+    const badge = o.badgeNumber ? ` (${o.badgeNumber})` : "";
+    return `${o.fullName}${badge}`;
+  }
+  // Fallback: it's an un-populated ObjectId-like value
+  return "—";
 }
 
 function statusLabel(s: string): string {
@@ -81,7 +104,7 @@ function statusLabel(s: string): string {
     closed: "Closed",
     suspended: "Suspended",
   };
-  return m[s] || s;
+  return m[s] || s || "—";
 }
 
 function priorityColor(p: string): string {
@@ -91,9 +114,6 @@ function priorityColor(p: string): string {
       ? "#ca8a04"
       : "#374151";
 }
-
-// ─── Hex colour → pdfkit-compatible string (already hex, just pass through) ──
-// pdfkit accepts CSS hex strings directly.
 
 // ─── PDF builder ──────────────────────────────────────────────────────────────
 async function buildPDF(caseData: any): Promise<Buffer> {
@@ -106,7 +126,7 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     margins: { top: 72, bottom: 60, left: 40, right: 40 },
     bufferPages: true,
     info: {
-      Title: `Case Book \u2014 ${caseData.caseNumber}`,
+      Title: `Case Book — ${caseData.caseNumber || "N/A"}`,
       Author: "Ghana Police Service",
       Subject: "Digital Case Book Official Record",
       Creator: "Digital Case Book System",
@@ -119,13 +139,11 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   const pageW = doc.page.width; // 595.28
   const pageH = doc.page.height; // 841.89
   const mL = 40;
-  const mR = 40;
-  const cW = pageW - mL - mR; // 515.28
+  const cW = pageW - mL - 40; // 515.28
 
-  // ── Utility drawing helpers ─────────────────────────────────────────────────
+  // ── Drawing primitives ──────────────────────────────────────────────────────
 
-  /** Filled (optionally rounded) rectangle */
-  function rect(
+  function filledRect(
     x: number,
     y: number,
     w: number,
@@ -133,11 +151,10 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     fill: string,
     r = 0,
   ) {
-    doc.save().roundedRect(x, y, w, h, r).fill(fill).restore();
+    doc.save().roundedRect(x, y, w, h, Math.max(r, 0)).fill(fill).restore();
   }
 
-  /** Stroked rectangle border only */
-  function border(
+  function strokedRect(
     x: number,
     y: number,
     w: number,
@@ -154,8 +171,7 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       .restore();
   }
 
-  /** Horizontal rule */
-  function hRule(y: number, color = "#e2e8f0", lw = 0.5) {
+  function hLine(y: number, color = "#e2e8f0", lw = 0.5) {
     doc
       .save()
       .moveTo(mL, y)
@@ -166,7 +182,6 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       .restore();
   }
 
-  /** Ensure enough vertical space remains; add page + header/footer if not */
   function need(h: number) {
     if (doc.y + h > pageH - 70) {
       doc.addPage();
@@ -174,19 +189,20 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     }
   }
 
-  /** Small label above a value */
-  function fieldLabel(text: string, x: number, y: number, w = 120) {
+  function labelText(text: string, x: number, y: number, w = 120) {
     doc
       .save()
       .font("Helvetica-Bold")
       .fontSize(6.5)
       .fillColor("#64748b")
-      .text(text.toUpperCase(), x, y, { width: w, characterSpacing: 0.6 })
+      .text((text || "").toUpperCase(), x, y, {
+        width: w,
+        characterSpacing: 0.6,
+      })
       .restore();
   }
 
-  /** Body text */
-  function body(
+  function bodyText(
     text: string,
     x: number,
     y: number,
@@ -199,12 +215,11 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       .font("Helvetica")
       .fontSize(size)
       .fillColor(color)
-      .text(text || "\u2014", x, y, { width: w, lineGap: 1.5 })
+      .text(text || "—", x, y, { width: w, lineGap: 1.5 })
       .restore();
   }
 
-  /** Bold text */
-  function bold(
+  function boldText(
     text: string,
     x: number,
     y: number,
@@ -217,58 +232,52 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       .font("Helvetica-Bold")
       .fontSize(size)
       .fillColor(color)
-      .text(text || "\u2014", x, y, { width: w })
+      .text(text || "—", x, y, { width: w })
       .restore();
   }
 
-  /** Full-width section header band */
   function sectionBand(title: string, color = "#1e3a8a") {
-    need(32);
-    const y = doc.y + 10;
-    rect(mL, y, cW, 22, color, 3);
+    need(34);
+    const y = doc.y + 8;
+    filledRect(mL, y, cW, 22, color, 3);
     doc
       .save()
       .font("Helvetica-Bold")
       .fontSize(8)
       .fillColor("#ffffff")
-      .text(title.toUpperCase(), mL + 10, y + 7, {
+      .text((title || "").toUpperCase(), mL + 10, y + 7, {
         width: cW - 20,
         characterSpacing: 1.2,
       })
       .restore();
-    doc.y = y + 28;
+    doc.y = y + 30;
   }
 
-  /** Per-page running header + footer (called on every new page) */
   function stampHeaderFooter() {
     const savedY = doc.y;
-    // Header
     doc
       .save()
       .font("Helvetica")
       .fontSize(7)
       .fillColor("#94a3b8")
-      .text("GHANA POLICE SERVICE \u2014 DIGITAL CASE BOOK", mL, 22, {
+      .text("GHANA POLICE SERVICE — DIGITAL CASE BOOK", mL, 22, {
         width: cW / 2,
       })
-      .text(caseData.caseNumber, mL + cW / 2, 22, {
+      .text(caseData.caseNumber || "", mL + cW / 2, 22, {
         width: cW / 2,
         align: "right",
       })
       .restore();
-    // Footer
     const fY = pageH - 34;
     doc
       .save()
       .font("Helvetica-Oblique")
       .fontSize(7)
       .fillColor("#94a3b8")
-      .text("CONFIDENTIAL \u2014 FOR OFFICIAL USE ONLY", mL, fY, {
-        width: cW / 2,
-      })
+      .text("CONFIDENTIAL — FOR OFFICIAL USE ONLY", mL, fY, { width: cW / 2 })
       .font("Helvetica")
       .text(
-        `Generated by Digital Case Book System \u00b7 ${new Date().toLocaleDateString("en-GB")}`,
+        `Generated by Digital Case Book System · ${new Date().toLocaleDateString("en-GB")}`,
         mL + cW / 2,
         fY,
         { width: cW / 2, align: "right" },
@@ -277,94 +286,147 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     doc.y = savedY;
   }
 
-  // ── PAGE 1 HEADER ───────────────────────────────────────────────────────────
-  rect(mL, 56, cW, 76, "#1e3a8a", 6);
+  // ────────────────────────────────────────────────────────────────────────────
+  // PAGE 1 — COVER HEADER
+  // ────────────────────────────────────────────────────────────────────────────
+  filledRect(mL, 56, cW, 80, "#1e3a8a", 6);
   doc
     .save()
     .font("Helvetica-Bold")
-    .fontSize(19)
+    .fontSize(20)
     .fillColor("#ffffff")
-    .text("GHANA POLICE SERVICE", mL, 75, { width: cW, align: "center" })
+    .text("GHANA POLICE SERVICE", mL, 74, { width: cW, align: "center" })
     .restore();
   doc
     .save()
     .font("Helvetica")
     .fontSize(9)
     .fillColor("#bfdbfe")
-    .text("DIGITAL CASE BOOK \u2014 OFFICIAL RECORD", mL, 101, {
+    .text("DIGITAL CASE BOOK — OFFICIAL RECORD", mL, 104, {
       width: cW,
       align: "center",
       characterSpacing: 1.4,
     })
     .restore();
-  doc.y = 148;
+  doc
+    .save()
+    .font("Helvetica")
+    .fontSize(7.5)
+    .fillColor("#93c5fd")
+    .text(`Generated: ${fmt(new Date())}`, mL, 122, {
+      width: cW,
+      align: "center",
+    })
+    .restore();
+  doc.y = 154;
   stampHeaderFooter();
 
-  // ── CASE IDENTITY BOX ───────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
+  // CASE IDENTITY BOX
+  // ────────────────────────────────────────────────────────────────────────────
   const idY = doc.y;
-  const idH = 102;
-  rect(mL, idY, cW, idH, "#f8fafc", 4);
-  border(mL, idY, cW, idH, "#cbd5e1", 1);
+  const idH = 110;
+  filledRect(mL, idY, cW, idH, "#f8fafc", 4);
+  strokedRect(mL, idY, cW, idH, "#cbd5e1", 1);
 
-  // Left — case number + title + description
-  fieldLabel("Case Number", mL + 12, idY + 10);
-  bold(caseData.caseNumber, mL + 12, idY + 20, 220, "#1e3a8a", 20);
-  bold(caseData.title || "", mL + 12, idY + 52, cW - 180, "#0f172a", 12);
-  body(caseData.description || "", mL + 12, idY + 68, cW - 180, "#475569", 8.5);
-
-  // Right — status + priority
-  const rX = mL + cW - 158;
-  fieldLabel("Status", rX, idY + 10, 150);
-  bold(statusLabel(caseData.status), rX, idY + 20, 150, "#1e3a8a", 10);
-  fieldLabel("Priority", rX, idY + 44, 150);
-  bold(
-    caseData.priority || "\u2014",
-    rX,
+  labelText("Case Number", mL + 12, idY + 10);
+  boldText(
+    caseData.caseNumber || "N/A",
+    mL + 12,
+    idY + 20,
+    cW - 180,
+    "#1e3a8a",
+    22,
+  );
+  boldText(
+    caseData.title || "(No title)",
+    mL + 12,
     idY + 54,
-    150,
+    cW - 180,
+    "#0f172a",
+    11,
+  );
+  bodyText(
+    caseData.description || "(No description)",
+    mL + 12,
+    idY + 70,
+    cW - 180,
+    "#475569",
+    8.5,
+  );
+
+  const rX = mL + cW - 160;
+  labelText("Status", rX, idY + 10, 155);
+  boldText(statusLabel(caseData.status), rX, idY + 21, 155, "#1e3a8a", 10);
+  labelText("Priority", rX, idY + 46, 155);
+  boldText(
+    caseData.priority || "—",
+    rX,
+    idY + 57,
+    155,
     priorityColor(caseData.priority),
     10,
   );
+  labelText("Current Stage", rX, idY + 78, 155);
+  boldText(
+    ROLE_LABELS[caseData.currentStage] || caseData.currentStage || "—",
+    rX,
+    idY + 89,
+    155,
+    "#374151",
+    8,
+  );
 
-  doc.y = idY + idH + 8;
+  doc.y = idY + idH + 10;
 
-  // ── KEY DETAILS GRID ────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
+  // KEY DETAILS GRID
+  // ────────────────────────────────────────────────────────────────────────────
   const gridRows: [string, string][][] = [
     [
-      ["Category", cap(caseData.category || "")],
-      ["Location", caseData.location || "\u2014"],
+      ["Category", cap(caseData.category)],
+      ["Location", caseData.location || "—"],
       ["Date Occurred", fmtDate(caseData.dateOccurred)],
       ["Date Reported", fmtDate(caseData.dateReported)],
     ],
     [
       [
         "Reporter",
-        `${caseData.reportedBy?.name || "\u2014"}${caseData.reportedBy?.phone ? "\n" + caseData.reportedBy.phone : ""}`,
+        `${caseData.reportedBy?.name || "—"}${caseData.reportedBy?.phone ? "\n" + caseData.reportedBy.phone : ""}`,
       ],
-      ["Logged By", officerLabel(caseData.loggedBy)],
-      ["CID Investigator", officerLabel(caseData.assignedOfficer)],
-      ["Station Officer", officerLabel(caseData.assignedSO)],
+      ["Reporter Email", caseData.reportedBy?.email || "—"],
+      ["Reporter Address", caseData.reportedBy?.address || "—"],
+      ["Logged By (NCO)", officerName(caseData.loggedBy)],
+    ],
+    [
+      ["CID Investigator", officerName(caseData.assignedOfficer)],
+      ["Station Officer", officerName(caseData.assignedSO)],
+      ["District Commander", officerName(caseData.assignedDC)],
+      ["Case Number", caseData.caseNumber || "—"],
     ],
   ];
 
   const colW4 = cW / 4;
   gridRows.forEach((row, ri) => {
-    const rH = 40;
+    const rH = 44;
     need(rH + 2);
     const rY = doc.y;
-    rect(mL, rY, cW, rH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
-    border(mL, rY, cW, rH, "#e2e8f0", 0.5);
+    filledRect(mL, rY, cW, rH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
+    strokedRect(mL, rY, cW, rH, "#e2e8f0", 0.5);
     row.forEach(([label, value], ci) => {
       const cx = mL + ci * colW4 + 6;
-      fieldLabel(label, cx, rY + 6, colW4 - 10);
-      body(value, cx, rY + 17, colW4 - 12, "#1e293b", 8);
+      labelText(label, cx, rY + 6, colW4 - 10);
+      bodyText(value || "—", cx, rY + 18, colW4 - 12, "#1e293b", 8);
     });
     doc.y = rY + rH;
   });
   doc.y += 6;
 
-  // ── WORKFLOW TIMELINE ───────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
+  // WORKFLOW TIMELINE
+  // ────────────────────────────────────────────────────────────────────────────
   sectionBand("Case Workflow Progress");
+  need(70);
   const tlY = doc.y;
   const colWt = cW / 4;
   const curIdx = STAGE_ORDER.indexOf(caseData.currentStage);
@@ -374,29 +436,26 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     const cx = mL + idx * colWt + colWt / 2;
     const isPast = idx < curIdx;
     const isCur = idx === curIdx;
-    const circleC = isCur ? pal.header : isPast ? "#64748b" : "#e2e8f0";
-    const labelC = isCur ? pal.header : isPast ? "#475569" : "#94a3b8";
-    const statusC = isCur ? pal.accent : isPast ? "#22c55e" : "#cbd5e1";
-    const statusTx = isCur ? "CURRENT" : isPast ? "DONE" : "PENDING";
+    const circleColor = isCur ? pal.header : isPast ? "#475569" : "#cbd5e1";
+    const labelColor = isCur ? pal.header : isPast ? "#475569" : "#94a3b8";
+    const statusColor = isCur ? pal.accent : isPast ? "#16a34a" : "#cbd5e1";
+    const statusText = isCur ? "CURRENT" : isPast ? "DONE" : "PENDING";
 
-    // Connector line to next node
     if (idx < 3) {
       doc
         .save()
         .moveTo(cx + 16, tlY + 16)
         .lineTo(cx + colWt - 16, tlY + 16)
-        .strokeColor(isPast ? "#64748b" : "#e2e8f0")
+        .strokeColor(isPast ? "#475569" : "#e2e8f0")
         .lineWidth(2)
         .stroke()
         .restore();
     }
-    // Circle
     doc
       .save()
       .circle(cx, tlY + 16, 14)
-      .fill(circleC)
+      .fill(circleColor)
       .restore();
-    // Stage abbreviation inside circle
     doc
       .save()
       .font("Helvetica-Bold")
@@ -407,37 +466,42 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         align: "center",
       })
       .restore();
-    // Label below
     doc
       .save()
       .font("Helvetica-Bold")
       .fontSize(7)
-      .fillColor(labelC)
-      .text(ROLE_LABELS[stage], cx - colWt / 2 + 4, tlY + 34, {
+      .fillColor(labelColor)
+      .text(ROLE_LABELS[stage] || stage, cx - colWt / 2 + 4, tlY + 34, {
         width: colWt - 8,
         align: "center",
       })
       .restore();
-    // Status pill
     doc
       .save()
       .font("Helvetica-Bold")
-      .fontSize(6)
-      .fillColor(statusC)
-      .text(statusTx, cx - colWt / 2 + 4, tlY + 46, {
+      .fontSize(6.5)
+      .fillColor(statusColor)
+      .text(statusText, cx - colWt / 2 + 4, tlY + 46, {
         width: colWt - 8,
         align: "center",
       })
       .restore();
   });
-  doc.y = tlY + 60;
+  doc.y = tlY + 64;
 
-  // ── DIGITAL CASE BOOK ENTRIES ────────────────────────────────────────────────
-  sectionBand("Digital Case Book \u2014 Officer Entries");
+  // ────────────────────────────────────────────────────────────────────────────
+  // DIGITAL CASE BOOK ENTRIES — NCO → CID → SO → DC
+  // ────────────────────────────────────────────────────────────────────────────
+  sectionBand("Digital Case Book — Officer Entries");
 
   const grouped: Record<string, any[]> = { nco: [], cid: [], so: [], dc: [] };
-  (caseData.caseBookEntries || []).forEach((e: any) => {
-    if (grouped[e.stage]) grouped[e.stage].push(e);
+  const allEntries: any[] = Array.isArray(caseData.caseBookEntries)
+    ? caseData.caseBookEntries
+    : [];
+
+  allEntries.forEach((e: any) => {
+    const stage = e?.stage || "nco";
+    if (grouped[stage]) grouped[stage].push(e);
   });
 
   for (const stage of STAGE_ORDER) {
@@ -448,9 +512,9 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       ? `${entries.length} entr${entries.length === 1 ? "y" : "ies"}`
       : "No entries recorded";
 
-    need(36);
+    need(38);
     const shY = doc.y + 6;
-    rect(mL, shY, cW, 24, pal.header, 3);
+    filledRect(mL, shY, cW, 24, pal.header, 3);
     doc
       .save()
       .font("Helvetica-Bold")
@@ -471,7 +535,7 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         align: "right",
       })
       .restore();
-    doc.y = shY + 30;
+    doc.y = shY + 32;
 
     if (entries.length === 0) {
       doc
@@ -486,66 +550,78 @@ async function buildPDF(caseData: any): Promise<Buffer> {
           { width: cW - 24 },
         )
         .restore();
-      doc.y += 10;
+      doc.y += 14;
       continue;
     }
 
     for (const entry of entries) {
-      const typeLabel = ENTRY_TYPE_LABELS[entry.entryType] || entry.entryType;
-      const oName = entry.addedBy?.fullName || "Unknown Officer";
-      const oRole = ROLE_LABELS[entry.roleSnapshot] || entry.roleSnapshot;
-      const badge = entry.addedBy?.badgeNumber
-        ? ` \u00b7 Badge: ${entry.addedBy.badgeNumber}`
-        : "";
-      const contentTxt = entry.content || "";
+      const typeLabel =
+        ENTRY_TYPE_LABELS[entry.entryType] || entry.entryType || "Remark";
 
-      // Estimate box height from text length
-      const textLines = Math.ceil(contentTxt.length / 82) + 1;
-      const boxH = Math.max(72, textLines * 13 + 52);
-      need(boxH + 12);
+      // ── Resolve officer name from addedBy ─────────────────────────────────
+      // After .lean() + .populate(), entry.addedBy is a plain JS object with fullName.
+      // We check both patterns defensively.
+      const addedByObj = entry.addedBy;
+      let oName = "Unknown Officer";
+      let badgeStr = "";
+      if (addedByObj && typeof addedByObj === "object" && addedByObj.fullName) {
+        oName = addedByObj.fullName;
+        badgeStr = addedByObj.badgeNumber
+          ? ` · Badge: ${addedByObj.badgeNumber}`
+          : "";
+      }
+      const oRole =
+        ROLE_LABELS[entry.roleSnapshot] || entry.roleSnapshot || stage;
+      const content = (entry.content || "").trim() || "(No content)";
+      const addedAt = entry.addedAt || entry.createdAt;
 
+      const estimatedLines = Math.ceil(content.length / 78) + 2;
+      const boxH = Math.max(80, estimatedLines * 13 + 58);
+
+      need(boxH + 14);
       const eY = doc.y + 4;
-      rect(mL, eY, cW, boxH, pal.light, 3);
-      border(mL, eY, cW, boxH, pal.accent, 1.5);
-      rect(mL, eY, 4, boxH, pal.accent, 2); // left accent bar
-      rect(mL + 12, eY + 8, 92, 14, pal.accent, 2); // type pill bg
 
-      // Type pill text
+      filledRect(mL, eY, cW, boxH, pal.light, 4);
+      strokedRect(mL, eY, cW, boxH, pal.accent, 1.5);
+      filledRect(mL, eY, 5, boxH, pal.header, 2); // left accent bar
+
+      // Entry type pill
+      filledRect(mL + 14, eY + 9, 110, 16, pal.accent, 3);
       doc
         .save()
         .font("Helvetica-Bold")
         .fontSize(7)
         .fillColor("#ffffff")
-        .text(typeLabel.toUpperCase(), mL + 14, eY + 11, {
-          width: 88,
+        .text(typeLabel.toUpperCase(), mL + 16, eY + 12, {
+          width: 106,
           characterSpacing: 0.3,
         })
         .restore();
 
       // Officer name + role
-      bold(
-        `${oName} (${oRole})${badge}`,
-        mL + 112,
-        eY + 9,
-        cW - 240,
+      boldText(
+        `${oName}  (${oRole})${badgeStr}`,
+        mL + 132,
+        eY + 10,
+        cW - 270,
         pal.header,
         8.5,
       );
 
-      // Timestamp (right-aligned)
+      // Timestamp
       doc
         .save()
         .font("Helvetica")
-        .fontSize(8)
+        .fontSize(7.5)
         .fillColor("#64748b")
-        .text(fmt(entry.addedAt), mL + cW - 128, eY + 9, {
-          width: 118,
+        .text(fmt(addedAt), mL + cW - 130, eY + 10, {
+          width: 120,
           align: "right",
         })
         .restore();
 
-      // Divider
-      hRule(eY + 28, pal.accent, 0.5);
+      // Divider — use a plain solid color, NOT hex+opacity string concatenation
+      hLine(eY + 30, pal.accent, 0.5);
 
       // Entry content
       doc
@@ -553,126 +629,32 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         .font("Helvetica")
         .fontSize(9)
         .fillColor("#1e293b")
-        .text(contentTxt, mL + 12, eY + 34, { width: cW - 28, lineGap: 2 })
+        .text(content, mL + 14, eY + 36, { width: cW - 28, lineGap: 2.5 })
         .restore();
 
-      // Lock notice
+      // Locked notice
       doc
         .save()
         .font("Helvetica-Oblique")
         .fontSize(7)
         .fillColor("#94a3b8")
         .text(
-          "Entry locked \u2014 cannot be edited after submission",
-          mL + 12,
-          eY + boxH - 14,
+          "Entry locked — immutable after submission",
+          mL + 14,
+          eY + boxH - 13,
           { width: cW - 28 },
         )
         .restore();
 
-      doc.y = eY + boxH + 6;
+      doc.y = eY + boxH + 8;
     }
+
+    doc.y += 4;
   }
 
-  // ── SUSPECTS & WITNESSES ────────────────────────────────────────────────────
-  if (caseData.suspects?.length || caseData.witnesses?.length) {
-    sectionBand("Parties Involved", "#374151");
-
-    function drawPartyTable(
-      items: any[],
-      headers: string[],
-      widths: number[],
-      rowFn: (item: any) => string[],
-      accentColor: string,
-    ) {
-      need(28);
-      // Header row
-      const hY = doc.y;
-      rect(mL, hY, cW, 20, accentColor);
-      let x = mL;
-      headers.forEach((h, i) => {
-        doc
-          .save()
-          .font("Helvetica-Bold")
-          .fontSize(8)
-          .fillColor("#ffffff")
-          .text(h, x + 4, hY + 6, { width: widths[i] - 8 })
-          .restore();
-        x += widths[i];
-      });
-      doc.y = hY + 22;
-
-      items.forEach((item, ri) => {
-        const cells = rowFn(item);
-        const lineC = Math.max(
-          ...cells.map((c) => Math.ceil((c || "").length / 32)),
-        );
-        const rowH = Math.max(22, lineC * 12 + 10);
-        need(rowH + 2);
-        const rY = doc.y;
-        rect(mL, rY, cW, rowH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
-        border(mL, rY, cW, rowH, "#e2e8f0", 0.5);
-        let cx = mL;
-        cells.forEach((cell, i) => {
-          body(cell || "\u2014", cx + 4, rY + 6, widths[i] - 8, "#334155", 8);
-          cx += widths[i];
-        });
-        doc.y = rY + rowH;
-      });
-      doc.y += 6;
-    }
-
-    if (caseData.suspects?.length) {
-      need(24);
-      doc
-        .save()
-        .font("Helvetica-Bold")
-        .fontSize(8)
-        .fillColor("#dc2626")
-        .text("SUSPECTS", mL, doc.y, { characterSpacing: 1 })
-        .restore();
-      doc.y += 5;
-      const sw = [cW * 0.25, cW * 0.1, cW * 0.35, cW * 0.3];
-      drawPartyTable(
-        caseData.suspects,
-        ["NAME", "AGE", "DESCRIPTION", "ADDRESS"],
-        sw,
-        (s: any) => [
-          s.name || "\u2014",
-          s.age ? String(s.age) : "\u2014",
-          s.description || "\u2014",
-          s.address || "\u2014",
-        ],
-        "#374151",
-      );
-    }
-
-    if (caseData.witnesses?.length) {
-      need(24);
-      doc
-        .save()
-        .font("Helvetica-Bold")
-        .fontSize(8)
-        .fillColor("#16a34a")
-        .text("WITNESSES", mL, doc.y, { characterSpacing: 1 })
-        .restore();
-      doc.y += 5;
-      const ww = [cW * 0.25, cW * 0.2, cW * 0.55];
-      drawPartyTable(
-        caseData.witnesses,
-        ["NAME", "PHONE", "STATEMENT"],
-        ww,
-        (w: any) => [
-          w.name || "\u2014",
-          w.phone || "\u2014",
-          w.statement || "\u2014",
-        ],
-        "#374151",
-      );
-    }
-  }
-
-  // ── OFFICIAL HANDOFF NOTES ───────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
+  // OFFICIAL HANDOFF NOTES
+  // ────────────────────────────────────────────────────────────────────────────
   const handoffs = [
     {
       label: "NCO Referral Note",
@@ -680,12 +662,12 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       color: "#1d4ed8",
     },
     {
-      label: "CID Submission Note",
+      label: "CID Submission / Findings",
       val: caseData.cidSubmissionNote,
       color: "#4338ca",
     },
     {
-      label: "Station Officer Review",
+      label: "Station Officer Review Note",
       val: caseData.soReviewNote,
       color: "#7c3aed",
     },
@@ -703,75 +685,237 @@ async function buildPDF(caseData: any): Promise<Buffer> {
 
   if (handoffs.length) {
     sectionBand("Official Handoff Notes", "#374151");
+
     for (const hn of handoffs) {
       const tLines = Math.ceil((hn.val || "").length / 88) + 1;
-      const boxH = Math.max(46, tLines * 12 + 24);
-      need(boxH + 12);
+      const boxH = Math.max(52, tLines * 12 + 30);
+      need(boxH + 14);
+
       const hnY = doc.y + 4;
-      rect(mL, hnY, cW, boxH, "#f8fafc", 3);
-      border(mL, hnY, cW, boxH, "#e2e8f0", 1);
-      rect(mL, hnY, 4, boxH, hn.color, 2); // left accent bar
-      bold(hn.label.toUpperCase(), mL + 12, hnY + 9, cW - 24, hn.color, 8);
-      body(hn.val || "", mL + 12, hnY + 23, cW - 28, "#334155", 9);
-      doc.y = hnY + boxH + 6;
+      filledRect(mL, hnY, cW, boxH, "#f8fafc", 3);
+      strokedRect(mL, hnY, cW, boxH, "#e2e8f0", 1);
+      filledRect(mL, hnY, 5, boxH, hn.color, 2);
+
+      boldText(hn.label.toUpperCase(), mL + 14, hnY + 10, cW - 24, hn.color, 8);
+      bodyText(hn.val || "", mL + 14, hnY + 26, cW - 28, "#334155", 9);
+
+      doc.y = hnY + boxH + 8;
     }
   }
 
-  // ── AUDIT TRAIL ─────────────────────────────────────────────────────────────
-  if (caseData.auditLog?.length) {
+  // ────────────────────────────────────────────────────────────────────────────
+  // INTERNAL NOTES
+  // ────────────────────────────────────────────────────────────────────────────
+  const notes: any[] = Array.isArray(caseData.notes) ? caseData.notes : [];
+  if (notes.length) {
+    sectionBand("Internal Notes", "#374151");
+
+    for (const note of notes) {
+      const noteByObj = note.addedBy;
+      let noteName = "Unknown Officer";
+      if (noteByObj && typeof noteByObj === "object" && noteByObj.fullName) {
+        noteName = noteByObj.fullName;
+      }
+      const noteRole =
+        ROLE_LABELS[note.roleSnapshot] || note.roleSnapshot || "—";
+      const noteContent = (note.content || "").trim() || "(No content)";
+      const lines = Math.ceil(noteContent.length / 78) + 1;
+      const boxH = Math.max(50, lines * 13 + 28);
+
+      need(boxH + 10);
+      const nY = doc.y + 4;
+      filledRect(mL, nY, cW, boxH, "#f8fafc", 3);
+      strokedRect(mL, nY, cW, boxH, "#e2e8f0", 1);
+      filledRect(mL, nY, 5, boxH, "#64748b", 2);
+
+      boldText(
+        `${noteName}  (${noteRole})`,
+        mL + 14,
+        nY + 10,
+        cW * 0.6,
+        "#374151",
+        8.5,
+      );
+      doc
+        .save()
+        .font("Helvetica")
+        .fontSize(7.5)
+        .fillColor("#64748b")
+        .text(fmt(note.addedAt), mL + cW - 130, nY + 10, {
+          width: 120,
+          align: "right",
+        })
+        .restore();
+      bodyText(noteContent, mL + 14, nY + 26, cW - 28, "#334155", 9);
+
+      doc.y = nY + boxH + 6;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SUSPECTS & WITNESSES
+  // ────────────────────────────────────────────────────────────────────────────
+  const suspects = Array.isArray(caseData.suspects) ? caseData.suspects : [];
+  const witnesses = Array.isArray(caseData.witnesses) ? caseData.witnesses : [];
+
+  if (suspects.length || witnesses.length) {
+    sectionBand("Parties Involved", "#374151");
+
+    function drawTable(
+      items: any[],
+      headers: string[],
+      widths: number[],
+      rowFn: (item: any) => string[],
+    ) {
+      need(30);
+      const hY = doc.y;
+      filledRect(mL, hY, cW, 22, "#374151");
+      let xPos = mL;
+      headers.forEach((h, i) => {
+        doc
+          .save()
+          .font("Helvetica-Bold")
+          .fontSize(8)
+          .fillColor("#ffffff")
+          .text(h, xPos + 5, hY + 7, { width: widths[i] - 10 })
+          .restore();
+        xPos += widths[i];
+      });
+      doc.y = hY + 24;
+      items.forEach((item, ri) => {
+        const cells = rowFn(item);
+        const maxLen = Math.max(...cells.map((c) => (c || "").length));
+        const rowH = Math.max(24, Math.ceil(maxLen / 36) * 11 + 14);
+        need(rowH + 2);
+        const rY = doc.y;
+        filledRect(mL, rY, cW, rowH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
+        strokedRect(mL, rY, cW, rowH, "#e2e8f0", 0.5);
+        let cx = mL;
+        cells.forEach((cell, i) => {
+          bodyText(cell || "—", cx + 5, rY + 7, widths[i] - 10, "#334155", 8);
+          cx += widths[i];
+        });
+        doc.y = rY + rowH;
+      });
+      doc.y += 8;
+    }
+
+    if (suspects.length) {
+      need(26);
+      doc
+        .save()
+        .font("Helvetica-Bold")
+        .fontSize(8.5)
+        .fillColor("#dc2626")
+        .text("SUSPECTS", mL, doc.y, { characterSpacing: 1 })
+        .restore();
+      doc.y += 6;
+      drawTable(
+        suspects,
+        ["NAME", "AGE", "DESCRIPTION", "ADDRESS"],
+        [cW * 0.25, cW * 0.1, cW * 0.35, cW * 0.3],
+        (s: any) => [
+          s.name || "—",
+          s.age ? String(s.age) : "—",
+          s.description || "—",
+          s.address || "—",
+        ],
+      );
+    }
+
+    if (witnesses.length) {
+      need(26);
+      doc
+        .save()
+        .font("Helvetica-Bold")
+        .fontSize(8.5)
+        .fillColor("#16a34a")
+        .text("WITNESSES", mL, doc.y, { characterSpacing: 1 })
+        .restore();
+      doc.y += 6;
+      drawTable(
+        witnesses,
+        ["NAME", "PHONE", "STATEMENT"],
+        [cW * 0.25, cW * 0.2, cW * 0.55],
+        (w: any) => [w.name || "—", w.phone || "—", w.statement || "—"],
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // AUDIT TRAIL
+  // ────────────────────────────────────────────────────────────────────────────
+  const auditLog: any[] = Array.isArray(caseData.auditLog)
+    ? caseData.auditLog
+    : [];
+
+  if (auditLog.length) {
     sectionBand("Audit Trail", "#374151");
 
-    const aW = [cW * 0.22, cW * 0.33, cW * 0.25, cW * 0.2];
-    const aHeaders = ["DATE & TIME", "ACTION", "OFFICER", "TRANSITION"];
+    const aW = [cW * 0.22, cW * 0.34, cW * 0.24, cW * 0.2];
+    const aHeaders = [
+      "DATE & TIME",
+      "ACTION / DETAILS",
+      "PERFORMED BY",
+      "STAGE TRANSITION",
+    ];
 
-    need(26);
+    need(28);
     const ahY = doc.y;
-    rect(mL, ahY, cW, 20, "#1e3a8a");
-    let ax = mL;
+    filledRect(mL, ahY, cW, 22, "#1e3a8a");
+    let axPos = mL;
     aHeaders.forEach((h, i) => {
       doc
         .save()
         .font("Helvetica-Bold")
         .fontSize(8)
         .fillColor("#ffffff")
-        .text(h, ax + 4, ahY + 6, { width: aW[i] - 8 })
+        .text(h, axPos + 5, ahY + 7, { width: aW[i] - 10 })
         .restore();
-      ax += aW[i];
+      axPos += aW[i];
     });
-    doc.y = ahY + 22;
+    doc.y = ahY + 24;
 
-    caseData.auditLog.forEach((e: any, i: number) => {
+    auditLog.forEach((e: any, i: number) => {
+      // Resolve performedBy the same safe way
+      const pbObj = e.performedBy;
+      const officerStr =
+        pbObj && typeof pbObj === "object" && pbObj.fullName
+          ? pbObj.fullName
+          : "System";
+
       const transition =
         e.fromStage && e.toStage && e.fromStage !== e.toStage
-          ? `${e.fromStage.toUpperCase()} -> ${e.toStage.toUpperCase()}`
+          ? `${(e.fromStage || "").toUpperCase()} → ${(e.toStage || "").toUpperCase()}`
           : e.fromStage
-            ? e.fromStage.toUpperCase()
-            : "\u2014";
-      const cells = [
-        fmt(e.performedAt),
-        (e.details || e.action || "").replace(/_/g, " "),
-        e.performedBy?.fullName || "System",
-        transition,
-      ];
-      const lc = Math.max(
-        ...cells.map((c) => Math.ceil((c || "").length / 32)),
-      );
-      const rowH = Math.max(22, lc * 12 + 10);
+            ? (e.fromStage || "").toUpperCase()
+            : "—";
+
+      const actionLabel = (e.details || e.action || "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+      const cells = [fmt(e.performedAt), actionLabel, officerStr, transition];
+      const maxLen = Math.max(...cells.map((c) => (c || "").length));
+      const rowH = Math.max(22, Math.ceil(maxLen / 36) * 11 + 10);
+
       need(rowH + 2);
       const rY = doc.y;
-      rect(mL, rY, cW, rowH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
-      border(mL, rY, cW, rowH, "#e2e8f0", 0.5);
+      filledRect(mL, rY, cW, rowH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
+      strokedRect(mL, rY, cW, rowH, "#e2e8f0", 0.5);
       let cx = mL;
       cells.forEach((cell, ci) => {
-        body(cell, cx + 4, rY + 6, aW[ci] - 8, "#334155", 8);
+        bodyText(cell, cx + 5, rY + 6, aW[ci] - 10, "#334155", 8);
         cx += aW[ci];
       });
       doc.y = rY + rowH;
     });
-    doc.y += 6;
+    doc.y += 8;
   }
 
-  // ── CASE TIMELINE ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
+  // CASE TIMELINE
+  // ────────────────────────────────────────────────────────────────────────────
   const timestamps = [
     { label: "Case Reported", val: caseData.dateReported },
     { label: "Referred to CID", val: caseData.referredAt },
@@ -782,48 +926,60 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     { label: "Case Closed", val: caseData.closedAt },
   ].filter((t) => t.val);
 
-  if (timestamps.length > 1) {
+  if (timestamps.length >= 1) {
     sectionBand("Case Timeline", "#374151");
+
     timestamps.forEach((t, i) => {
-      const tH = 20;
+      const tH = 22;
       need(tH + 2);
       const tY = doc.y;
-      rect(mL, tY, cW, tH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
-      border(mL, tY, cW, tH, "#e2e8f0", 0.5);
-      bold(t.label, mL + 8, tY + 5, cW * 0.38, "#374151", 9);
-      body(
+      filledRect(mL, tY, cW, tH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
+      strokedRect(mL, tY, cW, tH, "#e2e8f0", 0.5);
+      doc
+        .save()
+        .circle(mL + 14, tY + 11, 4)
+        .fill(
+          i === 0
+            ? "#1e40af"
+            : i === timestamps.length - 1
+              ? "#16a34a"
+              : "#64748b",
+        )
+        .restore();
+      boldText(t.label, mL + 26, tY + 6, cW * 0.38, "#374151", 9);
+      bodyText(
         fmt(t.val as string),
         mL + cW * 0.4,
-        tY + 5,
+        tY + 6,
         cW * 0.58,
         "#475569",
         9,
       );
       doc.y = tY + tH;
     });
-    doc.y += 8;
+    doc.y += 10;
   }
 
-  // ── CERTIFICATION + SIGNATURES ──────────────────────────────────────────────
-  need(150);
-  doc.y += 16;
-  hRule(doc.y, "#cbd5e1", 1);
-  doc.y += 8;
+  // ────────────────────────────────────────────────────────────────────────────
+  // CERTIFICATION + SIGNATURE BLOCK
+  // ────────────────────────────────────────────────────────────────────────────
+  need(170);
+  doc.y += 14;
+  hLine(doc.y, "#cbd5e1", 1);
+  doc.y += 10;
 
   const certY = doc.y;
 
-  // Left — certification text
-  bold("CERTIFICATION", mL, certY, cW * 0.55, "#374151", 8);
-  body(
-    "This is a certified digital copy of the official case record generated by the Ghana Police Service Digital Case Book System.",
+  boldText("CERTIFICATION OF AUTHENTICITY", mL, certY, cW * 0.55, "#374151", 8);
+  bodyText(
+    "This is a certified digital copy of the official case record generated by the Ghana Police Service Digital Case Book System. This document is an accurate representation of all entries made by authorised officers.",
     mL,
-    certY + 13,
+    certY + 14,
     cW * 0.55,
     "#64748b",
-    7,
+    7.5,
   );
 
-  // Right — document details
   const dX = mL + cW * 0.6;
   const dW = cW * 0.4;
   doc
@@ -836,13 +992,17 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   doc
     .save()
     .font("Helvetica")
-    .fontSize(7)
+    .fontSize(7.5)
     .fillColor("#64748b")
-    .text(`Generated: ${fmt(new Date().toISOString())}`, dX, certY + 13, {
+    .text(`Generated: ${fmt(new Date())}`, dX, certY + 14, {
       width: dW,
       align: "right",
     })
-    .text(`Case: ${caseData.caseNumber}`, dX, certY + 23, {
+    .text(`Case Number: ${caseData.caseNumber || "N/A"}`, dX, certY + 25, {
+      width: dW,
+      align: "right",
+    })
+    .text(`Status: ${statusLabel(caseData.status)}`, dX, certY + 36, {
       width: dW,
       align: "right",
     })
@@ -852,17 +1012,18 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     .font("Helvetica-Bold")
     .fontSize(7)
     .fillColor("#dc2626")
-    .text("This document is CONFIDENTIAL", dX, certY + 33, {
+    .text("CONFIDENTIAL — FOR OFFICIAL USE ONLY", dX, certY + 48, {
       width: dW,
       align: "right",
     })
     .restore();
 
-  doc.y = certY + 52;
-  hRule(doc.y);
-  doc.y += 14;
+  doc.y = certY + 66;
+  hLine(doc.y);
+  doc.y += 16;
 
-  // Signature blocks (4 across)
+  // Signature blocks
+  need(80);
   const sigW = cW / 4;
   const sigY = doc.y;
   const sigOfficers = [
@@ -874,51 +1035,63 @@ async function buildPDF(caseData: any): Promise<Buffer> {
 
   sigOfficers.forEach(({ role, officer }, i) => {
     const sx = mL + i * sigW;
-    // Signature line
+    const oObj =
+      officer && typeof officer === "object" && officer.fullName
+        ? officer
+        : null;
     doc
       .save()
-      .moveTo(sx + 4, sigY + 20)
-      .lineTo(sx + sigW - 14, sigY + 20)
+      .moveTo(sx + 4, sigY + 22)
+      .lineTo(sx + sigW - 12, sigY + 22)
       .strokeColor("#374151")
       .lineWidth(0.8)
       .stroke()
       .restore();
-    bold(
-      officer?.fullName || "_______________",
+    boldText(
+      oObj?.fullName || "_______________",
       sx + 4,
-      sigY + 24,
-      sigW - 18,
+      sigY + 26,
+      sigW - 16,
       "#1e293b",
       8,
     );
-    body(role, sx + 4, sigY + 36, sigW - 18, "#64748b", 7);
-    if (officer?.badgeNumber) {
-      body(
-        `Badge: ${officer.badgeNumber}`,
+    bodyText(role, sx + 4, sigY + 38, sigW - 16, "#64748b", 7);
+    if (oObj?.badgeNumber) {
+      bodyText(
+        `Badge: ${oObj.badgeNumber}`,
         sx + 4,
-        sigY + 47,
-        sigW - 18,
+        sigY + 49,
+        sigW - 16,
         "#94a3b8",
         7,
       );
     }
-    body("Date: _______________", sx + 4, sigY + 58, sigW - 18, "#94a3b8", 7);
+    bodyText(
+      "Date: _______________",
+      sx + 4,
+      sigY + 60,
+      sigW - 16,
+      "#94a3b8",
+      7,
+    );
   });
 
-  // ── WATERMARK (stamp on every buffered page) ─────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
+  // WATERMARK — stamp every buffered page
+  // ────────────────────────────────────────────────────────────────────────────
   doc.flushPages();
   const { start, count } = doc.bufferedPageRange();
-  for (let i = start; i < start + count; i++) {
-    doc.switchToPage(i);
+  for (let pi = start; pi < start + count; pi++) {
+    doc.switchToPage(pi);
     doc
       .save()
       .translate(pageW / 2, pageH / 2)
       .rotate(-45)
       .font("Helvetica-Bold")
-      .fontSize(68)
-      .fillColor("#d1d5db")
-      .fillOpacity(0.12)
-      .text("CONFIDENTIAL", -190, -34, { width: 380, align: "center" })
+      .fontSize(64)
+      .fillColor("#9ca3af")
+      .fillOpacity(0.07)
+      .text("CONFIDENTIAL", -185, -32, { width: 370, align: "center" })
       .restore();
   }
 
@@ -940,6 +1113,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   try {
     await connectDB();
 
+    // Use .lean() with full population so every sub-document addedBy / performedBy
+    // is resolved to a plain JS object containing { fullName, badgeNumber, role }.
     const caseData = await Case.findById(id)
       .populate("loggedBy", "fullName email role badgeNumber")
       .populate("assignedOfficer", "fullName email role badgeNumber")
@@ -947,10 +1122,12 @@ export async function GET(req: NextRequest, { params }: Params) {
       .populate("assignedDC", "fullName email role badgeNumber")
       .populate("caseBookEntries.addedBy", "fullName role badgeNumber")
       .populate("auditLog.performedBy", "fullName role badgeNumber")
-      .lean();
+      .populate("notes.addedBy", "fullName role badgeNumber")
+      .lean(); // ← lean() gives plain JS objects; populated refs are plain objects too
 
-    if (!caseData)
+    if (!caseData) {
       return NextResponse.json({ error: "Case not found" }, { status: 404 });
+    }
 
     const pdfBuffer = await buildPDF(caseData);
     const filename = `CaseBook-${(caseData as any).caseNumber}-${Date.now()}.pdf`;
@@ -965,7 +1142,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       },
     });
   } catch (err) {
-    console.error("PDF generation error:", err);
+    console.error("[PDF] generation error:", err);
     return NextResponse.json(
       { error: "Failed to generate PDF" },
       { status: 500 },

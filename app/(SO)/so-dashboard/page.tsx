@@ -557,7 +557,7 @@ const SoDashboardPage = () => {
       </Card>
 
       {/* ── Quick Actions ──────────────────────────────────────────────── */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
@@ -599,7 +599,7 @@ const SoDashboardPage = () => {
             ))}
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 };

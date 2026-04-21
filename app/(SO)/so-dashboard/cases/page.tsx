@@ -24,6 +24,11 @@ import {
   RotateCcw,
   Scale,
   CheckCircle2,
+  BookOpen,
+  History,
+  ClipboardList,
+  Shield,
+  FileDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,16 +39,33 @@ import {
   Pagination,
   UserRef,
   Attachment,
+  CaseBookEntry,
+  AuditEntry,
   STATUS_MAP,
   PRIORITY_BADGE,
   PRIORITY_LEFT,
   ROLE_LABELS,
+  ROLE_SHORT,
+  STAGE_COLORS,
+  ENTRY_TYPE_LABELS,
   CATEGORIES,
+  STAGE_ORDER,
   formatBytes,
-} from "@/components/cases/shared";
+  formatDateTime,
+  formatDate,
+  groupEntriesByStage,
+} from "@/constants/Share";
+import {
+  CaseBookPDFButton,
+  CaseBookExportCard,
+} from "@/components/Casebookpdfbutton";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared micro-components
+// ─────────────────────────────────────────────────────────────────────────────
 
 const inputCls =
-  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition";
+  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition";
 
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_MAP[status] || STATUS_MAP.open;
@@ -55,6 +77,7 @@ function StatusBadge({ status }: { status: string }) {
     </span>
   );
 }
+
 function PriorityBadge({ priority }: { priority: string }) {
   return (
     <span
@@ -76,19 +99,26 @@ function Modal({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
+        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-4xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
+            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <X size={16} />
           </button>
@@ -126,7 +156,7 @@ function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
           href={a.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1"
+          className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1"
         >
           <Download size={11} />
           {a.originalName || `file-${i + 1}`}
@@ -154,7 +184,7 @@ function FilePicker({
       </label>
       <div
         onClick={() => ref.current?.click()}
-        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-purple-400 hover:bg-purple-50/50 transition-colors"
       >
         <Paperclip size={14} className="text-gray-400" />
         <span className="text-xs text-gray-500">
@@ -192,25 +222,570 @@ function FilePicker({
   );
 }
 
-// ─── CID ↔ SO Thread ─────────────────────────────────────────────────────────
-function SOThread({
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit Trail
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AuditTrail({ entries }: { entries: AuditEntry[] }) {
+  return (
+    <div className="space-y-2 max-h-72 overflow-y-auto">
+      {entries.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-6">
+          No audit records yet.
+        </p>
+      ) : (
+        [...entries].reverse().map((e) => (
+          <div key={e._id} className="flex items-start gap-3 text-xs">
+            <div className="w-6 h-6 bg-gray-100 border border-gray-200 rounded-full flex items-center justify-center text-gray-500 shrink-0 mt-0.5">
+              <History size={10} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-gray-700 font-medium">
+                {e.details || e.action.replace(/_/g, " ")}
+              </p>
+              <div className="flex items-center gap-2 mt-0.5 text-gray-400">
+                <span>{e.performedBy?.fullName || "System"}</span>
+                <span>·</span>
+                <span>{formatDateTime(e.performedAt)}</span>
+                {e.fromStage && e.toStage && e.fromStage !== e.toStage && (
+                  <>
+                    <span>·</span>
+                    <span>
+                      {e.fromStage.toUpperCase()} → {e.toStage.toUpperCase()}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Digital Case Book — Stage Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CaseBookStageSection({
+  stage,
+  entries,
+  caseData,
+}: {
+  stage: "nco" | "cid" | "so" | "dc";
+  entries: CaseBookEntry[];
+  caseData: CaseData;
+}) {
+  const colors = STAGE_COLORS[stage];
+  const stageLabel = ROLE_LABELS[stage];
+  const stageOfficer =
+    stage === "nco"
+      ? caseData.loggedBy
+      : stage === "cid"
+        ? caseData.assignedOfficer
+        : stage === "so"
+          ? caseData.assignedSO
+          : caseData.assignedDC;
+  const isActive = caseData.currentStage === stage;
+  const isPast =
+    STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(caseData.currentStage);
+
+  return (
+    <div
+      className={`rounded-xl border-2 overflow-hidden ${
+        isActive
+          ? `${colors.border} ring-2 ring-offset-1 ring-purple-300`
+          : isPast
+            ? "border-gray-200"
+            : "border-dashed border-gray-200 opacity-50"
+      }`}
+    >
+      <div
+        className={`flex items-center justify-between px-5 py-3 ${
+          isActive ? colors.bg : isPast ? "bg-gray-50" : "bg-white"
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+              isActive ? colors.badge : isPast ? "bg-gray-400" : "bg-gray-200"
+            }`}
+          >
+            {stage.toUpperCase().charAt(0)}
+          </div>
+          <div>
+            <p
+              className={`text-sm font-bold ${
+                isActive
+                  ? colors.text
+                  : isPast
+                    ? "text-gray-700"
+                    : "text-gray-400"
+              }`}
+            >
+              {stageLabel}
+            </p>
+            {stageOfficer && (
+              <p className="text-xs text-gray-500">{stageOfficer.fullName}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isPast && (
+            <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+              <CheckCircle2 size={12} className="text-green-500" /> Completed
+            </span>
+          )}
+          {isActive && (
+            <span
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} border ${colors.border}`}
+            >
+              Active Stage
+            </span>
+          )}
+          {!isActive && !isPast && (
+            <span className="text-xs text-gray-400">Pending</span>
+          )}
+        </div>
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        {entries.length === 0 ? (
+          <p className="text-xs text-gray-400 italic text-center py-3">
+            {isActive
+              ? "No entries yet. Add a review entry before forwarding."
+              : "No entries recorded."}
+          </p>
+        ) : (
+          entries.map((entry) => (
+            <div
+              key={entry._id}
+              className={`rounded-lg border p-4 ${colors.bg} ${colors.border}`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${colors.badge}`}
+                  >
+                    {ENTRY_TYPE_LABELS[entry.entryType] || entry.entryType}
+                  </span>
+                  <span className={`text-xs font-semibold ${colors.text}`}>
+                    {entry.addedBy?.fullName || "Officer"}
+                    <span className="ml-1 font-normal text-gray-500">
+                      ({ROLE_SHORT[entry.roleSnapshot] || entry.roleSnapshot})
+                    </span>
+                  </span>
+                </div>
+                <span className="text-xs text-gray-400 shrink-0">
+                  {formatDateTime(entry.addedAt)}
+                </span>
+              </div>
+              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                {entry.content}
+              </p>
+              <AttachmentList attachments={entry.attachments} />
+              <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                <CheckCircle2 size={10} className="text-green-400" /> Entry
+                locked — cannot be edited
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Digital Case Book (SO view)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DigitalCaseBook({
   caseItem,
-  userRole,
+  onAddEntry,
+}: {
+  caseItem: CaseData;
+  onAddEntry: () => void;
+}) {
+  const grouped = groupEntriesByStage(caseItem.caseBookEntries);
+  const isSOStage = caseItem.currentStage === "so";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-linear-to-r from-purple-900 to-purple-700 rounded-xl p-5 text-white">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen size={14} className="opacity-70" />
+              <span className="text-xs font-semibold opacity-70 uppercase tracking-widest">
+                Digital Case Book
+              </span>
+            </div>
+            <p className="text-lg font-bold">{caseItem.caseNumber}</p>
+            <p className="text-sm opacity-80 mt-0.5">{caseItem.title}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <div className="text-right text-xs opacity-70 space-y-0.5">
+              <p>Reported: {formatDate(caseItem.dateReported)}</p>
+              <p>Location: {caseItem.location}</p>
+            </div>
+            <CaseBookPDFButton
+              caseId={caseItem._id}
+              caseNumber={caseItem.caseNumber}
+              size="sm"
+              className="bg-white/20 hover:bg-white/30 text-white border-white/30 hover:border-white/50"
+            />
+          </div>
+        </div>
+        {/* Progress */}
+        <div className="mt-4 flex items-center gap-0">
+          {STAGE_ORDER.map((stage, idx) => {
+            const past =
+              STAGE_ORDER.indexOf(stage) <
+              STAGE_ORDER.indexOf(caseItem.currentStage);
+            const current = stage === caseItem.currentStage;
+            return (
+              <div key={stage} className="flex items-center flex-1">
+                <div
+                  className={`flex-1 h-1.5 ${idx === 0 ? "rounded-l-full" : ""} ${idx === 3 ? "rounded-r-full" : ""} ${past || current ? "bg-white" : "bg-white/20"}`}
+                />
+                <div
+                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0 ${
+                    current
+                      ? "bg-white text-purple-800 border-white"
+                      : past
+                        ? "bg-white/80 text-purple-700 border-white/80"
+                        : "bg-transparent text-white/50 border-white/30"
+                  }`}
+                >
+                  {stage.toUpperCase().charAt(0)}
+                </div>
+                {idx < 3 && (
+                  <div
+                    className={`flex-1 h-1.5 ${past ? "bg-white" : "bg-white/20"}`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-between mt-1">
+          {STAGE_ORDER.map((stage) => (
+            <span
+              key={stage}
+              className={`text-xs ${stage === caseItem.currentStage ? "text-white font-bold" : "text-white/50"}`}
+            >
+              {ROLE_SHORT[stage]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* CID Submission Note */}
+      {caseItem.cidSubmissionNote && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+          <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">
+            CID Submission Findings
+          </p>
+          <p className="text-sm text-gray-700">{caseItem.cidSubmissionNote}</p>
+        </div>
+      )}
+
+      {(STAGE_ORDER as ("nco" | "cid" | "so" | "dc")[]).map((stage) => (
+        <CaseBookStageSection
+          key={stage}
+          stage={stage}
+          entries={grouped[stage] || []}
+          caseData={caseItem}
+        />
+      ))}
+
+      {isSOStage && (
+        <Button
+          onClick={onAddEntry}
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2"
+        >
+          <ClipboardList size={14} /> Add Review Entry to Case Book
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Case Book Entry Modal (SO)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AddCaseBookEntryModal({
+  caseItem,
+  onSuccess,
+  onClose,
+}: {
+  caseItem: CaseData;
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
+  const [content, setContent] = useState("");
+  const [entryType, setType] = useState("review");
+  const [files, setFiles] = useState<File[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!content.trim()) return;
+    setLoading(true);
+    try {
+      if (files.length > 0) {
+        const fd = new FormData();
+        fd.append("action", "add-casebook-entry");
+        fd.append("content", content.trim());
+        fd.append("entryType", entryType);
+        fd.append("stage", "so");
+        files.forEach((f) => fd.append("attachments", f));
+        const res = await fetch(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          credentials: "include",
+          body: fd,
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+      } else {
+        await api(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            action: "add-casebook-entry",
+            content: content.trim(),
+            entryType,
+            stage: "so",
+          }),
+        });
+      }
+      toast.success("Review entry added to case book");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <BookOpen size={14} className="text-purple-600" />
+          <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">
+            SO Case Book Entry
+          </span>
+        </div>
+        <p className="text-xs text-gray-600">
+          Document your review observations. This entry is permanent and will
+          appear in the official case book and any exported PDF.
+        </p>
+      </div>
+      <FormField label="Entry Type">
+        <select
+          className={inputCls}
+          value={entryType}
+          onChange={(e) => setType(e.target.value)}
+        >
+          <option value="review">Review Notes</option>
+          <option value="directive">Directive</option>
+          <option value="remark">General Remark</option>
+        </select>
+      </FormField>
+      <FormField label="Entry Content *">
+        <textarea
+          className={inputCls}
+          rows={6}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Document your review observations, assessment of findings, directives, or recommendations..."
+          style={{ resize: "vertical" }}
+          required
+        />
+      </FormField>
+      <FilePicker files={files} onChange={setFiles} />
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          Once submitted, this entry cannot be modified. Ensure all details are
+          accurate before proceeding.
+        </p>
+      </div>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={loading || !content.trim()}
+          className="bg-purple-600 hover:bg-purple-700 text-white"
+        >
+          {loading ? (
+            <Loader2 size={14} className="animate-spin mr-2" />
+          ) : (
+            <ClipboardList size={14} className="mr-2" />
+          )}
+          Add Entry
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Export Tab (SO)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ExportTab({ caseItem }: { caseItem: CaseData }) {
+  const byStage = groupEntriesByStage(caseItem.caseBookEntries || []);
+  const counts = {
+    nco: byStage.nco?.length || 0,
+    cid: byStage.cid?.length || 0,
+    so: byStage.so?.length || 0,
+    dc: byStage.dc?.length || 0,
+  };
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-linear-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <BookOpen size={14} className="text-purple-600" />
+          <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">
+            Case Book Summary
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center mb-4">
+          {[
+            {
+              label: "NCO",
+              count: counts.nco,
+              color: "text-blue-700",
+              bg: "bg-blue-50",
+            },
+            {
+              label: "CID",
+              count: counts.cid,
+              color: "text-indigo-700",
+              bg: "bg-indigo-50",
+            },
+            {
+              label: "SO",
+              count: counts.so,
+              color: "text-purple-700",
+              bg: "bg-purple-50",
+            },
+            {
+              label: "DC",
+              count: counts.dc,
+              color: "text-amber-700",
+              bg: "bg-amber-50",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className={`${s.bg} rounded-lg p-2.5 border border-white`}
+            >
+              <p className={`text-xl font-bold ${s.color}`}>{s.count}</p>
+              <p className="text-xs text-gray-500">{s.label}</p>
+              <p className="text-xs text-gray-400">
+                {s.count === 1 ? "entry" : "entries"}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center text-xs text-gray-600">
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">
+              {caseItem.auditLog?.length || 0}
+            </span>{" "}
+            audit events
+          </div>
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">
+              {caseItem.suspects?.length || 0}
+            </span>{" "}
+            suspects
+          </div>
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">
+              {caseItem.witnesses?.length || 0}
+            </span>{" "}
+            witnesses
+          </div>
+        </div>
+      </div>
+
+      <CaseBookExportCard
+        caseId={caseItem._id}
+        caseNumber={caseItem.caseNumber}
+        caseTitle={caseItem.title}
+        caseStatus={caseItem.status}
+        entryCount={total}
+      />
+
+      <div className="text-xs text-gray-500 space-y-1.5 bg-gray-50 rounded-xl p-4 border border-gray-100">
+        <p className="font-semibold text-gray-700 mb-2 text-sm">
+          PDF document includes:
+        </p>
+        {[
+          "Ghana Police Service official header with case number",
+          "Case details — title, description, category, priority, location, dates",
+          "Reporter and all assigned officer information",
+          "Workflow progress timeline (NCO → CID → SO → DC)",
+          "All formal case book entries with role labels and timestamps",
+          "Official handoff notes between stages",
+          "Suspects and witnesses list",
+          "Full immutable audit trail",
+          "Signature blocks for all four officers",
+          "CONFIDENTIAL watermark and certification footer",
+        ].map((item, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <CheckCircle2
+              size={12}
+              className="text-green-500 shrink-0 mt-0.5"
+            />
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          The exported PDF is an official document. Handle it in accordance with
+          your station's document security policy.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Thread: CID ↔ SO
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ThreadBox({
+  caseItem,
   onRefresh,
 }: {
   caseItem: CaseData;
-  userRole: string;
   onRefresh: () => void;
 }) {
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
   const msgs = (caseItem.threadMessages || [])
     .filter((m) => m.thread === "cid_so")
     .sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
     );
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs.length]);
@@ -255,15 +830,6 @@ function SOThread({
     }
   }
 
-  if (!caseItem.assignedOfficer) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 text-gray-400">
-        <MessageSquare size={24} className="mb-2 opacity-40" />
-        <p className="text-xs">No CID officer assigned yet.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-64">
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
@@ -281,20 +847,24 @@ function SOThread({
                 className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
+                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${
+                    mine
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-100 text-gray-800"
+                  }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className={`text-xs font-semibold ${mine ? "text-blue-200" : "text-gray-500"}`}
+                      className={`text-xs font-semibold ${mine ? "text-purple-200" : "text-gray-500"}`}
                     >
                       {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
                     </span>
                     <ChevronRight
                       size={10}
-                      className={mine ? "text-blue-300" : "text-gray-400"}
+                      className={mine ? "text-purple-300" : "text-gray-400"}
                     />
                     <span
-                      className={`text-xs ${mine ? "text-blue-200" : "text-gray-500"}`}
+                      className={`text-xs ${mine ? "text-purple-200" : "text-gray-500"}`}
                     >
                       {ROLE_LABELS[m.toRole || ""] || m.toRole}
                     </span>
@@ -302,9 +872,9 @@ function SOThread({
                   <p className="text-sm leading-relaxed">{m.content}</p>
                   <AttachmentList attachments={m.attachments} />
                   <p
-                    className={`text-xs mt-1.5 ${mine ? "text-blue-300" : "text-gray-400"}`}
+                    className={`text-xs mt-1.5 ${mine ? "text-purple-300" : "text-gray-400"}`}
                   >
-                    {new Date(m.sentAt).toLocaleString()}
+                    {formatDateTime(m.sentAt)}
                   </p>
                 </div>
               </div>
@@ -328,7 +898,7 @@ function SOThread({
           <button
             type="submit"
             disabled={sending || !content.trim()}
-            className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
+            className="shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
           >
             {sending ? (
               <Loader2 size={14} className="animate-spin" />
@@ -342,7 +912,10 @@ function SOThread({
   );
 }
 
-// ─── Return to CID Modal ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Return to CID Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
 function ReturnModal({
   caseItem,
   onSuccess,
@@ -353,7 +926,6 @@ function ReturnModal({
   onClose: () => void;
 }) {
   const [directive, setDirective] = useState("");
-  const [note, setNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -369,7 +941,6 @@ function ReturnModal({
         const fd = new FormData();
         fd.append("action", "so-return");
         fd.append("soDirective", directive.trim());
-        if (note) fd.append("note", note);
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
           method: "PUT",
@@ -383,11 +954,10 @@ function ReturnModal({
           body: JSON.stringify({
             action: "so-return",
             soDirective: directive.trim(),
-            note,
           }),
         });
       }
-      toast.success("Case returned to CID — notification sent");
+      toast.success("Case returned to CID with directive");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -410,43 +980,51 @@ function ReturnModal({
           </p>
         )}
       </div>
+
       {caseItem.cidSubmissionNote && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-          <p className="text-xs font-bold text-yellow-700 uppercase mb-1">
-            CID Submission Note
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+          <p className="text-xs font-bold text-indigo-700 uppercase mb-1">
+            CID Submission Findings
           </p>
           <p className="text-sm text-gray-700">{caseItem.cidSubmissionNote}</p>
         </div>
       )}
-      <FormField label="Directive for Investigator *">
+
+      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <BookOpen size={14} className="text-purple-600" />
+          <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">
+            Directive (Added to Case Book) *
+          </p>
+        </div>
         <textarea
           className={inputCls}
-          rows={4}
+          rows={5}
           value={directive}
           onChange={(e) => setDirective(e.target.value)}
-          placeholder="Clearly state what further action is required..."
+          placeholder="Clearly state what further action is required from the CID Investigator. This will be permanently recorded in the case book."
           style={{ resize: "vertical" }}
           required
         />
-      </FormField>
-      <FormField label="Internal Note (optional)">
-        <textarea
-          className={inputCls}
-          rows={2}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Additional notes..."
-          style={{ resize: "vertical" }}
-        />
-      </FormField>
+      </div>
+
       <FilePicker files={files} onChange={setFiles} />
+
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          This directive will be permanently locked in the case book once
+          submitted.
+        </p>
+      </div>
+
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
         <Button
           type="submit"
-          disabled={loading}
+          disabled={loading || !directive.trim()}
           className="bg-orange-500 hover:bg-orange-600 text-white"
         >
           {loading ? (
@@ -461,7 +1039,10 @@ function ReturnModal({
   );
 }
 
-// ─── Forward to DC Modal ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Forward to DC Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
 function ForwardDCModal({
   caseItem,
   onSuccess,
@@ -473,10 +1054,12 @@ function ForwardDCModal({
 }) {
   const [commanders, setCommanders] = useState<UserRef[]>([]);
   const [selected, setSelected] = useState("");
-  const [reviewNote, setReviewNote] = useState("");
-  const [note, setNote] = useState("");
+  const [forwardNote, setForwardNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const hasSOEntries = (caseItem.caseBookEntries || []).some(
+    (e) => e.stage === "so",
+  );
 
   useEffect(() => {
     api("/api/users/by-role?role=dc")
@@ -490,14 +1073,17 @@ function ForwardDCModal({
       toast.error("Select a District Commander");
       return;
     }
+    if (!forwardNote.trim()) {
+      toast.error("Forward note is required");
+      return;
+    }
     setLoading(true);
     try {
       if (files.length > 0) {
         const fd = new FormData();
         fd.append("action", "so-forward");
         fd.append("assignedDC", selected);
-        if (reviewNote) fd.append("soReviewNote", reviewNote);
-        if (note) fd.append("note", note);
+        fd.append("soForwardNote", forwardNote.trim());
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
           method: "PUT",
@@ -511,12 +1097,11 @@ function ForwardDCModal({
           body: JSON.stringify({
             action: "so-forward",
             assignedDC: selected,
-            soReviewNote: reviewNote,
-            note,
+            soForwardNote: forwardNote.trim(),
           }),
         });
       }
-      toast.success("Forwarded to District Commander — notification sent");
+      toast.success("Case forwarded to District Commander");
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -539,6 +1124,17 @@ function ForwardDCModal({
           </p>
         )}
       </div>
+
+      {!hasSOEntries && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">
+            You have not added any case book entries yet. Add your review
+            findings in the Case Book tab before forwarding.
+          </p>
+        </div>
+      )}
+
       <FormField label="Assign District Commander *">
         <select
           className={inputCls}
@@ -554,35 +1150,46 @@ function ForwardDCModal({
           ))}
         </select>
       </FormField>
-      <FormField label="SO Review Note (optional)">
+
+      <div className="border border-purple-200 rounded-xl p-4 bg-purple-50 space-y-3">
+        <div className="flex items-center gap-2">
+          <BookOpen size={14} className="text-purple-600" />
+          <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">
+            SO Review Entry (Case Book) *
+          </p>
+        </div>
+        <p className="text-xs text-gray-600">
+          Your review note will be permanently recorded as 'Review Notes' in the
+          case book.
+        </p>
         <textarea
           className={inputCls}
-          rows={3}
-          value={reviewNote}
-          onChange={(e) => setReviewNote(e.target.value)}
-          placeholder="Summary for the Commander..."
+          rows={5}
+          value={forwardNote}
+          onChange={(e) => setForwardNote(e.target.value)}
+          placeholder="Summarise your review: assessment of CID findings, additional observations, recommendation for the District Commander..."
           style={{ resize: "vertical" }}
+          required
         />
-      </FormField>
-      <FormField label="Internal Note (optional)">
-        <textarea
-          className={inputCls}
-          rows={2}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Additional notes..."
-          style={{ resize: "vertical" }}
-        />
-      </FormField>
+      </div>
+
       <FilePicker files={files} onChange={setFiles} />
+
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          This review note will be permanently locked once forwarded.
+        </p>
+      </div>
+
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
         <Button
           type="submit"
-          disabled={loading || !selected}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
+          disabled={loading || !selected || !forwardNote.trim()}
+          className="bg-purple-600 hover:bg-purple-700 text-white"
         >
           {loading ? (
             <Loader2 size={14} className="animate-spin mr-2" />
@@ -596,26 +1203,28 @@ function ForwardDCModal({
   );
 }
 
-// ─── Detail Modal ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Detail Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
 function DetailModal({
   caseItem,
   userId,
-  userRole,
   onRefresh,
   onClose,
 }: {
   caseItem: CaseData;
   userId: string;
-  userRole: string;
   onRefresh: () => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"info" | "thread" | "notes" | "parties">(
-    "info",
-  );
+  const [tab, setTab] = useState<
+    "casebook" | "info" | "thread" | "notes" | "parties" | "audit" | "export"
+  >("casebook");
   const [noteContent, setNC] = useState("");
   const [noteFiles, setNF] = useState<File[]>([]);
   const [addingNote, setAN] = useState(false);
+  const [addEntryOpen, setOpen] = useState(false);
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -650,27 +1259,39 @@ function DetailModal({
     }
   }
 
-  const threadUnread = (caseItem.threadMessages || []).filter(
+  const cidUnread = (caseItem.threadMessages || []).filter(
     (m) =>
       m.thread === "cid_so" &&
       m.fromRole !== "so" &&
       !m.readBy?.includes(userId),
   ).length;
+
   const TABS = [
+    { id: "casebook", label: "📖 Case Book" },
     { id: "info", label: "Info" },
     {
       id: "thread",
-      label: `CID Chat${threadUnread > 0 ? ` (${threadUnread})` : ""}`,
+      label: `CID Chat${cidUnread > 0 ? ` (${cidUnread})` : ""}`,
     },
     { id: "notes", label: `Notes (${caseItem.notes.length})` },
     { id: "parties", label: "Parties" },
+    { id: "audit", label: `Audit (${caseItem.auditLog?.length || 0})` },
+    { id: "export", label: "⬇ Export" },
   ] as const;
 
   return (
     <div className="space-y-4">
+      {addEntryOpen && (
+        <AddCaseBookEntryModal
+          caseItem={caseItem}
+          onSuccess={onRefresh}
+          onClose={() => setOpen(false)}
+        />
+      )}
+
       <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
-          <p className="text-xs font-mono font-bold text-blue-600 mb-1">
+          <p className="text-xs font-mono font-bold text-purple-600 mb-1">
             {caseItem.caseNumber}
           </p>
           <h3 className="text-base font-bold text-gray-900">
@@ -686,46 +1307,74 @@ function DetailModal({
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${tab === t.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            onClick={() => setTab(t.id as any)}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             {t.label}
           </button>
         ))}
       </div>
 
+      {tab === "casebook" && (
+        <DigitalCaseBook caseItem={caseItem} onAddEntry={() => setOpen(true)} />
+      )}
+
       {tab === "info" && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "Location", val: caseItem.location },
               {
-                label: "Date Occurred",
-                val: new Date(caseItem.dateOccurred).toLocaleDateString(),
+                icon: <MapPin size={12} />,
+                label: "Location",
+                val: caseItem.location,
               },
-              { label: "Reported By", val: caseItem.reportedBy.name },
-              { label: "Category", val: caseItem.category, cap: true },
+              {
+                icon: <Calendar size={12} />,
+                label: "Date Occurred",
+                val: formatDate(caseItem.dateOccurred),
+              },
+              {
+                icon: <User size={12} />,
+                label: "Reported By",
+                val: caseItem.reportedBy.name,
+              },
+              {
+                icon: <FileText size={12} />,
+                label: "Category",
+                val: caseItem.category,
+                cap: true,
+              },
               ...(caseItem.loggedBy
-                ? [{ label: "Logged By", val: caseItem.loggedBy.fullName }]
+                ? [
+                    {
+                      icon: <User size={12} />,
+                      label: "Logged By (NCO)",
+                      val: caseItem.loggedBy.fullName,
+                    },
+                  ]
                 : []),
               ...(caseItem.assignedOfficer
                 ? [
                     {
+                      icon: <Users size={12} />,
                       label: "CID Investigator",
                       val: caseItem.assignedOfficer.fullName,
                     },
                   ]
                 : []),
-            ].map(({ label, val, cap }) => (
+            ].map(({ icon, label, val, cap }) => (
               <div
                 key={label}
                 className="bg-gray-50 rounded-lg p-3 border border-gray-100"
               >
-                <p className="text-xs text-gray-400 mb-1">{label}</p>
+                <div className="flex items-center gap-1.5 text-gray-400 text-xs mb-1">
+                  {icon}
+                  <span>{label}</span>
+                </div>
                 <p
                   className={`text-gray-800 text-sm font-medium ${cap ? "capitalize" : ""}`}
                 >
@@ -745,9 +1394,9 @@ function DetailModal({
             </div>
           )}
           {caseItem.cidSubmissionNote && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <p className="text-xs font-bold text-yellow-700 uppercase mb-1">
-                CID Submission Note
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-indigo-700 uppercase mb-1">
+                CID Submission Findings
               </p>
               <p className="text-sm text-gray-700">
                 {caseItem.cidSubmissionNote}
@@ -757,28 +1406,16 @@ function DetailModal({
           {caseItem.soDirective && (
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
               <p className="text-xs font-bold text-orange-700 uppercase mb-1">
-                Your Directive (Returned to CID)
+                Your Directive (Sent to CID)
               </p>
               <p className="text-sm text-gray-700">{caseItem.soDirective}</p>
-            </div>
-          )}
-          {caseItem.soReviewNote && (
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-              <p className="text-xs font-bold text-purple-700 uppercase mb-1">
-                Your Review Note
-              </p>
-              <p className="text-sm text-gray-700">{caseItem.soReviewNote}</p>
             </div>
           )}
         </div>
       )}
 
       {tab === "thread" && (
-        <SOThread
-          caseItem={caseItem}
-          userRole={userRole}
-          onRefresh={onRefresh}
-        />
+        <ThreadBox caseItem={caseItem} onRefresh={onRefresh} />
       )}
 
       {tab === "notes" && (
@@ -795,7 +1432,7 @@ function DetailModal({
                   className="bg-gray-50 rounded-lg p-3 border border-gray-100"
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-semibold text-blue-700">
+                    <span className="text-xs font-semibold text-purple-700">
                       {n.addedBy?.fullName || "Unknown"}
                       {n.roleSnapshot && (
                         <span className="ml-1 font-normal text-gray-400">
@@ -804,7 +1441,7 @@ function DetailModal({
                       )}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {new Date(n.addedAt).toLocaleString()}
+                      {formatDateTime(n.addedAt)}
                     </span>
                   </div>
                   <p className="text-sm text-gray-700">{n.content}</p>
@@ -822,7 +1459,7 @@ function DetailModal({
               rows={2}
               value={noteContent}
               onChange={(e) => setNC(e.target.value)}
-              placeholder="Add a review note..."
+              placeholder="Add review note..."
               style={{ resize: "vertical" }}
             />
             <FilePicker files={noteFiles} onChange={setNF} />
@@ -831,7 +1468,7 @@ function DetailModal({
                 type="submit"
                 size="sm"
                 disabled={addingNote || !noteContent.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-purple-600 hover:bg-purple-700 text-white"
               >
                 {addingNote ? (
                   <Loader2 size={12} className="animate-spin mr-1" />
@@ -859,7 +1496,7 @@ function DetailModal({
                   key={i}
                   className="bg-red-50 border border-red-200 rounded-lg p-3 mb-2"
                 >
-                  <p className="font-semibold text-sm">
+                  <p className="font-semibold text-sm text-gray-900">
                     {s.name}
                     {s.age && (
                       <span className="ml-2 text-xs text-gray-500">
@@ -888,7 +1525,7 @@ function DetailModal({
                   key={i}
                   className="bg-green-50 border border-green-200 rounded-lg p-3 mb-2"
                 >
-                  <p className="font-semibold text-sm">
+                  <p className="font-semibold text-sm text-gray-900">
                     {w.name}
                     {w.phone && (
                       <span className="ml-2 text-xs text-gray-500">
@@ -908,7 +1545,15 @@ function DetailModal({
         </div>
       )}
 
-      <div className="flex justify-end border-t border-gray-100 pt-3">
+      {tab === "audit" && <AuditTrail entries={caseItem.auditLog || []} />}
+      {tab === "export" && <ExportTab caseItem={caseItem} />}
+
+      <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+        <CaseBookPDFButton
+          caseId={caseItem._id}
+          caseNumber={caseItem.caseNumber}
+          size="sm"
+        />
         <Button variant="outline" onClick={onClose}>
           Close
         </Button>
@@ -916,6 +1561,10 @@ function DetailModal({
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stat Card
+// ─────────────────────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
@@ -955,6 +1604,10 @@ function StatCard({
     </Card>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function SOCasesPage() {
   const userId = "CURRENT_USER_ID";
@@ -1011,6 +1664,9 @@ export default function SOCasesPage() {
   const forwardedCount = cases.filter(
     (c) => c.status === "commander_review",
   ).length;
+  const directiveCount = cases.filter(
+    (c) => !!c.soDirective && c.currentStage === "cid",
+  ).length;
   const unreadCount = cases.reduce(
     (acc, c) =>
       acc +
@@ -1028,12 +1684,15 @@ export default function SOCasesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Scale size={16} className="text-blue-600" />
-            <span className="text-sm font-semibold text-blue-600">
+            <Scale size={16} className="text-purple-600" />
+            <span className="text-sm font-semibold text-purple-600">
               Station Officer
             </span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Case Reviews</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Digital Case Book System — review and forward cases
+          </p>
         </div>
         <Button
           variant="outline"
@@ -1046,19 +1705,19 @@ export default function SOCasesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          label="Total Cases"
+          label="Assigned Cases"
           value={total}
-          sub="Assigned to you"
-          icon={<Scale className="h-6 w-6 text-blue-600" />}
-          iconBg="bg-blue-100"
+          sub="All cases"
+          icon={<Scale className="h-6 w-6 text-purple-600" />}
+          iconBg="bg-purple-100"
         />
         <StatCard
           label="Awaiting Review"
           value={awaitingReview}
           sub="Submitted by CID"
-          icon={<Clock className="h-6 w-6 text-purple-600" />}
-          iconBg="bg-purple-100"
-          valueColor="text-purple-600"
+          icon={<Clock className="h-6 w-6 text-yellow-600" />}
+          iconBg="bg-yellow-100"
+          valueColor="text-yellow-600"
         />
         <StatCard
           label="Forwarded to DC"
@@ -1072,9 +1731,9 @@ export default function SOCasesPage() {
           label="Unread Messages"
           value={unreadCount}
           sub="From CID"
-          icon={<MessageSquare className="h-6 w-6 text-yellow-600" />}
-          iconBg="bg-yellow-100"
-          valueColor={unreadCount > 0 ? "text-yellow-600" : "text-gray-900"}
+          icon={<MessageSquare className="h-6 w-6 text-indigo-600" />}
+          iconBg="bg-indigo-100"
+          valueColor={unreadCount > 0 ? "text-indigo-600" : "text-gray-900"}
         />
       </div>
 
@@ -1133,14 +1792,14 @@ export default function SOCasesPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Scale size={16} className="text-blue-600" />
+            <Scale size={16} className="text-purple-600" />
             Cases Under Review ({total})
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="flex justify-center py-16">
-              <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+              <Loader2 className="h-7 w-7 animate-spin text-purple-600" />
             </div>
           ) : cases.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
@@ -1151,6 +1810,9 @@ export default function SOCasesPage() {
             <div className="space-y-2">
               {cases.map((c) => {
                 const canReview = c.status === "under_review";
+                const bookEntries = (c.caseBookEntries || []).filter(
+                  (e) => e.stage === "so",
+                ).length;
                 const unread = (c.threadMessages || []).filter(
                   (m) =>
                     m.thread === "cid_so" &&
@@ -1161,28 +1823,31 @@ export default function SOCasesPage() {
                 return (
                   <div
                     key={c._id}
-                    className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${canReview ? "bg-purple-50 border-purple-200" : "bg-white border-gray-200 hover:border-blue-200 hover:shadow-sm"}`}
+                    className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${canReview ? "bg-purple-50 border-purple-200" : "bg-white border-gray-200 hover:border-purple-200 hover:shadow-sm"}`}
                   >
                     <div
                       className={`w-1 h-12 rounded-full shrink-0 ${PRIORITY_LEFT[c.priority] || "bg-gray-300"}`}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center flex-wrap gap-2 mb-1">
-                        <span className="text-xs font-mono font-bold text-blue-600">
+                        <span className="text-xs font-mono font-bold text-purple-600">
                           {c.caseNumber}
                         </span>
                         <PriorityBadge priority={c.priority} />
                         <StatusBadge status={c.status} />
                         {canReview && (
                           <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
-                            <CheckCircle2 size={9} />
-                            Needs Review
+                            <CheckCircle2 size={9} /> Needs Review
+                          </span>
+                        )}
+                        {bookEntries > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                            <BookOpen size={9} /> {bookEntries} entries
                           </span>
                         )}
                         {unread > 0 && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-600 text-white">
-                            <MessageSquare size={9} />
-                            {unread} new
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-600 text-white">
+                            <MessageSquare size={9} /> {unread} new
                           </span>
                         )}
                       </div>
@@ -1208,7 +1873,7 @@ export default function SOCasesPage() {
                     </div>
                     <div className="text-right shrink-0 hidden sm:block">
                       <p className="text-xs text-gray-400">
-                        {new Date(c.createdAt).toLocaleDateString()}
+                        {formatDate(c.createdAt)}
                       </p>
                       <p className="text-xs text-gray-300 mt-0.5">
                         {c.notes.length} notes
@@ -1228,19 +1893,23 @@ export default function SOCasesPage() {
                             onClick={() => setReturnCase(c)}
                             className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8 px-3"
                           >
-                            <RotateCcw size={12} className="mr-1" />
-                            Return
+                            <RotateCcw size={12} className="mr-1" /> Return
                           </Button>
                           <Button
                             size="sm"
                             onClick={() => setForwardCase(c)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 px-3"
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs h-8 px-3"
                           >
-                            <ArrowUpRight size={12} className="mr-1" />
-                            Forward
+                            <ArrowUpRight size={12} className="mr-1" /> Forward
                           </Button>
                         </>
                       )}
+                      <CaseBookPDFButton
+                        caseId={c._id}
+                        caseNumber={c.caseNumber}
+                        size="sm"
+                        iconOnly
+                      />
                     </div>
                   </div>
                 );
@@ -1254,7 +1923,7 @@ export default function SOCasesPage() {
                   <button
                     key={p}
                     onClick={() => setPage(p)}
-                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${p === page ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${p === page ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
                   >
                     {p}
                   </button>
@@ -1298,7 +1967,6 @@ export default function SOCasesPage() {
           <DetailModal
             caseItem={detailCase}
             userId={userId}
-            userRole={userRole}
             onRefresh={refreshDetail}
             onClose={() => setDetailCase(null)}
           />

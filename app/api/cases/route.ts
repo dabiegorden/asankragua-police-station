@@ -1,4 +1,5 @@
 // src/app/api/cases/route.ts
+// Digital Case Book — full rewrite with audit trail + case book aggregation
 
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
@@ -8,12 +9,14 @@ import { parseAttachments } from "@/lib/parseAttachments";
 
 export async function populateCase(id: string) {
   return Case.findById(id)
-    .populate("loggedBy", "fullName email role")
-    .populate("assignedOfficer", "fullName email role")
-    .populate("assignedSO", "fullName email role")
-    .populate("assignedDC", "fullName email role")
-    .populate("notes.addedBy", "fullName role")
-    .populate("threadMessages.fromUser", "fullName role");
+    .populate("loggedBy", "fullName email role badgeNumber")
+    .populate("assignedOfficer", "fullName email role badgeNumber")
+    .populate("assignedSO", "fullName email role badgeNumber")
+    .populate("assignedDC", "fullName email role badgeNumber")
+    .populate("notes.addedBy", "fullName role badgeNumber")
+    .populate("caseBookEntries.addedBy", "fullName role badgeNumber")
+    .populate("threadMessages.fromUser", "fullName role")
+    .populate("auditLog.performedBy", "fullName role badgeNumber");
 }
 
 // ─── GET — list cases (role-scoped) ──────────────────────────────────────────
@@ -46,7 +49,7 @@ export async function GET(req: NextRequest) {
         break;
       case "dc":
       case "admin":
-        break;
+        break; // full visibility
     }
 
     if (status && status !== "all") query.status = status;
@@ -74,10 +77,11 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * limit;
     const [cases, total] = await Promise.all([
       Case.find(query)
-        .populate("loggedBy", "fullName email role")
-        .populate("assignedOfficer", "fullName email role")
-        .populate("assignedSO", "fullName email role")
-        .populate("assignedDC", "fullName email role")
+        .populate("loggedBy", "fullName email role badgeNumber")
+        .populate("assignedOfficer", "fullName email role badgeNumber")
+        .populate("assignedSO", "fullName email role badgeNumber")
+        .populate("assignedDC", "fullName email role badgeNumber")
+        .populate("caseBookEntries.addedBy", "fullName role badgeNumber")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -187,6 +191,7 @@ export async function POST(req: NextRequest) {
       attachments: uploadedAttachments,
     });
 
+    // ── seed initial case book entry from NCO/SO ──────────────────────────────
     if (typeof initialNote === "string" && initialNote.trim()) {
       newCase.notes.push({
         content: initialNote.trim(),
@@ -195,7 +200,29 @@ export async function POST(req: NextRequest) {
         addedAt: new Date(),
         attachments: [],
       });
+
+      // Also add to the digital case book
+      newCase.caseBookEntries.push({
+        stage: "nco",
+        entryType: "remark",
+        content: initialNote.trim(),
+        addedBy: user.userId,
+        roleSnapshot: user.role,
+        addedAt: new Date(),
+        attachments: [],
+        isEditable: false,
+      });
     }
+
+    // Audit: case created
+    newCase.auditLog.push({
+      action: "case_created",
+      performedBy: user.userId,
+      performedAt: new Date(),
+      fromStage: null,
+      toStage: "nco",
+      details: `Case logged by ${user.role.toUpperCase()}`,
+    });
 
     await newCase.save();
     const populated = await populateCase(newCase._id.toString());

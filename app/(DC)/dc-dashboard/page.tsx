@@ -650,7 +650,7 @@ const DcDashboardPage = () => {
       </Card>
 
       {/* ── Quick Actions ──────────────────────────────────────────────── */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
@@ -692,7 +692,7 @@ const DcDashboardPage = () => {
             ))}
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 };

@@ -538,7 +538,7 @@ const NcoDashboard = () => {
       </section>
 
       {/* ── Quick Actions ──────────────────────────────────────────────── */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
@@ -561,7 +561,7 @@ const NcoDashboard = () => {
             ))}
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 };

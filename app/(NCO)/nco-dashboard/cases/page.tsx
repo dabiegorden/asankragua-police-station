@@ -1,3 +1,6 @@
+// src/app/(dashboard)/cases/nco/page.tsx
+// NCO Case Management — Digital Case Book Edition + PDF Export
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -26,26 +29,48 @@ import {
   Download,
   Shield,
   RefreshCw,
+  BookOpen,
+  CheckCircle2,
+  History,
+  ClipboardList,
+  FileDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   api,
   CaseData,
   Pagination,
   UserRef,
   Attachment,
+  CaseBookEntry,
+  AuditEntry,
   STATUS_MAP,
   PRIORITY_BADGE,
   PRIORITY_LEFT,
   ROLE_LABELS,
+  ROLE_SHORT,
+  STAGE_COLORS,
+  ENTRY_TYPE_LABELS,
   CATEGORIES,
+  STAGE_ORDER,
   formatBytes,
-} from "@/components/cases/shared";
+  formatDateTime,
+  formatDate,
+  groupEntriesByStage,
+} from "@/constants/Share";
+import {
+  CaseBookPDFButton,
+  CaseBookExportCard,
+} from "@/components/Casebookpdfbutton";
 
-// ─── Shared sub-components ────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared micro-components
+// ─────────────────────────────────────────────────────────────────────────────
+
+const inputCls =
+  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition";
 
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_MAP[status] || STATUS_MAP.open;
@@ -79,15 +104,22 @@ function Modal({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
+        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-4xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
           <button
             onClick={onClose}
@@ -118,9 +150,6 @@ function FormField({
     </div>
   );
 }
-
-const inputCls =
-  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition";
 
 function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
   if (!attachments?.length) return null;
@@ -201,34 +230,533 @@ function FilePicker({
   );
 }
 
-// ─── Thread Chat Panel (NCO ↔ CID) ───────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Export Tab (shown inside DetailModal)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ExportTab({ caseItem }: { caseItem: CaseData }) {
+  const byStage = groupEntriesByStage(caseItem.caseBookEntries || []);
+  const counts = {
+    nco: byStage.nco?.length || 0,
+    cid: byStage.cid?.length || 0,
+    so: byStage.so?.length || 0,
+    dc: byStage.dc?.length || 0,
+  };
+  const total = counts.nco + counts.cid + counts.so + counts.dc;
+
+  const auditCount = caseItem.auditLog?.length || 0;
+  const suspectCount = caseItem.suspects?.length || 0;
+  const witnessCount = caseItem.witnesses?.length || 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Stage entry counts */}
+      <div className="bg-linear-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <BookOpen size={14} className="text-blue-600" />
+          <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+            Case Book Summary
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center mb-4">
+          {[
+            {
+              label: "NCO",
+              count: counts.nco,
+              color: "text-blue-700",
+              bg: "bg-blue-50",
+            },
+            {
+              label: "CID",
+              count: counts.cid,
+              color: "text-indigo-700",
+              bg: "bg-indigo-50",
+            },
+            {
+              label: "SO",
+              count: counts.so,
+              color: "text-purple-700",
+              bg: "bg-purple-50",
+            },
+            {
+              label: "DC",
+              count: counts.dc,
+              color: "text-amber-700",
+              bg: "bg-amber-50",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className={`${s.bg} rounded-lg p-2.5 border border-white`}
+            >
+              <p className={`text-xl font-bold ${s.color}`}>{s.count}</p>
+              <p className="text-xs text-gray-500">{s.label}</p>
+              <p className="text-xs text-gray-400">
+                {s.count === 1 ? "entry" : "entries"}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center text-xs text-gray-600">
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">{auditCount}</span> audit events
+          </div>
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">{suspectCount}</span> suspects
+          </div>
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">{witnessCount}</span> witnesses
+          </div>
+        </div>
+      </div>
+
+      {/* Export card with download button */}
+      <CaseBookExportCard
+        caseId={caseItem._id}
+        caseNumber={caseItem.caseNumber}
+        caseTitle={caseItem.title}
+        caseStatus={caseItem.status}
+        entryCount={total}
+      />
+
+      {/* What's included */}
+      <div className="text-xs text-gray-500 space-y-1.5 bg-gray-50 rounded-xl p-4 border border-gray-100">
+        <p className="font-semibold text-gray-700 mb-2 text-sm">
+          PDF document includes:
+        </p>
+        {[
+          "Ghana Police Service official header with case number",
+          "Case details — title, description, category, priority, location, dates",
+          "Reporter and all assigned officer information",
+          "Workflow progress timeline (NCO → CID → SO → DC)",
+          "All formal case book entries with role labels and timestamps",
+          "Official handoff notes between stages (referral, findings, directives)",
+          "Suspects and witnesses list",
+          "Full immutable audit trail of every action",
+          "Stage timestamps (when each stage was completed)",
+          "Signature blocks for all four officers",
+          "CONFIDENTIAL watermark and certification footer",
+          "Page headers and footers on every page",
+        ].map((item, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <CheckCircle2
+              size={12}
+              className="text-green-500 shrink-0 mt-0.5"
+            />
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          The exported PDF is an official document. Handle it in accordance with
+          your station's document security policy.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Digital Case Book View
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CaseBookStageSection({
+  stage,
+  entries,
+  caseData,
+}: {
+  stage: "nco" | "cid" | "so" | "dc";
+  entries: CaseBookEntry[];
+  caseData: CaseData;
+}) {
+  const colors = STAGE_COLORS[stage];
+  const stageLabel = ROLE_LABELS[stage];
+  const stageOfficer =
+    stage === "nco"
+      ? caseData.loggedBy
+      : stage === "cid"
+        ? caseData.assignedOfficer
+        : stage === "so"
+          ? caseData.assignedSO
+          : stage === "dc"
+            ? caseData.assignedDC
+            : undefined;
+  const isActive = caseData.currentStage === stage;
+  const isPast =
+    STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(caseData.currentStage);
+
+  return (
+    <div
+      className={`rounded-xl border-2 overflow-hidden ${isActive ? `${colors.border} ring-2 ring-offset-1 ring-blue-300` : isPast ? "border-gray-200" : "border-dashed border-gray-200 opacity-50"}`}
+    >
+      <div
+        className={`flex items-center justify-between px-5 py-3 ${isActive ? colors.bg : isPast ? "bg-gray-50" : "bg-white"}`}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${isActive ? colors.badge : isPast ? "bg-gray-400" : "bg-gray-200"}`}
+          >
+            {stage.toUpperCase()}
+          </div>
+          <div>
+            <p
+              className={`text-sm font-bold ${isActive ? colors.text : isPast ? "text-gray-700" : "text-gray-400"}`}
+            >
+              {stageLabel}
+            </p>
+            {stageOfficer && (
+              <p className="text-xs text-gray-500">{stageOfficer.fullName}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isPast && (
+            <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+              <CheckCircle2 size={12} className="text-green-500" /> Completed
+            </span>
+          )}
+          {isActive && (
+            <span
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} border ${colors.border}`}
+            >
+              Active Stage
+            </span>
+          )}
+          {!isActive && !isPast && (
+            <span className="text-xs text-gray-400">Pending</span>
+          )}
+        </div>
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        {entries.length === 0 ? (
+          <p className="text-xs text-gray-400 italic text-center py-3">
+            {isActive
+              ? "No entries yet. Add a remark to document your findings."
+              : "No entries recorded."}
+          </p>
+        ) : (
+          entries.map((entry) => (
+            <div
+              key={entry._id}
+              className={`rounded-lg border p-4 ${colors.bg} ${colors.border}`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${colors.badge}`}
+                  >
+                    {ENTRY_TYPE_LABELS[entry.entryType] || entry.entryType}
+                  </span>
+                  <span className={`text-xs font-semibold ${colors.text}`}>
+                    {entry.addedBy?.fullName || "Officer"}
+                    <span className="ml-1 font-normal text-gray-500">
+                      ({ROLE_SHORT[entry.roleSnapshot] || entry.roleSnapshot})
+                    </span>
+                  </span>
+                </div>
+                <span className="text-xs text-gray-400 shrink-0">
+                  {formatDateTime(entry.addedAt)}
+                </span>
+              </div>
+              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                {entry.content}
+              </p>
+              <AttachmentList attachments={entry.attachments} />
+              <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                <CheckCircle2 size={10} className="text-green-400" /> Entry
+                locked — cannot be edited
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DigitalCaseBook({
+  caseItem,
+  userRole,
+  onAddEntry,
+}: {
+  caseItem: CaseData;
+  userRole: string;
+  onAddEntry: () => void;
+}) {
+  const grouped = groupEntriesByStage(caseItem.caseBookEntries);
+  const canAddEntry =
+    (userRole === "nco" || userRole === "so") &&
+    caseItem.currentStage === "nco";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-linear-to-r from-blue-900 to-blue-700 rounded-xl p-5 text-white">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen size={14} className="opacity-70" />
+              <span className="text-xs font-semibold opacity-70 uppercase tracking-widest">
+                Digital Case Book
+              </span>
+            </div>
+            <p className="text-lg font-bold">{caseItem.caseNumber}</p>
+            <p className="text-sm opacity-80 mt-0.5">{caseItem.title}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <div className="text-right text-xs opacity-70 space-y-0.5">
+              <p>Reported: {formatDate(caseItem.dateReported)}</p>
+              <p>Location: {caseItem.location}</p>
+            </div>
+            {/* PDF download in case book header */}
+            <CaseBookPDFButton
+              caseId={caseItem._id}
+              caseNumber={caseItem.caseNumber}
+              size="sm"
+              className="bg-white/20 hover:bg-white/30 text-white border-white/30 hover:border-white/50"
+            />
+          </div>
+        </div>
+        {/* Workflow progress */}
+        <div className="mt-4 flex items-center gap-0">
+          {STAGE_ORDER.map((stage, idx) => {
+            const past =
+              STAGE_ORDER.indexOf(stage) <
+              STAGE_ORDER.indexOf(caseItem.currentStage);
+            const current = stage === caseItem.currentStage;
+            return (
+              <div key={stage} className="flex items-center flex-1">
+                <div
+                  className={`flex-1 h-1.5 ${idx === 0 ? "rounded-l-full" : ""} ${idx === 3 ? "rounded-r-full" : ""} ${past || current ? "bg-white" : "bg-white/20"}`}
+                />
+                <div
+                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0 ${current ? "bg-white text-blue-800 border-white" : past ? "bg-white/80 text-blue-700 border-white/80" : "bg-transparent text-white/50 border-white/30"}`}
+                >
+                  {stage.toUpperCase().charAt(0)}
+                </div>
+                {idx < 3 && (
+                  <div
+                    className={`flex-1 h-1.5 ${past ? "bg-white" : "bg-white/20"}`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-between mt-1">
+          {STAGE_ORDER.map((stage) => (
+            <span
+              key={stage}
+              className={`text-xs ${stage === caseItem.currentStage ? "text-white font-bold" : "text-white/50"}`}
+            >
+              {ROLE_SHORT[stage]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Stage sections */}
+      {(STAGE_ORDER as ("nco" | "cid" | "so" | "dc")[]).map((stage) => (
+        <CaseBookStageSection
+          key={stage}
+          stage={stage}
+          entries={grouped[stage] || []}
+          caseData={caseItem}
+        />
+      ))}
+
+      {canAddEntry && (
+        <Button
+          onClick={onAddEntry}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+        >
+          <ClipboardList size={14} /> Add Case Book Entry
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Case Book Entry Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AddCaseBookEntryModal({
+  caseItem,
+  onSuccess,
+  onClose,
+}: {
+  caseItem: CaseData;
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
+  const [content, setContent] = useState("");
+  const [entryType, setType] = useState("remark");
+  const [files, setFiles] = useState<File[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!content.trim()) return;
+    setLoading(true);
+    try {
+      if (files.length > 0) {
+        const fd = new FormData();
+        fd.append("action", "add-casebook-entry");
+        fd.append("content", content.trim());
+        fd.append("entryType", entryType);
+        fd.append("stage", "nco");
+        files.forEach((f) => fd.append("attachments", f));
+        const res = await fetch(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          credentials: "include",
+          body: fd,
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+      } else {
+        await api(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            action: "add-casebook-entry",
+            content: content.trim(),
+            entryType,
+            stage: "nco",
+          }),
+        });
+      }
+      toast.success("Case book entry added");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <BookOpen size={14} className="text-blue-600" />
+          <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+            Digital Case Book Entry
+          </span>
+        </div>
+        <p className="text-xs text-gray-600">
+          This entry is permanent and cannot be edited after submission. It will
+          appear in the case book and any exported PDF.
+        </p>
+      </div>
+      <FormField label="Entry Type">
+        <select
+          className={inputCls}
+          value={entryType}
+          onChange={(e) => setType(e.target.value)}
+        >
+          <option value="remark">General Remark</option>
+          <option value="referral">Referral Note</option>
+        </select>
+      </FormField>
+      <FormField label="Entry Content *">
+        <textarea
+          className={inputCls}
+          rows={5}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Enter your official case book remark..."
+          style={{ resize: "vertical" }}
+          required
+        />
+      </FormField>
+      <FilePicker files={files} onChange={setFiles} />
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          Once submitted, this entry cannot be modified.
+        </p>
+      </div>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={loading || !content.trim()}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          {loading ? (
+            <Loader2 size={14} className="animate-spin mr-2" />
+          ) : (
+            <ClipboardList size={14} className="mr-2" />
+          )}
+          Add Entry
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit Trail
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AuditTrail({ entries }: { entries: AuditEntry[] }) {
+  return (
+    <div className="space-y-2 max-h-72 overflow-y-auto">
+      {entries.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-6">
+          No audit records yet.
+        </p>
+      ) : (
+        [...entries].reverse().map((e) => (
+          <div key={e._id} className="flex items-start gap-3 text-xs">
+            <div className="w-6 h-6 bg-gray-100 border border-gray-200 rounded-full flex items-center justify-center text-gray-500 shrink-0 mt-0.5">
+              <History size={10} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-gray-700 font-medium">
+                {e.details || e.action.replace(/_/g, " ")}
+              </p>
+              <div className="flex items-center gap-2 mt-0.5 text-gray-400">
+                <span>{e.performedBy?.fullName || "System"}</span>
+                <span>·</span>
+                <span>{formatDateTime(e.performedAt)}</span>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Thread Panel (NCO ↔ CID)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function ThreadPanel({
   caseItem,
-  userId,
-  userRole,
   onRefresh,
 }: {
   caseItem: CaseData;
-  userId: string;
-  userRole: string;
   onRefresh: () => void;
 }) {
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-
   const msgs = (caseItem.threadMessages || [])
     .filter((m) => m.thread === "nco_cid")
     .sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
     );
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs.length]);
-
-  const toRole = userRole === "nco" || userRole === "so" ? "cid" : "nco";
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -240,7 +768,7 @@ function ThreadPanel({
         fd.append("action", "send-message");
         fd.append("thread", "nco_cid");
         fd.append("content", content.trim());
-        fd.append("toRole", toRole);
+        fd.append("toRole", "cid");
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
           method: "PUT",
@@ -255,7 +783,7 @@ function ThreadPanel({
             action: "send-message",
             thread: "nco_cid",
             content: content.trim(),
-            toRole,
+            toRole: "cid",
           }),
         });
       }
@@ -270,8 +798,6 @@ function ThreadPanel({
     }
   }
 
-  const canSend = !!caseItem.assignedOfficer;
-
   return (
     <div className="flex flex-col h-64">
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
@@ -282,36 +808,27 @@ function ThreadPanel({
           </div>
         ) : (
           msgs.map((m) => {
-            const mine =
-              m.fromRole === userRole ||
-              m.fromRole === "nco" ||
-              m.fromRole === "so"
-                ? userRole === "nco" || userRole === "so"
-                : userRole === "cid";
-            const isFromMe =
-              userRole === "nco" || userRole === "so"
-                ? m.fromRole === "nco" || m.fromRole === "so"
-                : m.fromRole === "cid";
+            const mine = m.fromRole === "nco" || m.fromRole === "so";
             return (
               <div
                 key={m._id}
-                className={`flex ${isFromMe ? "justify-end" : "justify-start"}`}
+                className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${isFromMe ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
+                  className={`max-w-[75%] rounded-xl px-4 py-2.5 ${mine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className={`text-xs font-semibold ${isFromMe ? "text-blue-200" : "text-gray-500"}`}
+                      className={`text-xs font-semibold ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
                       {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
                     </span>
                     <ChevronRight
                       size={10}
-                      className={isFromMe ? "text-blue-300" : "text-gray-400"}
+                      className={mine ? "text-blue-300" : "text-gray-400"}
                     />
                     <span
-                      className={`text-xs ${isFromMe ? "text-blue-200" : "text-gray-500"}`}
+                      className={`text-xs ${mine ? "text-blue-200" : "text-gray-500"}`}
                     >
                       {ROLE_LABELS[m.toRole || ""] || m.toRole}
                     </span>
@@ -319,9 +836,9 @@ function ThreadPanel({
                   <p className="text-sm leading-relaxed">{m.content}</p>
                   <AttachmentList attachments={m.attachments} />
                   <p
-                    className={`text-xs mt-1.5 ${isFromMe ? "text-blue-300" : "text-gray-400"}`}
+                    className={`text-xs mt-1.5 ${mine ? "text-blue-300" : "text-gray-400"}`}
                   >
-                    {new Date(m.sentAt).toLocaleString()}
+                    {formatDateTime(m.sentAt)}
                   </p>
                 </div>
               </div>
@@ -330,7 +847,7 @@ function ThreadPanel({
         )}
         <div ref={bottomRef} />
       </div>
-      {canSend ? (
+      {caseItem.assignedOfficer ? (
         <form
           onSubmit={send}
           className="border-t border-gray-100 pt-3 mt-3 space-y-2"
@@ -346,7 +863,7 @@ function ThreadPanel({
             <button
               type="submit"
               disabled={sending || !content.trim()}
-              className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
+              className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
             >
               {sending ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -365,7 +882,10 @@ function ThreadPanel({
   );
 }
 
-// ─── Case Form (Create / Edit) ────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Case Form (Create / Edit)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function CaseForm({
   initial,
   onSuccess,
@@ -547,13 +1067,13 @@ function CaseForm({
         </div>
       </div>
       {!isEdit && (
-        <FormField label="Initial Note (optional)">
+        <FormField label="Initial Case Book Remark (optional)">
           <textarea
             className={inputCls}
-            rows={2}
+            rows={3}
             value={form.notes}
             onChange={(e) => set("notes", e.target.value)}
-            placeholder="Any initial observations..."
+            placeholder="Official initial remarks — this will be added to the digital case book..."
             style={{ resize: "vertical" }}
           />
         </FormField>
@@ -576,7 +1096,10 @@ function CaseForm({
   );
 }
 
-// ─── Refer to CID Modal ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Refer to CID Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
 function ReferModal({
   caseItem,
   onSuccess,
@@ -605,13 +1128,17 @@ function ReferModal({
       toast.error("Select a CID officer");
       return;
     }
+    if (!referNote.trim()) {
+      toast.error("A case book remark is required before referring");
+      return;
+    }
     setLoading(true);
     try {
       if (files.length > 0) {
         const fd = new FormData();
         fd.append("action", "nco-refer");
         fd.append("assignedOfficer", selected);
-        if (referNote) fd.append("ncoReferralNote", referNote);
+        fd.append("ncoReferralNote", referNote);
         if (note) fd.append("note", note);
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
@@ -668,23 +1195,34 @@ function ReferModal({
           ))}
         </select>
       </FormField>
-      <FormField label="Referral Note (optional)">
+      <div className="border border-blue-200 rounded-xl p-4 bg-blue-50 space-y-3">
+        <div className="flex items-center gap-2">
+          <BookOpen size={14} className="text-blue-600" />
+          <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+            Case Book Entry Required *
+          </p>
+        </div>
+        <p className="text-xs text-gray-600">
+          Your referral remarks will be permanently recorded in the digital case
+          book.
+        </p>
         <textarea
           className={inputCls}
-          rows={3}
+          rows={4}
           value={referNote}
           onChange={(e) => setReferNote(e.target.value)}
-          placeholder="Instructions for the investigator..."
+          placeholder="State your referral reasons, initial findings, and instructions for the CID investigator..."
           style={{ resize: "vertical" }}
+          required
         />
-      </FormField>
-      <FormField label="Additional Note (optional)">
+      </div>
+      <FormField label="Additional Internal Note (optional)">
         <textarea
           className={inputCls}
           rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Any other notes..."
+          placeholder="Any other notes (not in case book)..."
           style={{ resize: "vertical" }}
         />
       </FormField>
@@ -695,7 +1233,7 @@ function ReferModal({
         </Button>
         <Button
           type="submit"
-          disabled={loading || !selected}
+          disabled={loading || !selected || !referNote.trim()}
           className="bg-blue-600 hover:bg-blue-700 text-white"
         >
           {loading ? (
@@ -710,7 +1248,10 @@ function ReferModal({
   );
 }
 
-// ─── Detail Modal ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Detail Modal — with Export tab
+// ─────────────────────────────────────────────────────────────────────────────
+
 function DetailModal({
   caseItem,
   userId,
@@ -724,12 +1265,13 @@ function DetailModal({
   onRefresh: () => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"info" | "thread" | "notes" | "parties">(
-    "info",
-  );
+  const [tab, setTab] = useState<
+    "casebook" | "info" | "thread" | "notes" | "parties" | "audit" | "export"
+  >("casebook");
   const [noteContent, setNC] = useState("");
   const [noteFiles, setNF] = useState<File[]>([]);
   const [addingNote, setAN] = useState(false);
+  const [addEntryOpen, setAddEntryOpen] = useState(false);
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -772,6 +1314,7 @@ function DetailModal({
   ).length;
 
   const TABS = [
+    { id: "casebook", label: "📖 Case Book" },
     { id: "info", label: "Info" },
     {
       id: "thread",
@@ -782,10 +1325,20 @@ function DetailModal({
       id: "parties",
       label: `Parties (${caseItem.suspects.length + caseItem.witnesses.length})`,
     },
+    { id: "audit", label: `Audit (${caseItem.auditLog?.length || 0})` },
+    { id: "export", label: "⬇ Export" },
   ] as const;
 
   return (
     <div className="space-y-4">
+      {addEntryOpen && (
+        <AddCaseBookEntryModal
+          caseItem={caseItem}
+          onSuccess={onRefresh}
+          onClose={() => setAddEntryOpen(false)}
+        />
+      )}
+
       <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
           <p className="text-xs font-mono font-bold text-blue-600 mb-1">
@@ -816,17 +1369,25 @@ function DetailModal({
         </div>
       )}
 
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${tab === t.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            onClick={() => setTab(t.id as any)}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             {t.label}
           </button>
         ))}
       </div>
+
+      {tab === "casebook" && (
+        <DigitalCaseBook
+          caseItem={caseItem}
+          userRole={userRole}
+          onAddEntry={() => setAddEntryOpen(true)}
+        />
+      )}
 
       {tab === "info" && (
         <div className="space-y-3">
@@ -840,7 +1401,7 @@ function DetailModal({
               {
                 icon: <Calendar size={12} />,
                 label: "Date Occurred",
-                val: new Date(caseItem.dateOccurred).toLocaleDateString(),
+                val: formatDate(caseItem.dateOccurred),
               },
               {
                 icon: <User size={12} />,
@@ -888,16 +1449,6 @@ function DetailModal({
               </div>
             ))}
           </div>
-          {caseItem.ncoReferralNote && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">
-                NCO Referral Note
-              </p>
-              <p className="text-sm text-gray-700">
-                {caseItem.ncoReferralNote}
-              </p>
-            </div>
-          )}
           {caseItem.attachments?.length ? (
             <div>
               <p className="text-xs font-medium text-gray-600 mb-1">
@@ -910,12 +1461,7 @@ function DetailModal({
       )}
 
       {tab === "thread" && (
-        <ThreadPanel
-          caseItem={caseItem}
-          userId={userId}
-          userRole={userRole}
-          onRefresh={onRefresh}
-        />
+        <ThreadPanel caseItem={caseItem} onRefresh={onRefresh} />
       )}
 
       {tab === "notes" && (
@@ -936,12 +1482,12 @@ function DetailModal({
                       {n.addedBy?.fullName || "Unknown"}
                       {n.roleSnapshot && (
                         <span className="ml-1 font-normal text-gray-400">
-                          ({ROLE_LABELS[n.roleSnapshot] || n.roleSnapshot})
+                          ({ROLE_LABELS[n.roleSnapshot]})
                         </span>
                       )}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {new Date(n.addedAt).toLocaleString()}
+                      {formatDateTime(n.addedAt)}
                     </span>
                   </div>
                   <p className="text-sm text-gray-700">{n.content}</p>
@@ -1050,7 +1596,18 @@ function DetailModal({
         </div>
       )}
 
-      <div className="flex justify-end border-t border-gray-100 pt-3">
+      {tab === "audit" && <AuditTrail entries={caseItem.auditLog || []} />}
+
+      {/* ── NEW: Export Tab ── */}
+      {tab === "export" && <ExportTab caseItem={caseItem} />}
+
+      {/* Footer — always shows PDF button */}
+      <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+        <CaseBookPDFButton
+          caseId={caseItem._id}
+          caseNumber={caseItem.caseNumber}
+          size="sm"
+        />
         <Button variant="outline" onClick={onClose}>
           Close
         </Button>
@@ -1059,7 +1616,10 @@ function DetailModal({
   );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Stat Card
+// ─────────────────────────────────────────────────────────────────────────────
+
 function StatCard({
   label,
   value,
@@ -1099,7 +1659,10 @@ function StatCard({
   );
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function NCOCasesPage() {
   const userId = "CURRENT_USER_ID"; // Replace with auth hook
   const userRole = "nco";
@@ -1188,6 +1751,9 @@ export default function NCOCasesPage() {
             </span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Case Management</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Digital Case Book System — all entries are permanently recorded
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -1326,6 +1892,7 @@ export default function NCOCasesPage() {
                     m.fromRole === "cid" &&
                     !m.readBy?.includes(userId),
                 ).length;
+                const bookEntries = (c.caseBookEntries || []).length;
 
                 return (
                   <div
@@ -1342,6 +1909,12 @@ export default function NCOCasesPage() {
                         </span>
                         <PriorityBadge priority={c.priority} />
                         <StatusBadge status={c.status} />
+                        {bookEntries > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <BookOpen size={9} />
+                            {bookEntries} entries
+                          </span>
+                        )}
                         {unread > 0 && (
                           <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-600 text-white">
                             <MessageSquare size={9} />
@@ -1371,7 +1944,7 @@ export default function NCOCasesPage() {
                     </div>
                     <div className="text-right shrink-0 hidden sm:block">
                       <p className="text-xs text-gray-400">
-                        {new Date(c.createdAt).toLocaleDateString()}
+                        {formatDate(c.createdAt)}
                       </p>
                       <p className="text-xs text-gray-300 mt-0.5">
                         {c.notes.length} notes
@@ -1401,6 +1974,13 @@ export default function NCOCasesPage() {
                           <Send size={12} className="mr-1" /> Refer
                         </Button>
                       )}
+                      {/* ── PDF download button per row ── */}
+                      <CaseBookPDFButton
+                        caseId={c._id}
+                        caseNumber={c.caseNumber}
+                        size="sm"
+                        iconOnly
+                      />
                       <button
                         onClick={() => setDeleteCase(c)}
                         className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -1441,7 +2021,6 @@ export default function NCOCasesPage() {
           />
         </Modal>
       )}
-
       {editCase && (
         <Modal
           title={`Edit — ${editCase.caseNumber}`}
@@ -1457,7 +2036,6 @@ export default function NCOCasesPage() {
           />
         </Modal>
       )}
-
       {referCase && (
         <Modal
           title={`Refer to CID — ${referCase.caseNumber}`}
@@ -1470,7 +2048,6 @@ export default function NCOCasesPage() {
           />
         </Modal>
       )}
-
       {detailCase && (
         <Modal
           title={`Case — ${detailCase.caseNumber}`}
@@ -1486,7 +2063,6 @@ export default function NCOCasesPage() {
           />
         </Modal>
       )}
-
       {deleteCase && (
         <Modal title="Confirm Delete" onClose={() => setDeleteCase(null)}>
           <div className="space-y-4">

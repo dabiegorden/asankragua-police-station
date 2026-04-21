@@ -26,6 +26,9 @@ import {
   Shield,
   BarChart3,
   TrendingDown,
+  BookOpen,
+  History,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,16 +39,33 @@ import {
   Pagination,
   UserRef,
   Attachment,
+  CaseBookEntry,
+  AuditEntry,
   STATUS_MAP,
   PRIORITY_BADGE,
   PRIORITY_LEFT,
   ROLE_LABELS,
+  ROLE_SHORT,
+  STAGE_COLORS,
+  ENTRY_TYPE_LABELS,
   CATEGORIES,
+  STAGE_ORDER,
   formatBytes,
-} from "@/components/cases/shared";
+  formatDateTime,
+  formatDate,
+  groupEntriesByStage,
+} from "@/constants/Share";
+import {
+  CaseBookPDFButton,
+  CaseBookExportCard,
+} from "@/components/Casebookpdfbutton";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared micro-components
+// ─────────────────────────────────────────────────────────────────────────────
 
 const inputCls =
-  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition";
+  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition";
 
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_MAP[status] || STATUS_MAP.open;
@@ -79,15 +99,22 @@ function Modal({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
+        className={`bg-white rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col w-full ${wide ? "sm:max-w-4xl" : "sm:max-w-xl"} max-h-[92vh] border border-gray-200`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
           <button
             onClick={onClose}
@@ -129,7 +156,7 @@ function AttachmentList({ attachments }: { attachments?: Attachment[] }) {
           href={a.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1"
         >
           <Download size={11} />
           {a.originalName || `file-${i + 1}`}
@@ -157,12 +184,9 @@ function FilePicker({
       </label>
       <div
         onClick={() => ref.current?.click()}
-        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors group"
+        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 transition-colors"
       >
-        <Paperclip
-          size={14}
-          className="text-gray-400 group-hover:text-blue-500"
-        />
+        <Paperclip size={14} className="text-gray-400" />
         <span className="text-xs text-gray-500">
           {files.length > 0
             ? `${files.length} file(s) selected`
@@ -186,7 +210,7 @@ function FilePicker({
               <span className="truncate">{f.name}</span>
               <button
                 onClick={() => onChange(files.filter((_, j) => j !== i))}
-                className="text-gray-400 hover:text-red-500 ml-2 shrink-0"
+                className="text-gray-400 hover:text-red-500 ml-2"
               >
                 <X size={12} />
               </button>
@@ -198,8 +222,501 @@ function FilePicker({
   );
 }
 
-// ─── DC broadcast / thread message panel ─────────────────────────────────────
-// DC can message any participant — NCO, CID, or SO
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit Trail
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AuditTrail({ entries }: { entries: AuditEntry[] }) {
+  return (
+    <div className="space-y-2 max-h-72 overflow-y-auto">
+      {entries.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-6">
+          No audit records yet.
+        </p>
+      ) : (
+        [...entries].reverse().map((e) => (
+          <div key={e._id} className="flex items-start gap-3 text-xs">
+            <div className="w-6 h-6 bg-gray-100 border border-gray-200 rounded-full flex items-center justify-center text-gray-500 shrink-0 mt-0.5">
+              <History size={10} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-gray-700 font-medium">
+                {e.details || e.action.replace(/_/g, " ")}
+              </p>
+              <div className="flex items-center gap-2 mt-0.5 text-gray-400">
+                <span>{e.performedBy?.fullName || "System"}</span>
+                <span>·</span>
+                <span>{formatDateTime(e.performedAt)}</span>
+                {e.fromStage && e.toStage && e.fromStage !== e.toStage && (
+                  <>
+                    <span>·</span>
+                    <span>
+                      {e.fromStage.toUpperCase()} → {e.toStage.toUpperCase()}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Digital Case Book — Stage Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CaseBookStageSection({
+  stage,
+  entries,
+  caseData,
+}: {
+  stage: "nco" | "cid" | "so" | "dc";
+  entries: CaseBookEntry[];
+  caseData: CaseData;
+}) {
+  const colors = STAGE_COLORS[stage];
+  const stageLabel = ROLE_LABELS[stage];
+  const stageOfficer =
+    stage === "nco"
+      ? caseData.loggedBy
+      : stage === "cid"
+        ? caseData.assignedOfficer
+        : stage === "so"
+          ? caseData.assignedSO
+          : caseData.assignedDC;
+  const isActive = caseData.currentStage === stage;
+  const isPast =
+    STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(caseData.currentStage);
+
+  return (
+    <div
+      className={`rounded-xl border-2 overflow-hidden ${isActive ? `${colors.border} ring-2 ring-offset-1 ring-amber-300` : isPast ? "border-gray-200" : "border-dashed border-gray-200 opacity-50"}`}
+    >
+      <div
+        className={`flex items-center justify-between px-5 py-3 ${isActive ? colors.bg : isPast ? "bg-gray-50" : "bg-white"}`}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${isActive ? colors.badge : isPast ? "bg-gray-400" : "bg-gray-200"}`}
+          >
+            {stage.toUpperCase().charAt(0)}
+          </div>
+          <div>
+            <p
+              className={`text-sm font-bold ${isActive ? colors.text : isPast ? "text-gray-700" : "text-gray-400"}`}
+            >
+              {stageLabel}
+            </p>
+            {stageOfficer && (
+              <p className="text-xs text-gray-500">{stageOfficer.fullName}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isPast && (
+            <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+              <CheckCircle2 size={12} className="text-green-500" /> Completed
+            </span>
+          )}
+          {isActive && (
+            <span
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} border ${colors.border}`}
+            >
+              Active Stage
+            </span>
+          )}
+          {!isActive && !isPast && (
+            <span className="text-xs text-gray-400">Pending</span>
+          )}
+        </div>
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        {entries.length === 0 ? (
+          <p className="text-xs text-gray-400 italic text-center py-3">
+            {isActive
+              ? "No entries yet. Add a decision entry before closing."
+              : "No entries recorded."}
+          </p>
+        ) : (
+          entries.map((entry) => (
+            <div
+              key={entry._id}
+              className={`rounded-lg border p-4 ${colors.bg} ${colors.border}`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${colors.badge}`}
+                  >
+                    {ENTRY_TYPE_LABELS[entry.entryType] || entry.entryType}
+                  </span>
+                  <span className={`text-xs font-semibold ${colors.text}`}>
+                    {entry.addedBy?.fullName || "Officer"}
+                    <span className="ml-1 font-normal text-gray-500">
+                      ({ROLE_SHORT[entry.roleSnapshot] || entry.roleSnapshot})
+                    </span>
+                  </span>
+                </div>
+                <span className="text-xs text-gray-400 shrink-0">
+                  {formatDateTime(entry.addedAt)}
+                </span>
+              </div>
+              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                {entry.content}
+              </p>
+              <AttachmentList attachments={entry.attachments} />
+              <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                <CheckCircle2 size={10} className="text-green-400" /> Entry
+                locked — cannot be edited
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Digital Case Book (DC view)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DigitalCaseBook({
+  caseItem,
+  onAddEntry,
+}: {
+  caseItem: CaseData;
+  onAddEntry: () => void;
+}) {
+  const grouped = groupEntriesByStage(caseItem.caseBookEntries);
+  const isDCStage = caseItem.currentStage === "dc";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-linear-to-r from-amber-900 to-amber-700 rounded-xl p-5 text-white">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen size={14} className="opacity-70" />
+              <span className="text-xs font-semibold opacity-70 uppercase tracking-widest">
+                Digital Case Book
+              </span>
+            </div>
+            <p className="text-lg font-bold">{caseItem.caseNumber}</p>
+            <p className="text-sm opacity-80 mt-0.5">{caseItem.title}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <div className="text-right text-xs opacity-70 space-y-0.5">
+              <p>Reported: {formatDate(caseItem.dateReported)}</p>
+              <p>Location: {caseItem.location}</p>
+            </div>
+            <CaseBookPDFButton
+              caseId={caseItem._id}
+              caseNumber={caseItem.caseNumber}
+              size="sm"
+              className="bg-white/20 hover:bg-white/30 text-white border-white/30 hover:border-white/50"
+            />
+          </div>
+        </div>
+        {/* Progress */}
+        <div className="mt-4 flex items-center gap-0">
+          {STAGE_ORDER.map((stage, idx) => {
+            const past =
+              STAGE_ORDER.indexOf(stage) <
+              STAGE_ORDER.indexOf(caseItem.currentStage);
+            const current = stage === caseItem.currentStage;
+            return (
+              <div key={stage} className="flex items-center flex-1">
+                <div
+                  className={`flex-1 h-1.5 ${idx === 0 ? "rounded-l-full" : ""} ${idx === 3 ? "rounded-r-full" : ""} ${past || current ? "bg-white" : "bg-white/20"}`}
+                />
+                <div
+                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0 ${current ? "bg-white text-amber-800 border-white" : past ? "bg-white/80 text-amber-700 border-white/80" : "bg-transparent text-white/50 border-white/30"}`}
+                >
+                  {stage.toUpperCase().charAt(0)}
+                </div>
+                {idx < 3 && (
+                  <div
+                    className={`flex-1 h-1.5 ${past ? "bg-white" : "bg-white/20"}`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-between mt-1">
+          {STAGE_ORDER.map((stage) => (
+            <span
+              key={stage}
+              className={`text-xs ${stage === caseItem.currentStage ? "text-white font-bold" : "text-white/50"}`}
+            >
+              {ROLE_SHORT[stage]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* SO Review Note */}
+      {caseItem.soReviewNote && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+          <p className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">
+            Station Officer Review
+          </p>
+          <p className="text-sm text-gray-700">{caseItem.soReviewNote}</p>
+        </div>
+      )}
+
+      {(STAGE_ORDER as ("nco" | "cid" | "so" | "dc")[]).map((stage) => (
+        <CaseBookStageSection
+          key={stage}
+          stage={stage}
+          entries={grouped[stage] || []}
+          caseData={caseItem}
+        />
+      ))}
+
+      {isDCStage && (
+        <Button
+          onClick={onAddEntry}
+          className="w-full bg-amber-600 hover:bg-amber-700 text-white flex items-center gap-2"
+        >
+          <ClipboardList size={14} /> Add Decision Entry to Case Book
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Case Book Entry Modal (DC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AddCaseBookEntryModal({
+  caseItem,
+  onSuccess,
+  onClose,
+}: {
+  caseItem: CaseData;
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
+  const [content, setContent] = useState("");
+  const [entryType, setType] = useState("decision");
+  const [files, setFiles] = useState<File[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!content.trim()) return;
+    setLoading(true);
+    try {
+      if (files.length > 0) {
+        const fd = new FormData();
+        fd.append("action", "add-casebook-entry");
+        fd.append("content", content.trim());
+        fd.append("entryType", entryType);
+        fd.append("stage", "dc");
+        files.forEach((f) => fd.append("attachments", f));
+        const res = await fetch(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          credentials: "include",
+          body: fd,
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+      } else {
+        await api(`/api/cases/${caseItem._id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            action: "add-casebook-entry",
+            content: content.trim(),
+            entryType,
+            stage: "dc",
+          }),
+        });
+      }
+      toast.success("Decision entry added to case book");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <BookOpen size={14} className="text-amber-600" />
+          <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+            DC Case Book Entry
+          </span>
+        </div>
+        <p className="text-xs text-gray-600">
+          Document your decision. This entry is permanent and will appear in the
+          official case book and any exported PDF.
+        </p>
+      </div>
+      <FormField label="Entry Type">
+        <select
+          className={inputCls}
+          value={entryType}
+          onChange={(e) => setType(e.target.value)}
+        >
+          <option value="decision">Final Decision</option>
+          <option value="review">Review Notes</option>
+          <option value="remark">General Remark</option>
+        </select>
+      </FormField>
+      <FormField label="Entry Content *">
+        <textarea
+          className={inputCls}
+          rows={6}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Document your decision, observations, verdict, or directives. This is the official DC record."
+          style={{ resize: "vertical" }}
+          required
+        />
+      </FormField>
+      <FilePicker files={files} onChange={setFiles} />
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          Once submitted, this entry cannot be modified.
+        </p>
+      </div>
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={loading || !content.trim()}
+          className="bg-amber-600 hover:bg-amber-700 text-white"
+        >
+          {loading ? (
+            <Loader2 size={14} className="animate-spin mr-2" />
+          ) : (
+            <ClipboardList size={14} className="mr-2" />
+          )}
+          Add Entry
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Export Tab (DC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ExportTab({ caseItem }: { caseItem: CaseData }) {
+  const byStage = groupEntriesByStage(caseItem.caseBookEntries || []);
+  const counts = {
+    nco: byStage.nco?.length || 0,
+    cid: byStage.cid?.length || 0,
+    so: byStage.so?.length || 0,
+    dc: byStage.dc?.length || 0,
+  };
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-linear-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <BookOpen size={14} className="text-amber-600" />
+          <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+            Case Book Summary
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center mb-4">
+          {[
+            {
+              label: "NCO",
+              count: counts.nco,
+              color: "text-blue-700",
+              bg: "bg-blue-50",
+            },
+            {
+              label: "CID",
+              count: counts.cid,
+              color: "text-indigo-700",
+              bg: "bg-indigo-50",
+            },
+            {
+              label: "SO",
+              count: counts.so,
+              color: "text-purple-700",
+              bg: "bg-purple-50",
+            },
+            {
+              label: "DC",
+              count: counts.dc,
+              color: "text-amber-700",
+              bg: "bg-amber-50",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className={`${s.bg} rounded-lg p-2.5 border border-white`}
+            >
+              <p className={`text-xl font-bold ${s.color}`}>{s.count}</p>
+              <p className="text-xs text-gray-500">{s.label}</p>
+              <p className="text-xs text-gray-400">
+                {s.count === 1 ? "entry" : "entries"}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center text-xs text-gray-600">
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">
+              {caseItem.auditLog?.length || 0}
+            </span>{" "}
+            audit events
+          </div>
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">
+              {caseItem.suspects?.length || 0}
+            </span>{" "}
+            suspects
+          </div>
+          <div className="bg-white rounded-lg p-2 border border-gray-100">
+            <span className="font-semibold">
+              {caseItem.witnesses?.length || 0}
+            </span>{" "}
+            witnesses
+          </div>
+        </div>
+      </div>
+      <CaseBookExportCard
+        caseId={caseItem._id}
+        caseNumber={caseItem.caseNumber}
+        caseTitle={caseItem.title}
+        caseStatus={caseItem.status}
+        entryCount={total}
+      />
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          The exported PDF is an official document. Handle it in accordance with
+          your station's document security policy.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DC Communications Thread
+// ─────────────────────────────────────────────────────────────────────────────
+
 function DCThreadPanel({
   caseItem,
   userId,
@@ -242,12 +759,6 @@ function DCThreadPanel({
       label: `SO — ${caseItem.assignedSO.fullName}`,
     });
 
-  useEffect(() => {
-    if (recipients.length > 0 && !recipients.find((r) => r.role === toRole)) {
-      setToRole(recipients[0].role);
-    }
-  }, [recipients.length]);
-
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!content.trim() || !toRole) return;
@@ -289,14 +800,13 @@ function DCThreadPanel({
   }
 
   return (
-    <div className="flex flex-col min-h-0" style={{ height: "100%" }}>
-      {/* Message list — scrolls independently, never bleeds out */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pr-1 min-h-40 max-h-80">
+    <div className="flex flex-col" style={{ minHeight: "260px" }}>
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-40 max-h-64">
         {msgs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-8 text-gray-400">
             <MessageSquare size={28} className="mb-2 opacity-40" />
             <p className="text-xs text-center">
-              No DC messages sent yet. Use this to communicate with the team.
+              No DC messages yet. Use this to communicate with the team.
             </p>
           </div>
         ) : (
@@ -308,20 +818,20 @@ function DCThreadPanel({
                 className={`flex ${mine ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[78%] rounded-xl px-4 py-2.5 ${mine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}
+                  className={`max-w-[78%] rounded-xl px-4 py-2.5 ${mine ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-800"}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className={`text-xs font-semibold ${mine ? "text-blue-200" : "text-gray-500"}`}
+                      className={`text-xs font-semibold ${mine ? "text-amber-200" : "text-gray-500"}`}
                     >
                       {m.fromUser?.fullName || ROLE_LABELS[m.fromRole]}
                     </span>
                     <ChevronRight
                       size={10}
-                      className={mine ? "text-blue-300" : "text-gray-400"}
+                      className={mine ? "text-amber-300" : "text-gray-400"}
                     />
                     <span
-                      className={`text-xs ${mine ? "text-blue-200" : "text-gray-500"}`}
+                      className={`text-xs ${mine ? "text-amber-200" : "text-gray-500"}`}
                     >
                       {ROLE_LABELS[m.toRole || ""] || m.toRole}
                     </span>
@@ -329,9 +839,9 @@ function DCThreadPanel({
                   <p className="text-sm leading-relaxed">{m.content}</p>
                   <AttachmentList attachments={m.attachments} />
                   <p
-                    className={`text-xs mt-1.5 ${mine ? "text-blue-300" : "text-gray-400"}`}
+                    className={`text-xs mt-1.5 ${mine ? "text-amber-300" : "text-gray-400"}`}
                   >
-                    {new Date(m.sentAt).toLocaleString()}
+                    {formatDateTime(m.sentAt)}
                   </p>
                 </div>
               </div>
@@ -340,12 +850,9 @@ function DCThreadPanel({
         )}
         <div ref={bottomRef} />
       </div>
-
-      {/* Compose area — fixed at bottom, never squished */}
       {recipients.length > 0 ? (
         <div className="border-t border-gray-100 pt-3 mt-3 space-y-2 shrink-0">
           <FilePicker files={files} onChange={setFiles} />
-          {/* Recipient selector — full width on its own row */}
           <select
             className={`${inputCls} w-full`}
             value={toRole}
@@ -357,7 +864,6 @@ function DCThreadPanel({
               </option>
             ))}
           </select>
-          {/* Message input + send on its own row */}
           <div className="flex gap-2">
             <input
               className={`${inputCls} flex-1`}
@@ -374,7 +880,7 @@ function DCThreadPanel({
             <button
               onClick={send}
               disabled={sending || !content.trim()}
-              className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
+              className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
             >
               {sending ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -393,33 +899,42 @@ function DCThreadPanel({
   );
 }
 
-// ─── DC Close / Suspend modals ────────────────────────────────────────────────
-function DCActionModal({
+// ─────────────────────────────────────────────────────────────────────────────
+// DC Decision Modal (Close / Suspend / Return to Investigation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DCDecideModal({
   caseItem,
-  action,
   onSuccess,
   onClose,
 }: {
   caseItem: CaseData;
-  action: "dc-close" | "dc-suspend";
   onSuccess: () => void;
   onClose: () => void;
 }) {
-  const isClose = action === "dc-close";
+  const [outcome, setOutcome] = useState<
+    "closed" | "suspended" | "investigating"
+  >("closed");
   const [dcNote, setDcNote] = useState("");
-  const [note, setNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const hasDCEntries = (caseItem.caseBookEntries || []).some(
+    (e) => e.stage === "dc",
+  );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!dcNote.trim()) {
+      toast.error("Decision note is required");
+      return;
+    }
     setLoading(true);
     try {
       if (files.length > 0) {
         const fd = new FormData();
-        fd.append("action", action);
-        if (dcNote) fd.append("dcNote", dcNote);
-        if (note) fd.append("note", note);
+        fd.append("action", "dc-decide");
+        fd.append("outcome", outcome);
+        fd.append("dcNote", dcNote.trim());
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
           method: "PUT",
@@ -430,10 +945,20 @@ function DCActionModal({
       } else {
         await api(`/api/cases/${caseItem._id}`, {
           method: "PUT",
-          body: JSON.stringify({ action, dcNote, note }),
+          body: JSON.stringify({
+            action: "dc-decide",
+            outcome,
+            dcNote: dcNote.trim(),
+          }),
         });
       }
-      toast.success(isClose ? "Case closed successfully" : "Case suspended");
+      toast.success(
+        outcome === "closed"
+          ? "Case closed"
+          : outcome === "suspended"
+            ? "Case suspended"
+            : "Case returned to investigation",
+      );
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -443,50 +968,65 @@ function DCActionModal({
     }
   }
 
+  const outcomeConfig = {
+    closed: {
+      label: "Close Case",
+      color: "bg-emerald-600 hover:bg-emerald-700",
+      icon: <CheckCircle2 size={14} className="mr-2" />,
+      bg: "bg-emerald-50 border-emerald-200",
+      text: "text-emerald-700",
+    },
+    suspended: {
+      label: "Suspend Case",
+      color: "bg-orange-500 hover:bg-orange-600",
+      icon: <TrendingDown size={14} className="mr-2" />,
+      bg: "bg-orange-50 border-orange-200",
+      text: "text-orange-700",
+    },
+    investigating: {
+      label: "Return to Investigation",
+      color: "bg-blue-600 hover:bg-blue-700",
+      icon: <XCircle size={14} className="mr-2" />,
+      bg: "bg-blue-50 border-blue-200",
+      text: "text-blue-700",
+    },
+  };
+
+  const cfg = outcomeConfig[outcome];
+
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <div
-        className={`${isClose ? "bg-emerald-50 border-emerald-200" : "bg-orange-50 border-orange-200"} border rounded-xl p-4`}
-      >
-        <div className="flex items-start gap-3">
-          {isClose ? (
-            <CheckCircle2
-              size={16}
-              className="text-emerald-600 shrink-0 mt-0.5"
-            />
-          ) : (
-            <TrendingDown
-              size={16}
-              className="text-orange-600 shrink-0 mt-0.5"
-            />
-          )}
-          <div>
-            <p
-              className={`font-bold text-sm ${isClose ? "text-emerald-700" : "text-orange-700"}`}
-            >
-              {isClose ? "Close This Case" : "Suspend This Case"}
-            </p>
-            <p className="text-xs text-gray-600 mt-0.5">
-              {caseItem.caseNumber} — {caseItem.title}
-            </p>
-          </div>
-        </div>
+    <form onSubmit={submit} className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <p className="text-xs font-mono font-bold text-amber-700 mb-1">
+          {caseItem.caseNumber}
+        </p>
+        <p className="font-semibold text-gray-900 text-sm">{caseItem.title}</p>
       </div>
 
-      {/* Full case summary for DC review */}
-      <div className="space-y-2">
+      {!hasDCEntries && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">
+            You have not added any case book entries yet. Consider adding a
+            decision entry in the Case Book tab before deciding.
+          </p>
+        </div>
+      )}
+
+      {/* Paper trail summary */}
+      <div className="space-y-2 max-h-40 overflow-y-auto">
         {caseItem.ncoReferralNote && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">
+            <p className="text-xs font-bold text-blue-700 uppercase mb-1">
               NCO Referral Note
             </p>
             <p className="text-xs text-gray-700">{caseItem.ncoReferralNote}</p>
           </div>
         )}
         {caseItem.cidSubmissionNote && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-1">
-              CID Submission Note
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+            <p className="text-xs font-bold text-indigo-700 uppercase mb-1">
+              CID Findings
             </p>
             <p className="text-xs text-gray-700">
               {caseItem.cidSubmissionNote}
@@ -495,7 +1035,7 @@ function DCActionModal({
         )}
         {caseItem.soReviewNote && (
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-            <p className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">
+            <p className="text-xs font-bold text-purple-700 uppercase mb-1">
               SO Review Note
             </p>
             <p className="text-xs text-gray-700">{caseItem.soReviewNote}</p>
@@ -503,60 +1043,84 @@ function DCActionModal({
         )}
       </div>
 
-      <FormField
-        label={`${isClose ? "Closure" : "Suspension"} Note (optional)`}
-      >
+      <FormField label="Decision Outcome *">
+        <div className="grid grid-cols-3 gap-2">
+          {(["closed", "suspended", "investigating"] as const).map((o) => (
+            <button
+              key={o}
+              type="button"
+              onClick={() => setOutcome(o)}
+              className={`rounded-lg border-2 p-3 text-center transition-all ${outcome === o ? outcomeConfig[o].bg + " border-current " + outcomeConfig[o].text + " font-bold" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+            >
+              <p className="text-xs font-semibold capitalize">
+                {o === "investigating"
+                  ? "Return"
+                  : o.charAt(0).toUpperCase() + o.slice(1)}
+              </p>
+            </button>
+          ))}
+        </div>
+      </FormField>
+
+      <div className={`border rounded-xl p-4 space-y-3 ${cfg.bg}`}>
+        <div className="flex items-center gap-2">
+          <BookOpen size={14} className={cfg.text} />
+          <p
+            className={`text-xs font-bold uppercase tracking-wider ${cfg.text}`}
+          >
+            Decision Note (Case Book) *
+          </p>
+        </div>
+        <p className="text-xs text-gray-600">
+          Your decision note will be permanently recorded in the case book as
+          'Final Decision'.
+        </p>
         <textarea
           className={inputCls}
-          rows={4}
+          rows={5}
           value={dcNote}
           onChange={(e) => setDcNote(e.target.value)}
-          placeholder={
-            isClose
-              ? "Final decision notes, outcome, verdict..."
-              : "Reason for suspension, conditions for re-opening..."
-          }
+          placeholder={`Summarise your decision: ${outcome === "closed" ? "final verdict, outcome, and any recommendations..." : outcome === "suspended" ? "reason for suspension, conditions for re-opening..." : "reason for returning to investigation, additional directives..."}`}
           style={{ resize: "vertical" }}
+          required
         />
-      </FormField>
-
-      <FormField label="Internal Note (optional)">
-        <textarea
-          className={inputCls}
-          rows={2}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Additional internal notes..."
-          style={{ resize: "vertical" }}
-        />
-      </FormField>
+      </div>
 
       <FilePicker files={files} onChange={setFiles} />
+
+      <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+        <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-red-700">
+          This is a final decision. The case status will change immediately upon
+          submission.
+        </p>
+      </div>
 
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <button
+        <Button
           type="submit"
-          disabled={loading}
-          className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 ${isClose ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-orange-500 hover:bg-orange-600 text-white"}`}
+          disabled={loading || !dcNote.trim()}
+          className={`${cfg.color} text-white`}
         >
           {loading ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : isClose ? (
-            <CheckCircle2 size={14} />
+            <Loader2 size={14} className="animate-spin mr-2" />
           ) : (
-            <TrendingDown size={14} />
+            cfg.icon
           )}
-          {isClose ? "Close Case" : "Suspend Case"}
-        </button>
+          {cfg.label}
+        </Button>
       </div>
     </form>
   );
 }
 
-// ─── Detail modal ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Detail Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
 function DetailModal({
   caseItem,
   userId,
@@ -569,11 +1133,19 @@ function DetailModal({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<
-    "info" | "dc_msgs" | "all_msgs" | "notes" | "parties"
-  >("info");
+    | "casebook"
+    | "info"
+    | "comms"
+    | "all_threads"
+    | "notes"
+    | "parties"
+    | "audit"
+    | "export"
+  >("casebook");
   const [noteContent, setNC] = useState("");
   const [noteFiles, setNF] = useState<File[]>([]);
   const [addingNote, setAN] = useState(false);
+  const [addEntryOpen, setOpen] = useState(false);
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -608,23 +1180,14 @@ function DetailModal({
     }
   }
 
-  // DC sees all thread messages
   const allThreadMsgs = (caseItem.threadMessages || []).sort(
     (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
   );
 
-  const tabs = [
-    { id: "info", label: "Info" },
-    { id: "dc_msgs", label: "DC Comms" },
-    { id: "all_msgs", label: `All Threads (${allThreadMsgs.length})` },
-    { id: "notes", label: `Notes (${caseItem.notes.length})` },
-    { id: "parties", label: "Parties" },
-  ] as const;
-
   const THREAD_BADGE: Record<string, string> = {
     nco_cid: "text-blue-600 bg-blue-50 border-blue-200",
-    cid_so: "text-yellow-600 bg-yellow-50 border-yellow-200",
-    dc: "text-purple-600 bg-purple-50 border-purple-200",
+    cid_so: "text-indigo-600 bg-indigo-50 border-indigo-200",
+    dc: "text-amber-600 bg-amber-50 border-amber-200",
   };
   const THREAD_LABEL: Record<string, string> = {
     nco_cid: "NCO ↔ CID",
@@ -632,17 +1195,36 @@ function DetailModal({
     dc: "DC Comms",
   };
 
+  const TABS = [
+    { id: "casebook", label: "📖 Case Book" },
+    { id: "info", label: "Info" },
+    { id: "comms", label: "DC Comms" },
+    { id: "all_threads", label: `All Threads (${allThreadMsgs.length})` },
+    { id: "notes", label: `Notes (${caseItem.notes.length})` },
+    { id: "parties", label: "Parties" },
+    { id: "audit", label: `Audit (${caseItem.auditLog?.length || 0})` },
+    { id: "export", label: "⬇ Export" },
+  ] as const;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start gap-2">
+      {addEntryOpen && (
+        <AddCaseBookEntryModal
+          caseItem={caseItem}
+          onSuccess={onRefresh}
+          onClose={() => setOpen(false)}
+        />
+      )}
+
+      <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
-          <p className="text-xs font-mono text-blue-600 mb-1 font-bold">
+          <p className="text-xs font-mono font-bold text-amber-600 mb-1">
             {caseItem.caseNumber}
           </p>
           <h3 className="text-base font-bold text-gray-900">
             {caseItem.title}
           </h3>
-          <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">
+          <p className="text-xs text-gray-500 mt-1 line-clamp-2">
             {caseItem.description}
           </p>
         </div>
@@ -653,38 +1235,42 @@ function DetailModal({
       </div>
 
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
-        {tabs.map((t) => (
+        {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            onClick={() => setTab(t.id as any)}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? "border-amber-600 text-amber-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             {t.label}
           </button>
         ))}
       </div>
 
+      {tab === "casebook" && (
+        <DigitalCaseBook caseItem={caseItem} onAddEntry={() => setOpen(true)} />
+      )}
+
       {tab === "info" && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             {[
               {
-                icon: <MapPin size={11} />,
+                icon: <MapPin size={12} />,
                 label: "Location",
                 val: caseItem.location,
               },
               {
-                icon: <Calendar size={11} />,
+                icon: <Calendar size={12} />,
                 label: "Date Occurred",
-                val: new Date(caseItem.dateOccurred).toLocaleDateString(),
+                val: formatDate(caseItem.dateOccurred),
               },
               {
-                icon: <User size={11} />,
+                icon: <User size={12} />,
                 label: "Reported By",
                 val: caseItem.reportedBy.name,
               },
               {
-                icon: <FileText size={11} />,
+                icon: <FileText size={12} />,
                 label: "Category",
                 val: caseItem.category,
                 cap: true,
@@ -692,7 +1278,7 @@ function DetailModal({
               ...(caseItem.loggedBy
                 ? [
                     {
-                      icon: <User size={11} />,
+                      icon: <User size={12} />,
                       label: "Logged By (NCO)",
                       val: caseItem.loggedBy.fullName,
                     },
@@ -701,8 +1287,8 @@ function DetailModal({
               ...(caseItem.assignedOfficer
                 ? [
                     {
-                      icon: <Users size={11} />,
-                      label: "CID Officer",
+                      icon: <Users size={12} />,
+                      label: "CID Investigator",
                       val: caseItem.assignedOfficer.fullName,
                     },
                   ]
@@ -710,7 +1296,7 @@ function DetailModal({
               ...(caseItem.assignedSO
                 ? [
                     {
-                      icon: <Shield size={11} />,
+                      icon: <Shield size={12} />,
                       label: "Station Officer",
                       val: caseItem.assignedSO.fullName,
                     },
@@ -733,11 +1319,10 @@ function DetailModal({
               </div>
             ))}
           </div>
-          {/* Full paper trail */}
           <div className="space-y-2">
             {caseItem.ncoReferralNote && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">
+                <p className="text-xs font-bold text-blue-700 uppercase mb-1">
                   NCO Referral Note
                 </p>
                 <p className="text-sm text-gray-700">
@@ -746,35 +1331,27 @@ function DetailModal({
               </div>
             )}
             {caseItem.cidSubmissionNote && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-1">
-                  CID Submission Note
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-indigo-700 uppercase mb-1">
+                  CID Submission Findings
                 </p>
                 <p className="text-sm text-gray-700">
                   {caseItem.cidSubmissionNote}
                 </p>
               </div>
             )}
-            {caseItem.soDirective && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                <p className="text-xs font-bold text-orange-700 uppercase tracking-wider mb-1">
-                  SO Directive (Returned to CID)
-                </p>
-                <p className="text-sm text-gray-700">{caseItem.soDirective}</p>
-              </div>
-            )}
             {caseItem.soReviewNote && (
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <p className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">
+                <p className="text-xs font-bold text-purple-700 uppercase mb-1">
                   SO Review Note
                 </p>
                 <p className="text-sm text-gray-700">{caseItem.soReviewNote}</p>
               </div>
             )}
             {caseItem.dcNote && (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-                <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">
-                  DC Final Note
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-amber-700 uppercase mb-1">
+                  DC Decision
                 </p>
                 <p className="text-sm text-gray-700">{caseItem.dcNote}</p>
               </div>
@@ -783,7 +1360,7 @@ function DetailModal({
         </div>
       )}
 
-      {tab === "dc_msgs" && (
+      {tab === "comms" && (
         <DCThreadPanel
           caseItem={caseItem}
           userId={userId}
@@ -791,8 +1368,7 @@ function DetailModal({
         />
       )}
 
-      {/* All threads read-only view for DC */}
-      {tab === "all_msgs" && (
+      {tab === "all_threads" && (
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {allThreadMsgs.length === 0 ? (
             <p className="text-gray-400 text-xs text-center py-8">
@@ -820,7 +1396,7 @@ function DetailModal({
                     </span>
                   </div>
                   <span className="text-xs text-gray-400">
-                    {new Date(m.sentAt).toLocaleString()}
+                    {formatDateTime(m.sentAt)}
                   </span>
                 </div>
                 <p className="text-sm text-gray-700 leading-relaxed">
@@ -835,9 +1411,9 @@ function DetailModal({
 
       {tab === "notes" && (
         <div className="space-y-3">
-          <div className="space-y-2 max-h-52 overflow-y-auto">
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {caseItem.notes.length === 0 ? (
-              <p className="text-gray-400 text-xs text-center py-8">
+              <p className="text-gray-400 text-xs text-center py-6">
                 No notes yet.
               </p>
             ) : (
@@ -846,22 +1422,20 @@ function DetailModal({
                   key={n._id}
                   className="bg-gray-50 rounded-lg p-3 border border-gray-100"
                 >
-                  <div className="flex justify-between items-start mb-1.5">
-                    <span className="text-xs font-semibold text-blue-700">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-xs font-semibold text-amber-700">
                       {n.addedBy?.fullName || "Unknown"}
                       {n.roleSnapshot && (
-                        <span className="ml-1 font-normal text-gray-500">
-                          ({ROLE_LABELS[n.roleSnapshot] || n.roleSnapshot})
+                        <span className="ml-1 font-normal text-gray-400">
+                          ({ROLE_LABELS[n.roleSnapshot]})
                         </span>
                       )}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {new Date(n.addedAt).toLocaleString()}
+                      {formatDateTime(n.addedAt)}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {n.content}
-                  </p>
+                  <p className="text-sm text-gray-700">{n.content}</p>
                   <AttachmentList attachments={n.attachments} />
                 </div>
               ))
@@ -876,7 +1450,7 @@ function DetailModal({
               rows={2}
               value={noteContent}
               onChange={(e) => setNC(e.target.value)}
-              placeholder="Add a commander note..."
+              placeholder="Add commander note..."
               style={{ resize: "vertical" }}
             />
             <FilePicker files={noteFiles} onChange={setNF} />
@@ -885,7 +1459,7 @@ function DetailModal({
                 type="submit"
                 size="sm"
                 disabled={addingNote || !noteContent.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-amber-600 hover:bg-amber-700 text-white"
               >
                 {addingNote ? (
                   <Loader2 size={12} className="animate-spin mr-1" />
@@ -967,7 +1541,15 @@ function DetailModal({
         </div>
       )}
 
-      <div className="flex justify-end border-t border-gray-100 pt-3">
+      {tab === "audit" && <AuditTrail entries={caseItem.auditLog || []} />}
+      {tab === "export" && <ExportTab caseItem={caseItem} />}
+
+      <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+        <CaseBookPDFButton
+          caseId={caseItem._id}
+          caseNumber={caseItem.caseNumber}
+          size="sm"
+        />
         <Button variant="outline" onClick={onClose}>
           Close
         </Button>
@@ -975,6 +1557,10 @@ function DetailModal({
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stat Card
+// ─────────────────────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
@@ -1015,10 +1601,12 @@ function StatCard({
   );
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function DCCasesPage() {
   const userId = "CURRENT_USER_ID";
-  const userRole = "dc";
 
   const [cases, setCases] = useState<CaseData[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -1027,12 +1615,8 @@ export default function DCCasesPage() {
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
-
   const [detailCase, setDetailCase] = useState<CaseData | null>(null);
-  const [actionCase, setActionCase] = useState<{
-    case: CaseData;
-    action: "dc-close" | "dc-suspend";
-  } | null>(null);
+  const [decideCase, setDecideCase] = useState<CaseData | null>(null);
 
   const fetchCases = useCallback(async () => {
     setLoading(true);
@@ -1082,19 +1666,19 @@ export default function DCCasesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Star size={14} className="text-blue-600 fill-blue-600" />
-            <span className="text-sm font-semibold text-blue-600">
+            <Star size={16} className="text-amber-600 fill-amber-600" />
+            <span className="text-sm font-semibold text-amber-600">
               District Commander
             </span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Command Overview</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Full visibility across all cases and communications
+            Digital Case Book System — full visibility and final decisions
           </p>
         </div>
         <Button
-          onClick={fetchCases}
           variant="outline"
+          onClick={fetchCases}
           className="flex items-center gap-2"
         >
           <RefreshCw size={13} /> Refresh
@@ -1106,8 +1690,8 @@ export default function DCCasesPage() {
           label="Total Cases"
           value={total}
           sub="Full district view"
-          icon={<BarChart3 className="h-6 w-6 text-blue-600" />}
-          iconBg="bg-blue-100"
+          icon={<BarChart3 className="h-6 w-6 text-amber-600" />}
+          iconBg="bg-amber-100"
         />
         <StatCard
           label="Awaiting Decision"
@@ -1190,14 +1774,14 @@ export default function DCCasesPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Star size={16} className="text-blue-600 fill-blue-600" />
+            <Star size={16} className="text-amber-600 fill-amber-600" />
             District Cases ({total})
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="flex justify-center py-16">
-              <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+              <Loader2 className="h-7 w-7 animate-spin text-amber-600" />
             </div>
           ) : cases.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
@@ -1208,6 +1792,9 @@ export default function DCCasesPage() {
             <div className="space-y-2">
               {cases.map((c) => {
                 const canDecide = c.status === "commander_review";
+                const dcBookEntries = (c.caseBookEntries || []).filter(
+                  (e) => e.stage === "dc",
+                ).length;
                 const dcMsgCount = (c.threadMessages || []).filter(
                   (m) => m.thread === "dc",
                 ).length;
@@ -1215,28 +1802,32 @@ export default function DCCasesPage() {
                 return (
                   <div
                     key={c._id}
-                    className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${canDecide ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200 hover:border-blue-200 hover:shadow-sm"}`}
+                    className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${canDecide ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200 hover:border-amber-200 hover:shadow-sm"}`}
                   >
                     <div
                       className={`w-1 h-12 rounded-full shrink-0 ${PRIORITY_LEFT[c.priority] || "bg-gray-300"}`}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center flex-wrap gap-2 mb-1">
-                        <span className="text-xs font-mono font-bold text-blue-600">
+                        <span className="text-xs font-mono font-bold text-amber-600">
                           {c.caseNumber}
                         </span>
                         <PriorityBadge priority={c.priority} />
                         <StatusBadge status={c.status} />
                         {canDecide && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200">
-                            <Star size={9} className="fill-yellow-700" />
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                            <Star size={9} className="fill-amber-700" />{" "}
                             Decision Required
                           </span>
                         )}
+                        {dcBookEntries > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                            <BookOpen size={9} /> {dcBookEntries} entries
+                          </span>
+                        )}
                         {dcMsgCount > 0 && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
-                            <MessageSquare size={9} />
-                            {dcMsgCount} DC msgs
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                            <MessageSquare size={9} /> {dcMsgCount} msgs
                           </span>
                         )}
                       </div>
@@ -1267,7 +1858,7 @@ export default function DCCasesPage() {
                     </div>
                     <div className="text-right shrink-0 hidden sm:block">
                       <p className="text-xs text-gray-400">
-                        {new Date(c.createdAt).toLocaleDateString()}
+                        {formatDate(c.createdAt)}
                       </p>
                       <p className="text-xs text-gray-300 mt-0.5">
                         {c.notes.length} notes
@@ -1281,27 +1872,20 @@ export default function DCCasesPage() {
                         <Eye size={15} />
                       </button>
                       {canDecide && (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              setActionCase({ case: c, action: "dc-close" })
-                            }
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3"
-                          >
-                            <CheckCircle2 size={12} className="mr-1" /> Close
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              setActionCase({ case: c, action: "dc-suspend" })
-                            }
-                            className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8 px-3"
-                          >
-                            <TrendingDown size={12} className="mr-1" /> Suspend
-                          </Button>
-                        </>
+                        <Button
+                          size="sm"
+                          onClick={() => setDecideCase(c)}
+                          className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 px-3"
+                        >
+                          <CheckCircle2 size={12} className="mr-1" /> Decide
+                        </Button>
                       )}
+                      <CaseBookPDFButton
+                        caseId={c._id}
+                        caseNumber={c.caseNumber}
+                        size="sm"
+                        iconOnly
+                      />
                     </div>
                   </div>
                 );
@@ -1311,11 +1895,11 @@ export default function DCCasesPage() {
           {pagination && pagination.pages > 1 && (
             <div className="flex justify-center gap-1 mt-6">
               {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(
-                (p: any) => (
+                (p) => (
                   <button
                     key={p}
                     onClick={() => setPage(p)}
-                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${p === page ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${p === page ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
                   >
                     {p}
                   </button>
@@ -1340,19 +1924,18 @@ export default function DCCasesPage() {
           />
         </Modal>
       )}
-      {actionCase && (
+      {decideCase && (
         <Modal
-          title={`${actionCase.action === "dc-close" ? "Close" : "Suspend"} Case — ${actionCase.case.caseNumber}`}
-          onClose={() => setActionCase(null)}
+          title={`Decision — ${decideCase.caseNumber}`}
+          onClose={() => setDecideCase(null)}
         >
-          <DCActionModal
-            caseItem={actionCase.case}
-            action={actionCase.action}
+          <DCDecideModal
+            caseItem={decideCase}
             onSuccess={() => {
               fetchCases();
-              setActionCase(null);
+              setDecideCase(null);
             }}
-            onClose={() => setActionCase(null)}
+            onClose={() => setDecideCase(null)}
           />
         </Modal>
       )}
