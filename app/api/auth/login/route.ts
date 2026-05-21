@@ -43,15 +43,15 @@ export async function POST(req: NextRequest) {
       userId: user._id.toString(),
       email: user.email,
       role: user.role,
+      stationId: user.stationId ?? null, // ← include stationId
     });
 
     const response = NextResponse.json({
       message: "Login successful",
       user: user.toSafeObject(),
-      token, // also in cookie below
+      token,
     });
 
-    // Set HTTP-only cookie
     response.cookies.set("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

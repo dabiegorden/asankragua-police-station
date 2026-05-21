@@ -1,12 +1,10 @@
 // src/app/api/users/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { requireRole } from "@/middleware/auth";
 
-// GET all users with filtering and search
 export async function GET(req: NextRequest) {
   const { user, error } = requireRole(req, ["admin", "nco", "so", "dc"]);
   if (error) return error;
@@ -20,8 +18,9 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const role = searchParams.get("role") || "";
     const isActive = searchParams.get("isActive") || "";
+    // DC can pass ?stationId= to filter users at a specific station
+    const stationId = searchParams.get("stationId") || "";
 
-    // Build filter query
     const filter: any = {};
 
     if (search) {
@@ -32,12 +31,15 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    if (role) {
-      filter.role = role;
-    }
+    if (role) filter.role = role;
+    if (isActive !== "") filter.isActive = isActive === "true";
 
-    if (isActive !== "") {
-      filter.isActive = isActive === "true";
+    // Scope by station for DC (or any role that passes ?stationId=)
+    if (user.role === "dc" && !stationId && user.stationId) {
+      // Default to the DC's own station if no override is given
+      filter.stationId = user.stationId;
+    } else if (stationId) {
+      filter.stationId = stationId;
     }
 
     const skip = (page - 1) * limit;
@@ -66,7 +68,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - Create new user
 export async function POST(req: NextRequest) {
   const { user, error } = requireRole(req, ["admin"]);
   if (error) return error;
@@ -83,13 +84,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate role
     const validRoles = ["admin", "nco", "cid", "so", "dc"];
     if (!validRoles.includes(role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
-    // Check if email already exists
     const existing = await User.findOne({ email });
     if (existing) {
       return NextResponse.json(
@@ -98,10 +97,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
     const newUser = await User.create({
       fullName,
       email,

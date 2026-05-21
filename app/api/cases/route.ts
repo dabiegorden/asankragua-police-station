@@ -1,9 +1,8 @@
 // src/app/api/cases/route.ts
-// Digital Case Book — full rewrite with audit trail + case book aggregation
-
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Case from "@/models/Case";
+import User from "@/models/User";
 import { requireAuth } from "@/middleware/auth";
 import { parseAttachments } from "@/lib/parseAttachments";
 
@@ -19,7 +18,16 @@ export async function populateCase(id: string) {
     .populate("auditLog.performedBy", "fullName role badgeNumber");
 }
 
-// ─── GET — list cases (role-scoped) ──────────────────────────────────────────
+/**
+ * Resolves the set of User ObjectIds that belong to a given station.
+ * Returns null if no station scope should be applied (admin seeing all).
+ */
+async function getStationUserIds(stationId: string): Promise<string[]> {
+  const stationUsers = await User.find({ stationId }).select("_id").lean();
+  return stationUsers.map((u) => u._id.toString());
+}
+
+// ─── GET — list cases (station-scoped) ───────────────────────────────────────
 export async function GET(req: NextRequest) {
   const { user, error } = requireAuth(req);
   if (error) return error;
@@ -34,22 +42,65 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get("category");
     const search = searchParams.get("search");
     const stage = searchParams.get("stage");
+    const stationId = searchParams.get("stationId");
 
     const query: Record<string, unknown> = {};
 
     switch (user.role) {
-      case "nco":
-        query.$or = [{ loggedBy: user.userId }, { currentStage: "nco" }];
+      case "nco": {
+        // NCO sees only cases logged at their own station
+        if (!user.stationId) {
+          return NextResponse.json({
+            cases: [],
+            pagination: { page, limit, total: 0, pages: 0 },
+          });
+        }
+        const ids = await getStationUserIds(user.stationId);
+        query.$or = [
+          { loggedBy: { $in: ids } },
+          { currentStage: "nco", loggedBy: { $in: ids } },
+        ];
         break;
-      case "cid":
+      }
+
+      case "cid": {
+        // CID sees only cases assigned to them (still station-bound because
+        // NCO can only refer to CID officers at their own station via by-role)
         query.assignedOfficer = user.userId;
         break;
-      case "so":
-        query.$or = [{ assignedSO: user.userId }, { currentStage: "so" }];
+      }
+
+      case "so": {
+        // SO sees only cases at their own station
+        if (!user.stationId) {
+          return NextResponse.json({
+            cases: [],
+            pagination: { page, limit, total: 0, pages: 0 },
+          });
+        }
+        const ids = await getStationUserIds(user.stationId);
+        query.$or = [{ assignedSO: user.userId }, { loggedBy: { $in: ids } }];
         break;
+      }
+
       case "dc":
-      case "admin":
-        break; // full visibility
+      case "admin": {
+        // DC defaults to their own station; admin sees all unless filtered
+        const targetStation =
+          stationId || (user.role === "dc" ? (user.stationId ?? null) : null);
+
+        if (targetStation) {
+          const ids = await getStationUserIds(targetStation);
+          query.$or = [
+            { loggedBy: { $in: ids } },
+            { assignedOfficer: { $in: ids } },
+            { assignedSO: { $in: ids } },
+            { assignedDC: { $in: ids } },
+          ];
+        }
+        // Admin with no stationId filter sees everything
+        break;
+      }
     }
 
     if (status && status !== "all") query.status = status;
@@ -191,7 +242,6 @@ export async function POST(req: NextRequest) {
       attachments: uploadedAttachments,
     });
 
-    // ── seed initial case book entry from NCO/SO ──────────────────────────────
     if (typeof initialNote === "string" && initialNote.trim()) {
       newCase.notes.push({
         content: initialNote.trim(),
@@ -200,8 +250,6 @@ export async function POST(req: NextRequest) {
         addedAt: new Date(),
         attachments: [],
       });
-
-      // Also add to the digital case book
       newCase.caseBookEntries.push({
         stage: "nco",
         entryType: "remark",
@@ -214,7 +262,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Audit: case created
     newCase.auditLog.push({
       action: "case_created",
       performedBy: user.userId,

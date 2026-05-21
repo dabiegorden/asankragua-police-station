@@ -60,6 +60,10 @@ import {
   CaseBookExportCard,
 } from "@/components/Casebookpdfbutton";
 
+// Add at the top of imports:
+import { useStation } from "@/context/StationContext";
+import { Building2 } from "lucide-react";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared micro-components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1607,7 +1611,7 @@ function StatCard({
 
 export default function DCCasesPage() {
   const userId = "CURRENT_USER_ID";
-
+  const { selectedStation, stationParam } = useStation();
   const [cases, setCases] = useState<CaseData[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1627,6 +1631,7 @@ export default function DCCasesPage() {
         ...(status !== "all" && { status }),
         ...(category !== "all" && { category }),
         ...(search && { search }),
+        ...(stationParam && { stationId: stationParam }), // ← add this
       });
       const d = await api(`/api/cases?${p}`);
       setCases(d.cases);
@@ -1636,7 +1641,7 @@ export default function DCCasesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, status, category, search]);
+  }, [page, status, category, search, stationParam]); // ← add stationParam
 
   useEffect(() => {
     fetchCases();
@@ -1672,9 +1677,14 @@ export default function DCCasesPage() {
             </span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Command Overview</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Digital Case Book System — full visibility and final decisions
-          </p>
+          {selectedStation && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Building2 size={12} className="text-amber-600" />
+              <p className="text-xs text-amber-700 font-medium">
+                {selectedStation.name}
+              </p>
+            </div>
+          )}
         </div>
         <Button
           variant="outline"

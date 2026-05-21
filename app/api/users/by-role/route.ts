@@ -1,6 +1,8 @@
 // src/app/api/users/by-role/route.ts
-// Public-ish route (still auth-protected but accessible to all authenticated roles)
-// Returns minimal user info needed for referral dropdowns
+// Returns minimal user info for referral dropdowns — station-scoped.
+// NCO / CID / SO only see users at their own station.
+// DC sees their own station by default (pass ?stationId= to override).
+// Admin sees all unless filtered.
 
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
@@ -16,12 +18,36 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const role = searchParams.get("role");
+    const requestedStation = searchParams.get("stationId");
 
     const query: Record<string, unknown> = { isActive: true };
+
     if (role) {
-      // Support comma-separated roles: ?role=cid,so
       const roles = role.split(",").map((r) => r.trim());
       query.role = { $in: roles };
+    }
+
+    // Station scoping
+    switch (user.role) {
+      case "nco":
+      case "cid":
+      case "so":
+        // These roles can only see users within their own station
+        if (!user.stationId) {
+          return NextResponse.json({ users: [] });
+        }
+        query.stationId = user.stationId;
+        break;
+
+      case "dc":
+        // DC defaults to their station; can override with ?stationId=
+        query.stationId = requestedStation || user.stationId || undefined;
+        break;
+
+      case "admin":
+        // Admin sees all unless a stationId filter is passed
+        if (requestedStation) query.stationId = requestedStation;
+        break;
     }
 
     const users = await User.find(query)

@@ -10,6 +10,7 @@ export interface JWTPayload {
   userId: string;
   email: string;
   role: "admin" | "nco" | "cid" | "so" | "dc";
+  stationId: string | null;
 }
 
 export function generateToken(payload: JWTPayload): string {
