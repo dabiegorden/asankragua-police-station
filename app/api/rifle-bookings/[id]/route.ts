@@ -85,28 +85,40 @@ export async function PUT(
 
     const body = (await request.json()) as UpdateRifleBookingBody;
 
-    // Coerce date strings to Date objects where present
+    // ── Coerce top-level date strings ─────────────────────────────────────
     const updatePayload: Record<string, unknown> = { ...body };
 
     if (body.dateOfBooking) {
       updatePayload.dateOfBooking = new Date(body.dateOfBooking);
     }
 
-    if (body.weaponReturn?.returnDate) {
-      updatePayload.weaponReturn = {
-        ...body.weaponReturn,
-        returnDate: new Date(body.weaponReturn.returnDate),
-      };
+    // ── Coerce date strings inside weaponReturn ────────────────────────────
+    if (body.weaponReturn) {
+      const wr = { ...body.weaponReturn } as Record<string, unknown>;
+
+      if (typeof wr.returnDate === "string" && wr.returnDate) {
+        wr.returnDate = new Date(wr.returnDate as string);
+      }
+      // Booking snapshot date inside return
+      if (typeof wr.dateOfBooking === "string" && wr.dateOfBooking) {
+        wr.dateOfBooking = new Date(wr.dateOfBooking as string);
+      }
+
+      updatePayload.weaponReturn = wr;
     }
 
-    if (body.insurance?.coverageStartDate) {
-      (updatePayload.insurance as Record<string, unknown>).coverageStartDate =
-        new Date(body.insurance.coverageStartDate);
-    }
+    // ── Coerce date strings inside insurance ──────────────────────────────
+    if (body.insurance) {
+      const ins = { ...body.insurance } as Record<string, unknown>;
 
-    if (body.insurance?.coverageEndDate) {
-      (updatePayload.insurance as Record<string, unknown>).coverageEndDate =
-        new Date(body.insurance.coverageEndDate);
+      if (typeof ins.coverageStartDate === "string" && ins.coverageStartDate) {
+        ins.coverageStartDate = new Date(ins.coverageStartDate as string);
+      }
+      if (typeof ins.coverageEndDate === "string" && ins.coverageEndDate) {
+        ins.coverageEndDate = new Date(ins.coverageEndDate as string);
+      }
+
+      updatePayload.insurance = ins;
     }
 
     const booking = await RifleBooking.findByIdAndUpdate(

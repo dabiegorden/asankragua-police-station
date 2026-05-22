@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FileText, Home, HomeIcon, Users } from "lucide-react";
+import { StationOfficerLinks } from "@/constants";
 
 interface toggleSidebar {
   toggleSidebar?: () => void;
@@ -13,12 +14,12 @@ const SoSidebar = ({ toggleSidebar }: toggleSidebar) => {
   const pathname = usePathname();
 
   // Links defined directly in the component
-  const StationOfficerLinks = [
-    { id: 1, url: "/so-dashboard", title: "Dashboard", icon: Home },
-    { id: 2, url: "/so-dashboard/cases", title: "Cases", icon: FileText },
-    { id: 3, url: "/so-dashboard/profile", title: "Profile", icon: Users },
-    { id: 4, url: "/", title: "Home", icon: HomeIcon },
-  ];
+  // const StationOfficerLinks = [
+  //   { id: 1, url: "/so-dashboard", title: "Dashboard", icon: Home },
+  //   { id: 2, url: "/so-dashboard/cases", title: "Cases", icon: FileText },
+  //   { id: 3, url: "/so-dashboard/profile", title: "Profile", icon: Users },
+  //   { id: 4, url: "/", title: "Home", icon: HomeIcon },
+  // ];
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-950 text-white shadow-xl">

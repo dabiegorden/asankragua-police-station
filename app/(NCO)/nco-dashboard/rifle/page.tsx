@@ -29,6 +29,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   Plus,
@@ -43,6 +44,7 @@ import {
   Eye,
   Search,
   X,
+  PackageCheck,
 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
@@ -59,8 +61,21 @@ interface IInsurance {
 }
 
 interface IWeaponReturn {
-  returnedBy?: string;
+  // Mirror of booking core fields — captured at return time
+  typeOfRifle?: string;
+  rifleNumber?: string;
+  serialNumber?: string;
+  sdNumber?: string;
+  ammunitionType?: string;
+  numberOfAmmunition?: number;
+  dateOfBooking?: string;
+  typeOfDuty?: string;
+  nameOfPersonnel?: string;
+  issuedBy?: string;
   receivedBy?: string;
+  // Return-specific fields
+  returnedBy?: string;
+  returnReceivedBy?: string;
   returnDate?: string;
   ammunitionReturned?: number;
   conditionOnReturn?: "good" | "damaged" | "lost";
@@ -87,8 +102,7 @@ interface RifleBooking {
   createdAt: string;
 }
 
-interface FormData {
-  // Core
+interface BookingFormData {
   typeOfRifle: string;
   rifleNumber: string;
   serialNumber: string;
@@ -100,19 +114,33 @@ interface FormData {
   nameOfPersonnel: string;
   issuedBy: string;
   receivedBy: string;
-  // Insurance
   insurancePolicyNumber: string;
   insuranceProvider: string;
   insuranceCoverageStart: string;
   insuranceCoverageEnd: string;
   insuranceNotes: string;
-  // Return
-  returnReturnedBy: string;
+}
+
+interface ReturnFormData {
+  // Booking info (pre-filled from booking, editable)
+  typeOfRifle: string;
+  rifleNumber: string;
+  serialNumber: string;
+  sdNumber: string;
+  ammunitionType: string;
+  numberOfAmmunition: number;
+  dateOfBooking: string;
+  typeOfDuty: string;
+  nameOfPersonnel: string;
+  issuedBy: string;
+  receivedBy: string;
+  // Return-specific
+  returnedBy: string;
   returnReceivedBy: string;
   returnDate: string;
-  returnAmmunitionReturned: number;
-  returnCondition: "good" | "damaged" | "lost" | "";
-  returnNotes: string;
+  ammunitionReturned: number;
+  conditionOnReturn: "good" | "damaged" | "lost" | "";
+  notes: string;
 }
 
 interface Pagination {
@@ -124,7 +152,7 @@ interface Pagination {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-const EMPTY_FORM: FormData = {
+const EMPTY_BOOKING_FORM: BookingFormData = {
   typeOfRifle: "",
   rifleNumber: "",
   serialNumber: "",
@@ -141,51 +169,54 @@ const EMPTY_FORM: FormData = {
   insuranceCoverageStart: "",
   insuranceCoverageEnd: "",
   insuranceNotes: "",
-  returnReturnedBy: "",
-  returnReceivedBy: "",
-  returnDate: "",
-  returnAmmunitionReturned: 0,
-  returnCondition: "",
-  returnNotes: "",
 };
 
-function formDataToPayload(f: FormData, isEdit: boolean) {
-  const insurance: IInsurance = {};
-  if (f.insurancePolicyNumber) insurance.policyNumber = f.insurancePolicyNumber;
-  if (f.insuranceProvider) insurance.provider = f.insuranceProvider;
-  if (f.insuranceCoverageStart)
-    insurance.coverageStartDate = f.insuranceCoverageStart;
-  if (f.insuranceCoverageEnd)
-    insurance.coverageEndDate = f.insuranceCoverageEnd;
-  if (f.insuranceNotes) insurance.notes = f.insuranceNotes;
+const EMPTY_RETURN_FORM: ReturnFormData = {
+  typeOfRifle: "",
+  rifleNumber: "",
+  serialNumber: "",
+  sdNumber: "",
+  ammunitionType: "",
+  numberOfAmmunition: 0,
+  dateOfBooking: "",
+  typeOfDuty: "",
+  nameOfPersonnel: "",
+  issuedBy: "",
+  receivedBy: "",
+  returnedBy: "",
+  returnReceivedBy: "",
+  returnDate: new Date().toISOString().split("T")[0],
+  ammunitionReturned: 0,
+  conditionOnReturn: "",
+  notes: "",
+};
 
-  const weaponReturn: IWeaponReturn = {};
-  if (f.returnReturnedBy) weaponReturn.returnedBy = f.returnReturnedBy;
-  if (f.returnReceivedBy) weaponReturn.receivedBy = f.returnReceivedBy;
-  if (f.returnDate) weaponReturn.returnDate = f.returnDate;
-  if (f.returnAmmunitionReturned)
-    weaponReturn.ammunitionReturned = f.returnAmmunitionReturned;
-  if (f.returnCondition) weaponReturn.conditionOnReturn = f.returnCondition;
-  if (f.returnNotes) weaponReturn.notes = f.returnNotes;
-
+function bookingToReturnForm(b: RifleBooking): ReturnFormData {
   return {
-    typeOfRifle: f.typeOfRifle,
-    rifleNumber: f.rifleNumber,
-    serialNumber: f.serialNumber,
-    sdNumber: f.sdNumber,
-    ammunitionType: f.ammunitionType,
-    numberOfAmmunition: f.numberOfAmmunition,
-    dateOfBooking: f.dateOfBooking,
-    typeOfDuty: f.typeOfDuty,
-    nameOfPersonnel: f.nameOfPersonnel,
-    issuedBy: f.issuedBy,
-    receivedBy: f.receivedBy,
-    insurance,
-    weaponReturn,
+    typeOfRifle: b.typeOfRifle,
+    rifleNumber: b.rifleNumber,
+    serialNumber: b.serialNumber,
+    sdNumber: b.sdNumber,
+    ammunitionType: b.ammunitionType,
+    numberOfAmmunition: b.numberOfAmmunition,
+    dateOfBooking: b.dateOfBooking ? b.dateOfBooking.split("T")[0] : "",
+    typeOfDuty: b.typeOfDuty,
+    nameOfPersonnel: b.nameOfPersonnel,
+    issuedBy: b.issuedBy,
+    receivedBy: b.receivedBy,
+    returnedBy: b.weaponReturn?.returnedBy ?? "",
+    returnReceivedBy:
+      b.weaponReturn?.returnReceivedBy ?? b.weaponReturn?.receivedBy ?? "",
+    returnDate: b.weaponReturn?.returnDate
+      ? b.weaponReturn.returnDate.split("T")[0]
+      : new Date().toISOString().split("T")[0],
+    ammunitionReturned: b.weaponReturn?.ammunitionReturned ?? 0,
+    conditionOnReturn: b.weaponReturn?.conditionOnReturn ?? "",
+    notes: b.weaponReturn?.notes ?? "",
   };
 }
 
-function bookingToForm(b: RifleBooking): FormData {
+function bookingToEditForm(b: RifleBooking): BookingFormData {
   return {
     typeOfRifle: b.typeOfRifle,
     rifleNumber: b.rifleNumber,
@@ -207,14 +238,6 @@ function bookingToForm(b: RifleBooking): FormData {
       ? b.insurance.coverageEndDate.split("T")[0]
       : "",
     insuranceNotes: b.insurance?.notes ?? "",
-    returnReturnedBy: b.weaponReturn?.returnedBy ?? "",
-    returnReceivedBy: b.weaponReturn?.receivedBy ?? "",
-    returnDate: b.weaponReturn?.returnDate
-      ? b.weaponReturn.returnDate.split("T")[0]
-      : "",
-    returnAmmunitionReturned: b.weaponReturn?.ammunitionReturned ?? 0,
-    returnCondition: b.weaponReturn?.conditionOnReturn ?? "",
-    returnNotes: b.weaponReturn?.notes ?? "",
   };
 }
 
@@ -224,7 +247,16 @@ const STATUS_STYLES: Record<RifleBooking["status"], string> = {
   overdue: "bg-red-100 text-red-800 border border-red-200",
 };
 
-// ─── Search Input Component ─────────────────────────────────────────────────
+const fmtDate = (d?: string) =>
+  d
+    ? new Date(d).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
+
+// ─── Search Bar ────────────────────────────────────────────────────────────
 
 interface SearchBarProps {
   value: string;
@@ -251,14 +283,8 @@ function SearchBar({
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setLocalValue(newValue);
-    debouncedOnChange(newValue);
-  };
-
-  const handleClear = () => {
-    setLocalValue("");
-    onChange("");
+    setLocalValue(e.target.value);
+    debouncedOnChange(e.target.value);
   };
 
   return (
@@ -279,7 +305,10 @@ function SearchBar({
       {localValue && (
         <button
           type="button"
-          onClick={handleClear}
+          onClick={() => {
+            setLocalValue("");
+            onChange("");
+          }}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
         >
           <X className="h-4 w-4" />
@@ -289,22 +318,487 @@ function SearchBar({
   );
 }
 
-// ─── View Record Modal ─────────────────────────────────────────────────────
+// ─── Core Booking Fields (reusable) ────────────────────────────────────────
 
-interface ViewRecordModalProps {
-  booking: RifleBooking | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface CoreFieldsProps {
+  data: Pick<
+    BookingFormData | ReturnFormData,
+    | "typeOfRifle"
+    | "rifleNumber"
+    | "serialNumber"
+    | "sdNumber"
+    | "ammunitionType"
+    | "numberOfAmmunition"
+    | "dateOfBooking"
+    | "typeOfDuty"
+    | "nameOfPersonnel"
+    | "issuedBy"
+    | "receivedBy"
+  >;
+  onChange: (patch: Partial<BookingFormData & ReturnFormData>) => void;
+  idPrefix?: string;
+  readOnly?: boolean;
 }
+
+function CoreFields({
+  data,
+  onChange,
+  idPrefix = "",
+  readOnly = false,
+}: CoreFieldsProps) {
+  const p = idPrefix;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${p}typeOfRifle`}>Type of Rifle *</Label>
+          <Input
+            id={`${p}typeOfRifle`}
+            placeholder="e.g. AK-47, M16"
+            value={data.typeOfRifle}
+            onChange={(e) => onChange({ typeOfRifle: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${p}rifleNumber`}>Rifle Number *</Label>
+          <Input
+            id={`${p}rifleNumber`}
+            placeholder="e.g. RFL-001"
+            value={data.rifleNumber}
+            onChange={(e) => onChange({ rifleNumber: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${p}serialNumber`}>Serial Number *</Label>
+          <Input
+            id={`${p}serialNumber`}
+            placeholder="Unique serial number"
+            value={data.serialNumber}
+            onChange={(e) => onChange({ serialNumber: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${p}sdNumber`}>SD Number *</Label>
+          <Input
+            id={`${p}sdNumber`}
+            placeholder="SD Number"
+            value={data.sdNumber}
+            onChange={(e) => onChange({ sdNumber: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${p}ammunitionType`}>Ammunition Type *</Label>
+          <Input
+            id={`${p}ammunitionType`}
+            placeholder="e.g. 7.62mm"
+            value={data.ammunitionType}
+            onChange={(e) => onChange({ ammunitionType: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${p}numberOfAmmunition`}>
+            Ammunition Count (Issued) *
+          </Label>
+          <Input
+            id={`${p}numberOfAmmunition`}
+            type="number"
+            min="0"
+            value={data.numberOfAmmunition}
+            onChange={(e) =>
+              onChange({ numberOfAmmunition: parseInt(e.target.value) || 0 })
+            }
+            readOnly={readOnly}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${p}dateOfBooking`}>Date of Booking *</Label>
+          <Input
+            id={`${p}dateOfBooking`}
+            type="date"
+            value={data.dateOfBooking}
+            onChange={(e) => onChange({ dateOfBooking: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${p}typeOfDuty`}>Type of Duty *</Label>
+          <Input
+            id={`${p}typeOfDuty`}
+            placeholder="e.g. Patrol, Guard Duty"
+            value={data.typeOfDuty}
+            onChange={(e) => onChange({ typeOfDuty: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor={`${p}nameOfPersonnel`}>Name of Personnel *</Label>
+        <Input
+          id={`${p}nameOfPersonnel`}
+          placeholder="Full name"
+          value={data.nameOfPersonnel}
+          onChange={(e) => onChange({ nameOfPersonnel: e.target.value })}
+          readOnly={readOnly}
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${p}issuedBy`}>Issued By *</Label>
+          <Input
+            id={`${p}issuedBy`}
+            placeholder="Issuing officer"
+            value={data.issuedBy}
+            onChange={(e) => onChange({ issuedBy: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${p}receivedBy`}>Received By *</Label>
+          <Input
+            id={`${p}receivedBy`}
+            placeholder="Receiving officer"
+            value={data.receivedBy}
+            onChange={(e) => onChange({ receivedBy: e.target.value })}
+            readOnly={readOnly}
+            required
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Insurance Fields ──────────────────────────────────────────────────────
+
+function InsuranceFields({
+  data,
+  onChange,
+  idPrefix = "",
+}: {
+  data: BookingFormData;
+  onChange: (patch: Partial<BookingFormData>) => void;
+  idPrefix?: string;
+}) {
+  const p = idPrefix;
+  return (
+    <div className="space-y-4 rounded-md border p-4 bg-muted/30">
+      <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4" /> Issuance Details (optional)
+      </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${p}insurancePolicyNumber`}>Policy Number</Label>
+          <Input
+            id={`${p}insurancePolicyNumber`}
+            placeholder="e.g. POL-2024-001"
+            value={data.insurancePolicyNumber}
+            onChange={(e) =>
+              onChange({ insurancePolicyNumber: e.target.value })
+            }
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${p}insuranceProvider`}>Provider</Label>
+          <Input
+            id={`${p}insuranceProvider`}
+            placeholder="Insurance provider name"
+            value={data.insuranceProvider}
+            onChange={(e) => onChange({ insuranceProvider: e.target.value })}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`${p}insuranceCoverageStart`}>Coverage Start</Label>
+          <Input
+            id={`${p}insuranceCoverageStart`}
+            type="date"
+            value={data.insuranceCoverageStart}
+            onChange={(e) =>
+              onChange({ insuranceCoverageStart: e.target.value })
+            }
+          />
+        </div>
+        <div>
+          <Label htmlFor={`${p}insuranceCoverageEnd`}>Coverage End</Label>
+          <Input
+            id={`${p}insuranceCoverageEnd`}
+            type="date"
+            value={data.insuranceCoverageEnd}
+            onChange={(e) => onChange({ insuranceCoverageEnd: e.target.value })}
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor={`${p}insuranceNotes`}>Issuance Notes</Label>
+        <Textarea
+          id={`${p}insuranceNotes`}
+          placeholder="Any relevant issuance notes..."
+          value={data.insuranceNotes}
+          onChange={(e) => onChange({ insuranceNotes: e.target.value })}
+          rows={2}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Create / Edit Booking Modal Form ─────────────────────────────────────
+
+function BookingModalForm({
+  formData,
+  onChange,
+  onSubmit,
+  onCancel,
+  isEdit,
+}: {
+  formData: BookingFormData;
+  onChange: (patch: Partial<BookingFormData>) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  isEdit: boolean;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <Tabs defaultValue="core">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="core">
+            <Shield className="h-4 w-4 mr-1" /> Booking Info
+          </TabsTrigger>
+          <TabsTrigger value="insurance">
+            <ShieldCheck className="h-4 w-4 mr-1" /> Issuance
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="core" className="space-y-4 pt-2">
+          <CoreFields
+            data={formData}
+            onChange={onChange}
+            idPrefix={isEdit ? "edit-" : "create-"}
+          />
+        </TabsContent>
+
+        <TabsContent value="insurance" className="pt-2">
+          <InsuranceFields
+            data={formData}
+            onChange={onChange}
+            idPrefix={isEdit ? "edit-" : "create-"}
+          />
+        </TabsContent>
+      </Tabs>
+
+      <div className="flex justify-end gap-2 pt-2 border-t">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">
+          {isEdit ? "Update Booking" : "Create Booking"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ─── Return Modal Form ─────────────────────────────────────────────────────
+// Shows ALL booking fields (pre-filled, editable) + return-specific fields
+
+function ReturnModalForm({
+  formData,
+  onChange,
+  onSubmit,
+  onCancel,
+  bookingNumber,
+  isSubmitting,
+}: {
+  formData: ReturnFormData;
+  onChange: (patch: Partial<ReturnFormData>) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  bookingNumber: string;
+  isSubmitting: boolean;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-6">
+      {/* ── Section: Booking Details (pre-filled, editable) ── */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Booking Details
+          </h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          These fields are pre-filled from the original booking. Amend if needed
+          before saving the return.
+        </p>
+        <div className="rounded-md border bg-muted/20 p-4">
+          <CoreFields
+            data={formData}
+            onChange={onChange}
+            idPrefix="return-booking-"
+          />
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* ── Section: Return Details ── */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <RotateCcw className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Return Details
+          </h3>
+        </div>
+        <div className="space-y-4 rounded-md border p-4 bg-muted/20">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="returnedBy">Returned By *</Label>
+              <Input
+                id="returnedBy"
+                placeholder="Name of returning officer"
+                value={formData.returnedBy}
+                onChange={(e) => onChange({ returnedBy: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="returnReceivedBy">Received By *</Label>
+              <Input
+                id="returnReceivedBy"
+                placeholder="Name of receiving officer"
+                value={formData.returnReceivedBy}
+                onChange={(e) => onChange({ returnReceivedBy: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="returnDate">Return Date *</Label>
+              <Input
+                id="returnDate"
+                type="date"
+                value={formData.returnDate}
+                onChange={(e) => onChange({ returnDate: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="ammunitionReturned">Ammunition Returned *</Label>
+              <Input
+                id="ammunitionReturned"
+                type="number"
+                min="0"
+                value={formData.ammunitionReturned}
+                onChange={(e) =>
+                  onChange({
+                    ammunitionReturned: parseInt(e.target.value) || 0,
+                  })
+                }
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="conditionOnReturn">Condition on Return *</Label>
+            <Select
+              value={formData.conditionOnReturn}
+              onValueChange={(v) =>
+                onChange({
+                  conditionOnReturn: v as ReturnFormData["conditionOnReturn"],
+                })
+              }
+            >
+              <SelectTrigger id="conditionOnReturn">
+                <SelectValue placeholder="Select condition" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="good">Good</SelectItem>
+                <SelectItem value="damaged">Damaged</SelectItem>
+                <SelectItem value="lost">Lost</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="returnNotes">Return Notes</Label>
+            <Textarea
+              id="returnNotes"
+              placeholder="Notes about the returned weapon or ammunition..."
+              value={formData.notes}
+              onChange={(e) => onChange({ notes: e.target.value })}
+              rows={3}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2 border-t">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isSubmitting}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving Return...
+            </>
+          ) : (
+            <>
+              <PackageCheck className="h-4 w-4 mr-2" /> Save Return
+            </>
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ─── View Record Modal ─────────────────────────────────────────────────────
 
 function ViewRecordModal({
   booking,
   open,
   onOpenChange,
-}: ViewRecordModalProps) {
+}: {
+  booking: RifleBooking | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   if (!booking) return null;
-
-  const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString() : "—");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -324,7 +818,7 @@ function ViewRecordModal({
               <Shield className="h-4 w-4 mr-1" /> Booking Info
             </TabsTrigger>
             <TabsTrigger value="insurance">
-              <ShieldCheck className="h-4 w-4 mr-1" /> Insurance
+              <ShieldCheck className="h-4 w-4 mr-1" /> Issuance
             </TabsTrigger>
             <TabsTrigger value="return">
               <RotateCcw className="h-4 w-4 mr-1" /> Return Info
@@ -342,7 +836,6 @@ function ViewRecordModal({
                 <p>{fmtDate(booking.dateOfBooking)}</p>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-muted-foreground">Type of Rifle</Label>
@@ -353,7 +846,6 @@ function ViewRecordModal({
                 <p>{booking.rifleNumber}</p>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-muted-foreground">Serial Number</Label>
@@ -364,7 +856,6 @@ function ViewRecordModal({
                 <p>{booking.sdNumber}</p>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-muted-foreground">Ammunition Type</Label>
@@ -377,17 +868,14 @@ function ViewRecordModal({
                 <p>{booking.numberOfAmmunition}</p>
               </div>
             </div>
-
             <div>
               <Label className="text-muted-foreground">Type of Duty</Label>
               <p>{booking.typeOfDuty}</p>
             </div>
-
             <div>
               <Label className="text-muted-foreground">Name of Personnel</Label>
               <p className="font-medium">{booking.nameOfPersonnel}</p>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-muted-foreground">Issued By</Label>
@@ -398,7 +886,6 @@ function ViewRecordModal({
                 <p>{booking.receivedBy}</p>
               </div>
             </div>
-
             <div>
               <Label className="text-muted-foreground">Created At</Label>
               <p>{new Date(booking.createdAt).toLocaleString()}</p>
@@ -439,7 +926,7 @@ function ViewRecordModal({
               </>
             ) : (
               <p className="text-muted-foreground text-center py-8">
-                No insurance information available
+                No issuance information available
               </p>
             )}
           </TabsContent>
@@ -447,14 +934,109 @@ function ViewRecordModal({
           <TabsContent value="return" className="space-y-4 pt-4">
             {booking.weaponReturn?.returnDate ? (
               <>
+                {/* Booking snapshot saved at return time */}
+                <div className="rounded-md border bg-muted/20 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Booking Details at Return
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Type of Rifle
+                      </Label>
+                      <p>
+                        {booking.weaponReturn.typeOfRifle ||
+                          booking.typeOfRifle}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Rifle Number
+                      </Label>
+                      <p>
+                        {booking.weaponReturn.rifleNumber ||
+                          booking.rifleNumber}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Serial Number
+                      </Label>
+                      <p className="font-mono">
+                        {booking.weaponReturn.serialNumber ||
+                          booking.serialNumber}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        SD Number
+                      </Label>
+                      <p>{booking.weaponReturn.sdNumber || booking.sdNumber}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Ammunition Type
+                      </Label>
+                      <p>
+                        {booking.weaponReturn.ammunitionType ||
+                          booking.ammunitionType}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Ammo Issued
+                      </Label>
+                      <p>
+                        {booking.weaponReturn.numberOfAmmunition ??
+                          booking.numberOfAmmunition}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Type of Duty
+                      </Label>
+                      <p>
+                        {booking.weaponReturn.typeOfDuty || booking.typeOfDuty}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Personnel
+                      </Label>
+                      <p>
+                        {booking.weaponReturn.nameOfPersonnel ||
+                          booking.nameOfPersonnel}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Issued By
+                      </Label>
+                      <p>{booking.weaponReturn.issuedBy || booking.issuedBy}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground text-xs">
+                        Received By
+                      </Label>
+                      <p>
+                        {booking.weaponReturn.receivedBy || booking.receivedBy}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-muted-foreground">Returned By</Label>
                     <p>{booking.weaponReturn.returnedBy || "—"}</p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Received By</Label>
-                    <p>{booking.weaponReturn.receivedBy || "—"}</p>
+                    <Label className="text-muted-foreground">
+                      Received By (Return)
+                    </Label>
+                    <p>{booking.weaponReturn.returnReceivedBy || "—"}</p>
                   </div>
                 </div>
                 <div>
@@ -471,17 +1053,19 @@ function ViewRecordModal({
                   <Label className="text-muted-foreground">
                     Condition on Return
                   </Label>
-                  <Badge
-                    className={
-                      booking.weaponReturn.conditionOnReturn === "good"
-                        ? "bg-green-100 text-green-800"
-                        : booking.weaponReturn.conditionOnReturn === "damaged"
-                          ? "bg-orange-100 text-orange-800"
-                          : "bg-red-100 text-red-800"
-                    }
-                  >
-                    {booking.weaponReturn.conditionOnReturn}
-                  </Badge>
+                  <div className="mt-1">
+                    <Badge
+                      className={
+                        booking.weaponReturn.conditionOnReturn === "good"
+                          ? "bg-green-100 text-green-800"
+                          : booking.weaponReturn.conditionOnReturn === "damaged"
+                            ? "bg-orange-100 text-orange-800"
+                            : "bg-red-100 text-red-800"
+                      }
+                    >
+                      {booking.weaponReturn.conditionOnReturn}
+                    </Badge>
+                  </div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Notes</Label>
@@ -500,399 +1084,16 @@ function ViewRecordModal({
   );
 }
 
-// ─── Shared form sections (unchanged) ──────────────────────────────────────
-
-function CoreFields({
-  data,
-  onChange,
-  prefix = "",
-}: {
-  data: FormData;
-  onChange: (patch: Partial<FormData>) => void;
-  prefix?: string;
-}) {
-  return (
-    <>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}typeOfRifle`}>Type of Rifle *</Label>
-          <Input
-            id={`${prefix}typeOfRifle`}
-            placeholder="e.g. AK-47, M16"
-            value={data.typeOfRifle}
-            onChange={(e) => onChange({ typeOfRifle: e.target.value })}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}rifleNumber`}>Rifle Number *</Label>
-          <Input
-            id={`${prefix}rifleNumber`}
-            placeholder="e.g. RFL-001"
-            value={data.rifleNumber}
-            onChange={(e) => onChange({ rifleNumber: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}serialNumber`}>Serial Number *</Label>
-          <Input
-            id={`${prefix}serialNumber`}
-            placeholder="Unique serial number"
-            value={data.serialNumber}
-            onChange={(e) => onChange({ serialNumber: e.target.value })}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}sdNumber`}>SD Number *</Label>
-          <Input
-            id={`${prefix}sdNumber`}
-            placeholder="SD Number"
-            value={data.sdNumber}
-            onChange={(e) => onChange({ sdNumber: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}ammunitionType`}>Ammunition Type *</Label>
-          <Input
-            id={`${prefix}ammunitionType`}
-            placeholder="e.g. 7.62mm"
-            value={data.ammunitionType}
-            onChange={(e) => onChange({ ammunitionType: e.target.value })}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}numberOfAmmunition`}>
-            Ammunition Count *
-          </Label>
-          <Input
-            id={`${prefix}numberOfAmmunition`}
-            type="number"
-            min="0"
-            value={data.numberOfAmmunition}
-            onChange={(e) =>
-              onChange({ numberOfAmmunition: parseInt(e.target.value) || 0 })
-            }
-            required
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}dateOfBooking`}>Date of Booking *</Label>
-          <Input
-            id={`${prefix}dateOfBooking`}
-            type="date"
-            value={data.dateOfBooking}
-            onChange={(e) => onChange({ dateOfBooking: e.target.value })}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}typeOfDuty`}>Type of Duty *</Label>
-          <Input
-            id={`${prefix}typeOfDuty`}
-            placeholder="e.g. Patrol, Guard Duty"
-            value={data.typeOfDuty}
-            onChange={(e) => onChange({ typeOfDuty: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <div>
-        <Label htmlFor={`${prefix}nameOfPersonnel`}>Name of Personnel *</Label>
-        <Input
-          id={`${prefix}nameOfPersonnel`}
-          placeholder="Full name"
-          value={data.nameOfPersonnel}
-          onChange={(e) => onChange({ nameOfPersonnel: e.target.value })}
-          required
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}issuedBy`}>Issued By *</Label>
-          <Input
-            id={`${prefix}issuedBy`}
-            placeholder="Issuing officer"
-            value={data.issuedBy}
-            onChange={(e) => onChange({ issuedBy: e.target.value })}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}receivedBy`}>Received By *</Label>
-          <Input
-            id={`${prefix}receivedBy`}
-            placeholder="Receiving officer"
-            value={data.receivedBy}
-            onChange={(e) => onChange({ receivedBy: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-    </>
-  );
-}
-
-function InsuranceFields({
-  data,
-  onChange,
-  prefix = "",
-}: {
-  data: FormData;
-  onChange: (patch: Partial<FormData>) => void;
-  prefix?: string;
-}) {
-  return (
-    <div className="space-y-4 rounded-md border p-4 bg-muted/30">
-      <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-        <ShieldCheck className="h-4 w-4" /> Insurance Details (optional)
-      </p>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}insurancePolicyNumber`}>
-            Policy Number
-          </Label>
-          <Input
-            id={`${prefix}insurancePolicyNumber`}
-            placeholder="e.g. POL-2024-001"
-            value={data.insurancePolicyNumber}
-            onChange={(e) =>
-              onChange({ insurancePolicyNumber: e.target.value })
-            }
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}insuranceProvider`}>Provider</Label>
-          <Input
-            id={`${prefix}insuranceProvider`}
-            placeholder="Insurance provider name"
-            value={data.insuranceProvider}
-            onChange={(e) => onChange({ insuranceProvider: e.target.value })}
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}insuranceCoverageStart`}>
-            Coverage Start
-          </Label>
-          <Input
-            id={`${prefix}insuranceCoverageStart`}
-            type="date"
-            value={data.insuranceCoverageStart}
-            onChange={(e) =>
-              onChange({ insuranceCoverageStart: e.target.value })
-            }
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}insuranceCoverageEnd`}>Coverage End</Label>
-          <Input
-            id={`${prefix}insuranceCoverageEnd`}
-            type="date"
-            value={data.insuranceCoverageEnd}
-            onChange={(e) => onChange({ insuranceCoverageEnd: e.target.value })}
-          />
-        </div>
-      </div>
-      <div>
-        <Label htmlFor={`${prefix}insuranceNotes`}>Insurance Notes</Label>
-        <Textarea
-          id={`${prefix}insuranceNotes`}
-          placeholder="Any relevant insurance notes..."
-          value={data.insuranceNotes}
-          onChange={(e) => onChange({ insuranceNotes: e.target.value })}
-          rows={2}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ReturnFields({
-  data,
-  onChange,
-  prefix = "",
-}: {
-  data: FormData;
-  onChange: (patch: Partial<FormData>) => void;
-  prefix?: string;
-}) {
-  return (
-    <div className="space-y-4 rounded-md border p-4 bg-muted/30">
-      <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-        <RotateCcw className="h-4 w-4" /> Weapon Return Details (optional)
-      </p>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}returnReturnedBy`}>Returned By</Label>
-          <Input
-            id={`${prefix}returnReturnedBy`}
-            placeholder="Name of returning officer"
-            value={data.returnReturnedBy}
-            onChange={(e) => onChange({ returnReturnedBy: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}returnReceivedBy`}>Received By</Label>
-          <Input
-            id={`${prefix}returnReceivedBy`}
-            placeholder="Name of receiving officer"
-            value={data.returnReceivedBy}
-            onChange={(e) => onChange({ returnReceivedBy: e.target.value })}
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor={`${prefix}returnDate`}>Return Date</Label>
-          <Input
-            id={`${prefix}returnDate`}
-            type="date"
-            value={data.returnDate}
-            onChange={(e) => onChange({ returnDate: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor={`${prefix}returnAmmunitionReturned`}>
-            Ammunition Returned
-          </Label>
-          <Input
-            id={`${prefix}returnAmmunitionReturned`}
-            type="number"
-            min="0"
-            value={data.returnAmmunitionReturned}
-            onChange={(e) =>
-              onChange({
-                returnAmmunitionReturned: parseInt(e.target.value) || 0,
-              })
-            }
-          />
-        </div>
-      </div>
-      <div>
-        <Label htmlFor={`${prefix}returnCondition`}>Condition on Return</Label>
-        <Select
-          value={data.returnCondition}
-          onValueChange={(v) =>
-            onChange({
-              returnCondition: v as FormData["returnCondition"],
-            })
-          }
-        >
-          <SelectTrigger id={`${prefix}returnCondition`}>
-            <SelectValue placeholder="Select condition" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="good">Good</SelectItem>
-            <SelectItem value="damaged">Damaged</SelectItem>
-            <SelectItem value="lost">Lost</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor={`${prefix}returnNotes`}>Return Notes</Label>
-        <Textarea
-          id={`${prefix}returnNotes`}
-          placeholder="Notes about the returned weapon/ammunition..."
-          value={data.returnNotes}
-          onChange={(e) => onChange({ returnNotes: e.target.value })}
-          rows={2}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Booking form modal (unchanged) ────────────────────────────────────────
-
-function BookingForm({
-  formData,
-  onChange,
-  onSubmit,
-  onCancel,
-  isEdit,
-}: {
-  formData: FormData;
-  onChange: (patch: Partial<FormData>) => void;
-  onSubmit: (e: React.FormEvent) => void;
-  onCancel: () => void;
-  isEdit: boolean;
-}) {
-  return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <Tabs defaultValue="core">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="core">
-            <Shield className="h-4 w-4 mr-1" /> Booking
-          </TabsTrigger>
-          <TabsTrigger value="insurance">
-            <ShieldCheck className="h-4 w-4 mr-1" /> Insurance
-          </TabsTrigger>
-          <TabsTrigger value="return">
-            <RotateCcw className="h-4 w-4 mr-1" /> Return
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="core" className="space-y-4 pt-2">
-          <CoreFields
-            data={formData}
-            onChange={onChange}
-            prefix={isEdit ? "edit-" : ""}
-          />
-        </TabsContent>
-
-        <TabsContent value="insurance" className="pt-2">
-          <InsuranceFields
-            data={formData}
-            onChange={onChange}
-            prefix={isEdit ? "edit-" : ""}
-          />
-        </TabsContent>
-
-        <TabsContent value="return" className="pt-2">
-          <ReturnFields
-            data={formData}
-            onChange={onChange}
-            prefix={isEdit ? "edit-" : ""}
-          />
-        </TabsContent>
-      </Tabs>
-
-      <div className="flex justify-end gap-2 pt-2 border-t">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">
-          {isEdit ? "Update Booking" : "Create Booking"}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-// ─── Main page content ─────────────────────────────────────────────────────
+// ─── Main Page Content ─────────────────────────────────────────────────────
 
 function RifleBookingContent() {
   const [bookings, setBookings] = useState<RifleBooking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isReturnOpen, setIsReturnOpen] = useState(false);
+  const [isReturnSubmitting, setIsReturnSubmitting] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<RifleBooking | null>(
     null,
   );
@@ -906,15 +1107,21 @@ function RifleBookingContent() {
     total: 0,
     pages: 1,
   });
-  const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
 
-  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const [bookingForm, setBookingForm] =
+    useState<BookingFormData>(EMPTY_BOOKING_FORM);
+  const [returnForm, setReturnForm] =
+    useState<ReturnFormData>(EMPTY_RETURN_FORM);
 
-  // Read initial search param (unchanged behaviour)
+  const deferredSearch = useDeferredValue(searchTerm);
   useSearchParams();
 
-  const patchForm = useCallback((patch: Partial<FormData>) => {
-    setFormData((prev) => ({ ...prev, ...patch }));
+  const patchBookingForm = useCallback((patch: Partial<BookingFormData>) => {
+    setBookingForm((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const patchReturnForm = useCallback((patch: Partial<ReturnFormData>) => {
+    setReturnForm((prev) => ({ ...prev, ...patch }));
   }, []);
 
   const fetchBookings = useCallback(async () => {
@@ -925,17 +1132,17 @@ function RifleBookingContent() {
         page: currentPage.toString(),
         limit: "10",
       });
-      if (deferredSearchTerm) params.append("search", deferredSearchTerm);
+      if (deferredSearch) params.append("search", deferredSearch);
       if (statusFilter !== "all") params.append("status", statusFilter);
 
-      const response = await fetch(`/api/rifle-bookings?${params}`);
-      const data = (await response.json()) as {
+      const res = await fetch(`/api/rifle-bookings?${params}`);
+      const data = (await res.json()) as {
         bookings: RifleBooking[];
         pagination: Pagination;
         error?: string;
       };
 
-      if (response.ok) {
+      if (res.ok) {
         setBookings(data.bookings);
         setPagination(data.pagination);
       } else {
@@ -947,7 +1154,7 @@ function RifleBookingContent() {
       setLoading(false);
       setIsSearching(false);
     }
-  }, [currentPage, deferredSearchTerm, statusFilter]);
+  }, [currentPage, deferredSearch, statusFilter]);
 
   useEffect(() => {
     fetchBookings();
@@ -958,24 +1165,62 @@ function RifleBookingContent() {
     setCurrentPage(1);
   }, []);
 
-  const resetForm = () => {
-    setFormData(EMPTY_FORM);
+  const resetBookingForm = () => {
+    setBookingForm(EMPTY_BOOKING_FORM);
+    setSelectedBooking(null);
+  };
+  const resetReturnForm = () => {
+    setReturnForm(EMPTY_RETURN_FORM);
     setSelectedBooking(null);
   };
 
   const openEditModal = (booking: RifleBooking) => {
     setSelectedBooking(booking);
-    setFormData(bookingToForm(booking));
-    setIsEditModalOpen(true);
+    setBookingForm(bookingToEditForm(booking));
+    setIsEditOpen(true);
   };
 
   const openViewModal = (booking: RifleBooking) => {
     setSelectedBooking(booking);
-    setIsViewModalOpen(true);
+    setIsViewOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const openReturnModal = (booking: RifleBooking) => {
+    setSelectedBooking(booking);
+    setReturnForm(bookingToReturnForm(booking));
+    setIsReturnOpen(true);
+  };
+
+  // ── Create / Update booking ──────────────────────────────────────────────
+  const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const insurance: IInsurance = {};
+    if (bookingForm.insurancePolicyNumber)
+      insurance.policyNumber = bookingForm.insurancePolicyNumber;
+    if (bookingForm.insuranceProvider)
+      insurance.provider = bookingForm.insuranceProvider;
+    if (bookingForm.insuranceCoverageStart)
+      insurance.coverageStartDate = bookingForm.insuranceCoverageStart;
+    if (bookingForm.insuranceCoverageEnd)
+      insurance.coverageEndDate = bookingForm.insuranceCoverageEnd;
+    if (bookingForm.insuranceNotes)
+      insurance.notes = bookingForm.insuranceNotes;
+
+    const payload = {
+      typeOfRifle: bookingForm.typeOfRifle,
+      rifleNumber: bookingForm.rifleNumber,
+      serialNumber: bookingForm.serialNumber,
+      sdNumber: bookingForm.sdNumber,
+      ammunitionType: bookingForm.ammunitionType,
+      numberOfAmmunition: bookingForm.numberOfAmmunition,
+      dateOfBooking: bookingForm.dateOfBooking,
+      typeOfDuty: bookingForm.typeOfDuty,
+      nameOfPersonnel: bookingForm.nameOfPersonnel,
+      issuedBy: bookingForm.issuedBy,
+      receivedBy: bookingForm.receivedBy,
+      insurance,
+    };
 
     const url = selectedBooking
       ? `/api/rifle-bookings/${selectedBooking._id}`
@@ -983,58 +1228,106 @@ function RifleBookingContent() {
     const method = selectedBooking ? "PUT" : "POST";
 
     try {
-      const response = await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formDataToPayload(formData, !!selectedBooking)),
+        body: JSON.stringify(payload),
       });
+      const data = (await res.json()) as { message?: string; error?: string };
 
-      const data = (await response.json()) as {
-        message?: string;
-        error?: string;
-      };
-
-      if (response.ok) {
+      if (res.ok) {
         toast.success(
           data.message ??
-            `Rifle booking ${selectedBooking ? "updated" : "created"} successfully`,
+            `Booking ${selectedBooking ? "updated" : "created"} successfully`,
         );
         await fetchBookings();
-        setIsCreateModalOpen(false);
-        setIsEditModalOpen(false);
-        resetForm();
+        setIsCreateOpen(false);
+        setIsEditOpen(false);
+        resetBookingForm();
       } else {
-        toast.error(data.error ?? "Failed to save rifle booking");
+        toast.error(data.error ?? "Failed to save booking");
       }
     } catch {
-      toast.error("Failed to save rifle booking");
+      toast.error("Failed to save booking");
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this rifle booking?")) return;
+  // ── Save return ──────────────────────────────────────────────────────────
+  const handleReturnSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBooking) return;
+
+    setIsReturnSubmitting(true);
+
+    // Build weaponReturn payload — includes all booking fields as a snapshot
+    const weaponReturn: IWeaponReturn = {
+      // Booking snapshot fields
+      typeOfRifle: returnForm.typeOfRifle,
+      rifleNumber: returnForm.rifleNumber,
+      serialNumber: returnForm.serialNumber,
+      sdNumber: returnForm.sdNumber,
+      ammunitionType: returnForm.ammunitionType,
+      numberOfAmmunition: returnForm.numberOfAmmunition,
+      dateOfBooking: returnForm.dateOfBooking,
+      typeOfDuty: returnForm.typeOfDuty,
+      nameOfPersonnel: returnForm.nameOfPersonnel,
+      issuedBy: returnForm.issuedBy,
+      receivedBy: returnForm.receivedBy,
+      // Return-specific fields
+      returnedBy: returnForm.returnedBy,
+      returnReceivedBy: returnForm.returnReceivedBy,
+      returnDate: returnForm.returnDate,
+      ammunitionReturned: returnForm.ammunitionReturned,
+      ...(returnForm.conditionOnReturn && {
+        conditionOnReturn: returnForm.conditionOnReturn,
+      }),
+      notes: returnForm.notes,
+    };
 
     try {
-      const response = await fetch(`/api/rifle-bookings/${id}`, {
-        method: "DELETE",
+      const res = await fetch(`/api/rifle-bookings/${selectedBooking._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weaponReturn,
+          status: "returned",
+        }),
       });
-      const data = (await response.json()) as {
-        message?: string;
-        error?: string;
-      };
+      const data = (await res.json()) as { message?: string; error?: string };
 
-      if (response.ok) {
-        toast.success(data.message ?? "Rifle booking deleted successfully");
+      if (res.ok) {
+        toast.success(data.message ?? "Return recorded successfully");
         await fetchBookings();
+        setIsReturnOpen(false);
+        resetReturnForm();
       } else {
-        toast.error(data.error ?? "Failed to delete rifle booking");
+        toast.error(data.error ?? "Failed to record return");
       }
     } catch {
-      toast.error("Failed to delete rifle booking");
+      toast.error("Failed to record return");
+    } finally {
+      setIsReturnSubmitting(false);
     }
   };
 
-  const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString() : "—");
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this rifle booking?")) return;
+    try {
+      const res = await fetch(`/api/rifle-bookings/${id}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as { message?: string; error?: string };
+      if (res.ok) {
+        toast.success(data.message ?? "Booking deleted");
+        await fetchBookings();
+      } else {
+        toast.error(data.error ?? "Failed to delete booking");
+      }
+    } catch {
+      toast.error("Failed to delete booking");
+    }
+  };
 
   if (loading && !isSearching) {
     return (
@@ -1051,19 +1344,20 @@ function RifleBookingContent() {
         <div>
           <h1 className="text-3xl font-bold">Rifle Bookings</h1>
           <p className="text-muted-foreground">
-            Manage rifle assignments, insurance, and returns
+            Manage rifle assignments, issuance, and returns
           </p>
         </div>
 
+        {/* Create Booking Dialog */}
         <Dialog
-          open={isCreateModalOpen}
+          open={isCreateOpen}
           onOpenChange={(open) => {
-            setIsCreateModalOpen(open);
-            if (!open) resetForm();
+            setIsCreateOpen(open);
+            if (!open) resetBookingForm();
           }}
         >
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
+            <Button onClick={resetBookingForm}>
               <Plus className="mr-2 h-4 w-4" />
               New Booking
             </Button>
@@ -1072,13 +1366,13 @@ function RifleBookingContent() {
             <DialogHeader>
               <DialogTitle>Create Rifle Booking</DialogTitle>
             </DialogHeader>
-            <BookingForm
-              formData={formData}
-              onChange={patchForm}
-              onSubmit={handleSubmit}
+            <BookingModalForm
+              formData={bookingForm}
+              onChange={patchBookingForm}
+              onSubmit={handleBookingSubmit}
               onCancel={() => {
-                setIsCreateModalOpen(false);
-                resetForm();
+                setIsCreateOpen(false);
+                resetBookingForm();
               }}
               isEdit={false}
             />
@@ -1096,10 +1390,16 @@ function RifleBookingContent() {
             <SearchBar
               value={searchTerm}
               onChange={handleSearchChange}
-              placeholder="Search by booking number, serial, personnel... (type to search)"
+              placeholder="Search by booking number, serial, personnel..."
               isLoading={isSearching}
             />
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => {
+                setStatusFilter(v);
+                setCurrentPage(1);
+              }}
+            >
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -1113,7 +1413,7 @@ function RifleBookingContent() {
           </div>
           {searchTerm && (
             <p className="text-sm text-muted-foreground mt-2">
-              Searching for: "{searchTerm}"
+              Searching for: &ldquo;{searchTerm}&rdquo;
             </p>
           )}
         </CardContent>
@@ -1143,7 +1443,7 @@ function RifleBookingContent() {
                     <th className="text-left p-3">Serial</th>
                     <th className="text-left p-3">Duty</th>
                     <th className="text-left p-3">Booking Date</th>
-                    <th className="text-left p-3">Insurance</th>
+                    <th className="text-left p-3">Issuance</th>
                     <th className="text-left p-3">Return</th>
                     <th className="text-left p-3">Status</th>
                     <th className="text-left p-3">Actions</th>
@@ -1183,6 +1483,7 @@ function RifleBookingContent() {
 
                       <td className="p-3">{fmtDate(booking.dateOfBooking)}</td>
 
+                      {/* Issuance cell */}
                       <td className="p-3">
                         {booking.insurance?.policyNumber ? (
                           <div>
@@ -1206,6 +1507,7 @@ function RifleBookingContent() {
                         )}
                       </td>
 
+                      {/* Return summary cell */}
                       <td className="p-3">
                         {booking.weaponReturn?.returnDate ? (
                           <div>
@@ -1231,8 +1533,7 @@ function RifleBookingContent() {
                             {booking.weaponReturn.ammunitionReturned !==
                               undefined && (
                               <div className="text-xs text-muted-foreground">
-                                Ammo back:{" "}
-                                {booking.weaponReturn.ammunitionReturned}
+                                Ammo: {booking.weaponReturn.ammunitionReturned}
                               </div>
                             )}
                           </div>
@@ -1249,8 +1550,10 @@ function RifleBookingContent() {
                         </Badge>
                       </td>
 
+                      {/* Actions */}
                       <td className="p-3">
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
+                          {/* View */}
                           <Button
                             variant="outline"
                             size="sm"
@@ -1259,6 +1562,8 @@ function RifleBookingContent() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+
+                          {/* Edit */}
                           <Button
                             variant="outline"
                             size="sm"
@@ -1267,11 +1572,27 @@ function RifleBookingContent() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
+
+                          {/* Return — only shown when not yet returned */}
+                          {booking.status !== "returned" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openReturnModal(booking)}
+                              title="Record return"
+                              className="text-green-700 border-green-300 hover:bg-green-50 hover:text-green-800"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          )}
+
+                          {/* Delete */}
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleDelete(booking._id)}
                             title="Delete booking"
+                            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1295,8 +1616,7 @@ function RifleBookingContent() {
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
           >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
+            <ChevronLeft className="h-4 w-4" /> Previous
           </Button>
           <span className="text-sm text-muted-foreground px-2">
             Page {currentPage} of {pagination.pages} &middot; {pagination.total}{" "}
@@ -1310,18 +1630,17 @@ function RifleBookingContent() {
             }
             disabled={currentPage === pagination.pages}
           >
-            Next
-            <ChevronRight className="h-4 w-4" />
+            Next <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       )}
 
-      {/* ── Edit modal ──────────────────────────────────────────────── */}
+      {/* ── Edit Modal ──────────────────────────────────────────────── */}
       <Dialog
-        open={isEditModalOpen}
+        open={isEditOpen}
         onOpenChange={(open) => {
-          setIsEditModalOpen(open);
-          if (!open) resetForm();
+          setIsEditOpen(open);
+          if (!open) resetBookingForm();
         }}
       >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -1335,30 +1654,64 @@ function RifleBookingContent() {
               )}
             </DialogTitle>
           </DialogHeader>
-          <BookingForm
-            formData={formData}
-            onChange={patchForm}
-            onSubmit={handleSubmit}
+          <BookingModalForm
+            formData={bookingForm}
+            onChange={patchBookingForm}
+            onSubmit={handleBookingSubmit}
             onCancel={() => {
-              setIsEditModalOpen(false);
-              resetForm();
+              setIsEditOpen(false);
+              resetBookingForm();
             }}
             isEdit
           />
         </DialogContent>
       </Dialog>
 
-      {/* ─── View modal ──────────────────────────────────────────────── */}
+      {/* ── Return Modal ─────────────────────────────────────────────── */}
+      <Dialog
+        open={isReturnOpen}
+        onOpenChange={(open) => {
+          setIsReturnOpen(open);
+          if (!open) resetReturnForm();
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PackageCheck className="h-5 w-5 text-green-600" />
+              Record Weapon Return
+              {selectedBooking && (
+                <span className="font-mono text-muted-foreground text-sm ml-1">
+                  {selectedBooking.bookingNumber}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <ReturnModalForm
+            formData={returnForm}
+            onChange={patchReturnForm}
+            onSubmit={handleReturnSubmit}
+            onCancel={() => {
+              setIsReturnOpen(false);
+              resetReturnForm();
+            }}
+            bookingNumber={selectedBooking?.bookingNumber ?? ""}
+            isSubmitting={isReturnSubmitting}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* ── View Modal ───────────────────────────────────────────────── */}
       <ViewRecordModal
         booking={selectedBooking}
-        open={isViewModalOpen}
-        onOpenChange={setIsViewModalOpen}
+        open={isViewOpen}
+        onOpenChange={setIsViewOpen}
       />
     </div>
   );
 }
 
-// ─── Page wrapper ──────────────────────────────────────────────────────────
+// ─── Page Wrapper ──────────────────────────────────────────────────────────
 
 export default function RifleBookingPage() {
   return (

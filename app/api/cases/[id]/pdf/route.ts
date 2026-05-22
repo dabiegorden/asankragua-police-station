@@ -8,6 +8,8 @@ import Case from "@/models/Case";
 import { requireAuth } from "@/middleware/auth";
 import { parseAttachments } from "@/lib/parseAttachments";
 import { populateCase } from "@/app/api/cases/route";
+import path from "path";
+import fs from "fs";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -75,22 +77,11 @@ function cap(s?: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/**
- * Extract the display name from an officer field.
- * Works whether the field is:
- *  - a populated object  { fullName, badgeNumber, ... }
- *  - a lean plain object
- *  - still an ObjectId   (population failed)
- *  - null / undefined
- */
 function officerName(o: any): string {
   if (!o) return "—";
-  // Populated object (or lean object with fullName)
   if (typeof o === "object" && o.fullName) {
-    const badge = o.badgeNumber ? ` (${o.badgeNumber})` : "";
-    return `${o.fullName}${badge}`;
+    return `${o.fullName}${o.badgeNumber ? ` (${o.badgeNumber})` : ""}`;
   }
-  // Fallback: it's an un-populated ObjectId-like value
   return "—";
 }
 
@@ -121,10 +112,21 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   const pdfkitModule = require("pdfkit");
   const PDFDocument = pdfkitModule.default ?? pdfkitModule;
 
+  // ── Page constants ────────────────────────────────────────────────────────
+  const PAGE_W = 595.28; // A4 width  (pt)
+  const PAGE_H = 841.89; // A4 height (pt)
+  const ML = 40; // left margin
+  const MR = 40; // right margin
+  const MT = 40; // top margin (content starts here on page 1)
+  const MB = 50; // bottom margin / footer zone
+  const CW = PAGE_W - ML - MR; // 515.28
+  const FOOTER_Y = PAGE_H - MB; // content must stay above this
+
   const doc = new PDFDocument({
     size: "A4",
-    margins: { top: 72, bottom: 60, left: 40, right: 40 },
-    bufferPages: true,
+    // We manage margins manually so pdfkit doesn't auto-add page padding.
+    margins: { top: MT, bottom: MB, left: ML, right: MR },
+    bufferPages: true, // needed for watermark pass at the end
     info: {
       Title: `Case Book — ${caseData.caseNumber || "N/A"}`,
       Author: "Ghana Police Service",
@@ -136,12 +138,21 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
 
-  const pageW = doc.page.width; // 595.28
-  const pageH = doc.page.height; // 841.89
-  const mL = 40;
-  const cW = pageW - mL - 40; // 515.28
+  // ── Logo (optional — if the file is missing we skip gracefully) ───────────
+  let logoBuffer: Buffer | null = null;
+  try {
+    const logoPath = path.join(
+      process.cwd(),
+      "public",
+      "assets",
+      "officer.jpg",
+    );
+    if (fs.existsSync(logoPath)) logoBuffer = fs.readFileSync(logoPath);
+  } catch {
+    /* logo optional */
+  }
 
-  // ── Drawing primitives ──────────────────────────────────────────────────────
+  // ── Drawing primitives ────────────────────────────────────────────────────
 
   function filledRect(
     x: number,
@@ -174,19 +185,12 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   function hLine(y: number, color = "#e2e8f0", lw = 0.5) {
     doc
       .save()
-      .moveTo(mL, y)
-      .lineTo(mL + cW, y)
+      .moveTo(ML, y)
+      .lineTo(ML + CW, y)
       .strokeColor(color)
       .lineWidth(lw)
       .stroke()
       .restore();
-  }
-
-  function need(h: number) {
-    if (doc.y + h > pageH - 70) {
-      doc.addPage();
-      stampHeaderFooter();
-    }
   }
 
   function labelText(text: string, x: number, y: number, w = 120) {
@@ -236,126 +240,290 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       .restore();
   }
 
-  function sectionBand(title: string, color = "#1e3a8a") {
-    need(34);
-    const y = doc.y + 8;
-    filledRect(mL, y, cW, 22, color, 3);
-    doc
-      .save()
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor("#ffffff")
-      .text((title || "").toUpperCase(), mL + 10, y + 7, {
-        width: cW - 20,
-        characterSpacing: 1.2,
-      })
-      .restore();
-    doc.y = y + 30;
-  }
-
-  function stampHeaderFooter() {
-    const savedY = doc.y;
+  // ── Running header / footer stamped on every page ─────────────────────────
+  // Call after addPage() to stamp header/footer, then reset doc.y to the
+  // top content area (MT).
+  function stampPage() {
+    // Running header (top strip)
     doc
       .save()
       .font("Helvetica")
       .fontSize(7)
       .fillColor("#94a3b8")
-      .text("GHANA POLICE SERVICE — DIGITAL CASE BOOK", mL, 22, {
-        width: cW / 2,
+      .text("GHANA POLICE SERVICE — DIGITAL CASE BOOK", ML, 18, {
+        width: CW / 2,
       })
-      .text(caseData.caseNumber || "", mL + cW / 2, 22, {
-        width: cW / 2,
+      .text(caseData.caseNumber || "", ML + CW / 2, 18, {
+        width: CW / 2,
         align: "right",
       })
       .restore();
-    const fY = pageH - 34;
+
+    // Thin rule under header
+    doc
+      .save()
+      .moveTo(ML, 28)
+      .lineTo(ML + CW, 28)
+      .strokeColor("#e2e8f0")
+      .lineWidth(0.4)
+      .stroke()
+      .restore();
+
+    // Footer
     doc
       .save()
       .font("Helvetica-Oblique")
       .fontSize(7)
       .fillColor("#94a3b8")
-      .text("CONFIDENTIAL — FOR OFFICIAL USE ONLY", mL, fY, { width: cW / 2 })
+      .text("CONFIDENTIAL — FOR OFFICIAL USE ONLY", ML, FOOTER_Y + 4, {
+        width: CW / 2,
+      })
       .font("Helvetica")
       .text(
         `Generated by Digital Case Book System · ${new Date().toLocaleDateString("en-GB")}`,
-        mL + cW / 2,
-        fY,
-        { width: cW / 2, align: "right" },
+        ML + CW / 2,
+        FOOTER_Y + 4,
+        { width: CW / 2, align: "right" },
       )
       .restore();
-    doc.y = savedY;
+
+    // Reset cursor to below the running header
+    doc.y = 36;
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // PAGE 1 — COVER HEADER
-  // ────────────────────────────────────────────────────────────────────────────
-  filledRect(mL, 56, cW, 80, "#1e3a8a", 6);
+  // ── Page-break guard ──────────────────────────────────────────────────────
+  // Returns the Y position where drawing should begin.
+  // If there is not enough vertical room, adds a new page first.
+  function ensureSpace(needed: number): number {
+    if (doc.y + needed > FOOTER_Y - 6) {
+      doc.addPage();
+      stampPage();
+    }
+    return doc.y;
+  }
+
+  // ── Section band (coloured header bar) ───────────────────────────────────
+  // Returns the Y immediately below the band so callers can set doc.y.
+  function sectionBand(title: string, color = "#1e3a8a"): number {
+    const BAND_H = 22;
+    ensureSpace(BAND_H + 10);
+    const y = doc.y + 8;
+    filledRect(ML, y, CW, BAND_H, color, 3);
+    doc
+      .save()
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor("#ffffff")
+      .text((title || "").toUpperCase(), ML + 10, y + 7, {
+        width: CW - 20,
+        characterSpacing: 1.2,
+      })
+      .restore();
+    doc.y = y + BAND_H + 6;
+    return doc.y;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PAGE 1 — LETTERHEAD + COVER HEADER
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Outer border for the letterhead block
+  const LETTERHEAD_H = logoBuffer ? 110 : 88;
+  filledRect(ML, 36, CW, LETTERHEAD_H, "#f0f4ff", 4);
+  strokedRect(ML, 36, CW, LETTERHEAD_H, "#1e3a8a", 1);
+
+  // Logo (left side)
+  const LOGO_W = 72;
+  const LOGO_H = 72;
+  const LOGO_X = ML + 12;
+  const LOGO_Y = 36 + (LETTERHEAD_H - LOGO_H) / 2;
+
+  if (logoBuffer) {
+    doc.image(logoBuffer, LOGO_X, LOGO_Y, { width: LOGO_W, height: LOGO_H });
+  }
+
+  // Text block (centred in remaining space)
+  const TEXT_X = logoBuffer ? LOGO_X + LOGO_W + 12 : ML + 12;
+  const TEXT_W = logoBuffer ? CW - LOGO_W - 36 : CW - 24;
+  let textCursor = 36 + 10;
+
   doc
     .save()
     .font("Helvetica-Bold")
-    .fontSize(20)
-    .fillColor("#ffffff")
-    .text("GHANA POLICE SERVICE", mL, 74, { width: cW, align: "center" })
+    .fontSize(13)
+    .fillColor("#1e3a8a")
+    .text("GHANA POLICE SERVICE", TEXT_X, textCursor, {
+      width: TEXT_W,
+      align: "center",
+    })
     .restore();
+  textCursor += 17;
+
   doc
     .save()
-    .font("Helvetica")
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor("#1e3a8a")
+    .text("Ghana Police Station", TEXT_X, textCursor, {
+      width: TEXT_W,
+      align: "center",
+    })
+    .restore();
+  textCursor += 13;
+
+  doc
+    .save()
+    .font("Helvetica-Bold")
     .fontSize(9)
-    .fillColor("#bfdbfe")
-    .text("DIGITAL CASE BOOK — OFFICIAL RECORD", mL, 104, {
-      width: cW,
+    .fillColor("#374151")
+    .text("Asankragwa Police District", TEXT_X, textCursor, {
+      width: TEXT_W,
       align: "center",
-      characterSpacing: 1.4,
     })
+    .restore();
+  textCursor += 12;
+
+  doc
+    .save()
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor("#475569")
+    .text("Post Office Box 8, Asankragwa, Western Region", TEXT_X, textCursor, {
+      width: TEXT_W,
+      align: "center",
+    })
+    .restore();
+  textCursor += 11;
+
+  doc
+    .save()
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor("#475569")
+    .text(
+      "Tel: ...................................................",
+      TEXT_X,
+      textCursor,
+      { width: TEXT_W, align: "center" },
+    )
+    .restore();
+  textCursor += 11;
+
+  doc
+    .save()
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor("#1d4ed8")
+    .text("asankragwadistrict@gmail.com", TEXT_X, textCursor, {
+      width: TEXT_W,
+      align: "center",
+    })
+    .restore();
+
+  doc.y = 36 + LETTERHEAD_H + 8;
+
+  // Blue title banner
+  const BANNER_H = 44;
+  filledRect(ML, doc.y, CW, BANNER_H, "#1e3a8a", 4);
+  doc
+    .save()
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .fillColor("#ffffff")
+    .text("DIGITAL CASE BOOK", ML, doc.y + 6, { width: CW, align: "center" })
     .restore();
   doc
     .save()
     .font("Helvetica")
-    .fontSize(7.5)
-    .fillColor("#93c5fd")
-    .text(`Generated: ${fmt(new Date())}`, mL, 122, {
-      width: cW,
+    .fontSize(8)
+    .fillColor("#bfdbfe")
+    .text("OFFICIAL RECORD — FOR OFFICIAL USE ONLY", ML, doc.y + 24, {
+      width: CW,
       align: "center",
+      characterSpacing: 1,
     })
     .restore();
-  doc.y = 154;
-  stampHeaderFooter();
+  doc.y += BANNER_H + 10;
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // Stamp running header/footer on page 1 (without resetting doc.y)
+  {
+    const saved = doc.y;
+    doc
+      .save()
+      .font("Helvetica")
+      .fontSize(7)
+      .fillColor("#94a3b8")
+      .text("GHANA POLICE SERVICE — DIGITAL CASE BOOK", ML, 18, {
+        width: CW / 2,
+      })
+      .text(caseData.caseNumber || "", ML + CW / 2, 18, {
+        width: CW / 2,
+        align: "right",
+      })
+      .restore();
+    doc
+      .save()
+      .moveTo(ML, 28)
+      .lineTo(ML + CW, 28)
+      .strokeColor("#e2e8f0")
+      .lineWidth(0.4)
+      .stroke()
+      .restore();
+    doc
+      .save()
+      .font("Helvetica-Oblique")
+      .fontSize(7)
+      .fillColor("#94a3b8")
+      .text("CONFIDENTIAL — FOR OFFICIAL USE ONLY", ML, FOOTER_Y + 4, {
+        width: CW / 2,
+      })
+      .font("Helvetica")
+      .text(
+        `Generated by Digital Case Book System · ${new Date().toLocaleDateString("en-GB")}`,
+        ML + CW / 2,
+        FOOTER_Y + 4,
+        { width: CW / 2, align: "right" },
+      )
+      .restore();
+    doc.y = saved;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // CASE IDENTITY BOX
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  ensureSpace(110);
   const idY = doc.y;
-  const idH = 110;
-  filledRect(mL, idY, cW, idH, "#f8fafc", 4);
-  strokedRect(mL, idY, cW, idH, "#cbd5e1", 1);
+  const ID_H = 108;
+  filledRect(ML, idY, CW, ID_H, "#f8fafc", 4);
+  strokedRect(ML, idY, CW, ID_H, "#cbd5e1", 1);
 
-  labelText("Case Number", mL + 12, idY + 10);
+  labelText("Case Number", ML + 12, idY + 10);
   boldText(
     caseData.caseNumber || "N/A",
-    mL + 12,
+    ML + 12,
     idY + 20,
-    cW - 180,
+    CW - 180,
     "#1e3a8a",
     22,
   );
   boldText(
     caseData.title || "(No title)",
-    mL + 12,
+    ML + 12,
     idY + 54,
-    cW - 180,
+    CW - 180,
     "#0f172a",
     11,
   );
   bodyText(
     caseData.description || "(No description)",
-    mL + 12,
-    idY + 70,
-    cW - 180,
+    ML + 12,
+    idY + 69,
+    CW - 180,
     "#475569",
     8.5,
   );
 
-  const rX = mL + cW - 160;
+  const rX = ML + CW - 160;
   labelText("Status", rX, idY + 10, 155);
   boldText(statusLabel(caseData.status), rX, idY + 21, 155, "#1e3a8a", 10);
   labelText("Priority", rX, idY + 46, 155);
@@ -377,11 +545,11 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     8,
   );
 
-  doc.y = idY + idH + 10;
+  doc.y = idY + ID_H + 10;
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // KEY DETAILS GRID
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // KEY DETAILS GRID  (3 rows × 4 columns)
+  // ─────────────────────────────────────────────────────────────────────────
   const gridRows: [string, string][][] = [
     [
       ["Category", cap(caseData.category)],
@@ -406,34 +574,36 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     ],
   ];
 
-  const colW4 = cW / 4;
-  gridRows.forEach((row, ri) => {
-    const rH = 44;
-    need(rH + 2);
+  const COL4 = CW / 4;
+  const ROW_H = 44;
+
+  for (let ri = 0; ri < gridRows.length; ri++) {
+    ensureSpace(ROW_H + 2);
     const rY = doc.y;
-    filledRect(mL, rY, cW, rH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
-    strokedRect(mL, rY, cW, rH, "#e2e8f0", 0.5);
-    row.forEach(([label, value], ci) => {
-      const cx = mL + ci * colW4 + 6;
-      labelText(label, cx, rY + 6, colW4 - 10);
-      bodyText(value || "—", cx, rY + 18, colW4 - 12, "#1e293b", 8);
-    });
-    doc.y = rY + rH;
-  });
+    filledRect(ML, rY, CW, ROW_H, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
+    strokedRect(ML, rY, CW, ROW_H, "#e2e8f0", 0.5);
+    for (let ci = 0; ci < gridRows[ri].length; ci++) {
+      const [label, value] = gridRows[ri][ci];
+      const cx = ML + ci * COL4 + 6;
+      labelText(label, cx, rY + 6, COL4 - 10);
+      bodyText(value || "—", cx, rY + 18, COL4 - 12, "#1e293b", 8);
+    }
+    doc.y = rY + ROW_H;
+  }
   doc.y += 6;
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // WORKFLOW TIMELINE
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   sectionBand("Case Workflow Progress");
-  need(70);
+  ensureSpace(70);
   const tlY = doc.y;
-  const colWt = cW / 4;
+  const colWt = CW / 4;
   const curIdx = STAGE_ORDER.indexOf(caseData.currentStage);
 
   STAGE_ORDER.forEach((stage, idx) => {
     const pal = STAGE_COLORS[stage];
-    const cx = mL + idx * colWt + colWt / 2;
+    const cx = ML + idx * colWt + colWt / 2;
     const isPast = idx < curIdx;
     const isCur = idx === curIdx;
     const circleColor = isCur ? pal.header : isPast ? "#475569" : "#cbd5e1";
@@ -489,16 +659,15 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   });
   doc.y = tlY + 64;
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // DIGITAL CASE BOOK ENTRIES — NCO → CID → SO → DC
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // DIGITAL CASE BOOK ENTRIES  (NCO → CID → SO → DC)
+  // ─────────────────────────────────────────────────────────────────────────
   sectionBand("Digital Case Book — Officer Entries");
 
   const grouped: Record<string, any[]> = { nco: [], cid: [], so: [], dc: [] };
   const allEntries: any[] = Array.isArray(caseData.caseBookEntries)
     ? caseData.caseBookEntries
     : [];
-
   allEntries.forEach((e: any) => {
     const stage = e?.stage || "nco";
     if (grouped[stage]) grouped[stage].push(e);
@@ -512,16 +681,17 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       ? `${entries.length} entr${entries.length === 1 ? "y" : "ies"}`
       : "No entries recorded";
 
-    need(38);
-    const shY = doc.y + 6;
-    filledRect(mL, shY, cW, 24, pal.header, 3);
+    // Stage sub-header
+    ensureSpace(36);
+    const shY = doc.y + 4;
+    filledRect(ML, shY, CW, 22, pal.header, 3);
     doc
       .save()
       .font("Helvetica-Bold")
       .fontSize(9)
       .fillColor("#ffffff")
-      .text(stageLbl.toUpperCase(), mL + 10, shY + 7, {
-        width: cW / 2,
+      .text(stageLbl.toUpperCase(), ML + 10, shY + 7, {
+        width: CW / 2,
         characterSpacing: 0.5,
       })
       .restore();
@@ -530,12 +700,12 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       .font("Helvetica")
       .fontSize(8)
       .fillColor("#bfdbfe")
-      .text(countTxt, mL + cW / 2, shY + 8, {
-        width: cW / 2 - 10,
+      .text(countTxt, ML + CW / 2, shY + 8, {
+        width: CW / 2 - 10,
         align: "right",
       })
       .restore();
-    doc.y = shY + 32;
+    doc.y = shY + 28;
 
     if (entries.length === 0) {
       doc
@@ -545,12 +715,12 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         .fillColor("#94a3b8")
         .text(
           "No case book entries were recorded at this stage.",
-          mL + 12,
+          ML + 12,
           doc.y,
-          { width: cW - 24 },
+          { width: CW - 24 },
         )
         .restore();
-      doc.y += 14;
+      doc.y += 16;
       continue;
     }
 
@@ -558,9 +728,6 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       const typeLabel =
         ENTRY_TYPE_LABELS[entry.entryType] || entry.entryType || "Remark";
 
-      // ── Resolve officer name from addedBy ─────────────────────────────────
-      // After .lean() + .populate(), entry.addedBy is a plain JS object with fullName.
-      // We check both patterns defensively.
       const addedByObj = entry.addedBy;
       let oName = "Unknown Officer";
       let badgeStr = "";
@@ -575,25 +742,30 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       const content = (entry.content || "").trim() || "(No content)";
       const addedAt = entry.addedAt || entry.createdAt;
 
-      const estimatedLines = Math.ceil(content.length / 78) + 2;
-      const boxH = Math.max(80, estimatedLines * 13 + 58);
+      // Accurately measure the text height pdfkit will use
+      const measured = doc.heightOfString(content, {
+        width: CW - 28,
+        lineGap: 2.5,
+      });
+      // Box = pill row (30 pt) + divider (2 pt) + content + bottom notice (18 pt) + padding (12 pt)
+      const boxH = Math.max(80, 30 + 2 + measured + 18 + 12);
 
-      need(boxH + 14);
+      ensureSpace(boxH + 14);
       const eY = doc.y + 4;
 
-      filledRect(mL, eY, cW, boxH, pal.light, 4);
-      strokedRect(mL, eY, cW, boxH, pal.accent, 1.5);
-      filledRect(mL, eY, 5, boxH, pal.header, 2); // left accent bar
+      filledRect(ML, eY, CW, boxH, pal.light, 4);
+      strokedRect(ML, eY, CW, boxH, pal.accent, 1.5);
+      filledRect(ML, eY, 5, boxH, pal.header, 2); // left accent bar
 
       // Entry type pill
-      filledRect(mL + 14, eY + 9, 110, 16, pal.accent, 3);
+      filledRect(ML + 14, eY + 7, 114, 16, pal.accent, 3);
       doc
         .save()
         .font("Helvetica-Bold")
         .fontSize(7)
         .fillColor("#ffffff")
-        .text(typeLabel.toUpperCase(), mL + 16, eY + 12, {
-          width: 106,
+        .text(typeLabel.toUpperCase(), ML + 16, eY + 10, {
+          width: 110,
           characterSpacing: 0.3,
         })
         .restore();
@@ -601,9 +773,9 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       // Officer name + role
       boldText(
         `${oName}  (${oRole})${badgeStr}`,
-        mL + 132,
-        eY + 10,
-        cW - 270,
+        ML + 136,
+        eY + 8,
+        CW - 274,
         pal.header,
         8.5,
       );
@@ -614,22 +786,22 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         .font("Helvetica")
         .fontSize(7.5)
         .fillColor("#64748b")
-        .text(fmt(addedAt), mL + cW - 130, eY + 10, {
+        .text(fmt(addedAt), ML + CW - 130, eY + 8, {
           width: 120,
           align: "right",
         })
         .restore();
 
-      // Divider — use a plain solid color, NOT hex+opacity string concatenation
-      hLine(eY + 30, pal.accent, 0.5);
+      // Divider
+      hLine(eY + 28, pal.accent, 0.5);
 
-      // Entry content
+      // Content
       doc
         .save()
         .font("Helvetica")
         .fontSize(9)
         .fillColor("#1e293b")
-        .text(content, mL + 14, eY + 36, { width: cW - 28, lineGap: 2.5 })
+        .text(content, ML + 14, eY + 34, { width: CW - 28, lineGap: 2.5 })
         .restore();
 
       // Locked notice
@@ -640,21 +812,20 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         .fillColor("#94a3b8")
         .text(
           "Entry locked — immutable after submission",
-          mL + 14,
+          ML + 14,
           eY + boxH - 13,
-          { width: cW - 28 },
+          { width: CW - 28 },
         )
         .restore();
 
       doc.y = eY + boxH + 8;
     }
-
     doc.y += 4;
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // OFFICIAL HANDOFF NOTES
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   const handoffs = [
     {
       label: "NCO Referral Note",
@@ -687,25 +858,28 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     sectionBand("Official Handoff Notes", "#374151");
 
     for (const hn of handoffs) {
-      const tLines = Math.ceil((hn.val || "").length / 88) + 1;
-      const boxH = Math.max(52, tLines * 12 + 30);
-      need(boxH + 14);
+      const measured = doc.heightOfString(hn.val || "", {
+        width: CW - 28,
+        lineGap: 1.5,
+      });
+      const boxH = Math.max(50, measured + 36);
 
+      ensureSpace(boxH + 14);
       const hnY = doc.y + 4;
-      filledRect(mL, hnY, cW, boxH, "#f8fafc", 3);
-      strokedRect(mL, hnY, cW, boxH, "#e2e8f0", 1);
-      filledRect(mL, hnY, 5, boxH, hn.color, 2);
+      filledRect(ML, hnY, CW, boxH, "#f8fafc", 3);
+      strokedRect(ML, hnY, CW, boxH, "#e2e8f0", 1);
+      filledRect(ML, hnY, 5, boxH, hn.color, 2);
 
-      boldText(hn.label.toUpperCase(), mL + 14, hnY + 10, cW - 24, hn.color, 8);
-      bodyText(hn.val || "", mL + 14, hnY + 26, cW - 28, "#334155", 9);
+      boldText(hn.label.toUpperCase(), ML + 14, hnY + 10, CW - 24, hn.color, 8);
+      bodyText(hn.val || "", ML + 14, hnY + 26, CW - 28, "#334155", 9);
 
       doc.y = hnY + boxH + 8;
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // INTERNAL NOTES
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   const notes: any[] = Array.isArray(caseData.notes) ? caseData.notes : [];
   if (notes.length) {
     sectionBand("Internal Notes", "#374151");
@@ -719,20 +893,23 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       const noteRole =
         ROLE_LABELS[note.roleSnapshot] || note.roleSnapshot || "—";
       const noteContent = (note.content || "").trim() || "(No content)";
-      const lines = Math.ceil(noteContent.length / 78) + 1;
-      const boxH = Math.max(50, lines * 13 + 28);
+      const measured = doc.heightOfString(noteContent, {
+        width: CW - 28,
+        lineGap: 1.5,
+      });
+      const boxH = Math.max(50, measured + 36);
 
-      need(boxH + 10);
+      ensureSpace(boxH + 10);
       const nY = doc.y + 4;
-      filledRect(mL, nY, cW, boxH, "#f8fafc", 3);
-      strokedRect(mL, nY, cW, boxH, "#e2e8f0", 1);
-      filledRect(mL, nY, 5, boxH, "#64748b", 2);
+      filledRect(ML, nY, CW, boxH, "#f8fafc", 3);
+      strokedRect(ML, nY, CW, boxH, "#e2e8f0", 1);
+      filledRect(ML, nY, 5, boxH, "#64748b", 2);
 
       boldText(
         `${noteName}  (${noteRole})`,
-        mL + 14,
+        ML + 14,
         nY + 10,
-        cW * 0.6,
+        CW * 0.6,
         "#374151",
         8.5,
       );
@@ -741,20 +918,20 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         .font("Helvetica")
         .fontSize(7.5)
         .fillColor("#64748b")
-        .text(fmt(note.addedAt), mL + cW - 130, nY + 10, {
+        .text(fmt(note.addedAt), ML + CW - 130, nY + 10, {
           width: 120,
           align: "right",
         })
         .restore();
-      bodyText(noteContent, mL + 14, nY + 26, cW - 28, "#334155", 9);
+      bodyText(noteContent, ML + 14, nY + 26, CW - 28, "#334155", 9);
 
       doc.y = nY + boxH + 6;
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // SUSPECTS & WITNESSES
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   const suspects = Array.isArray(caseData.suspects) ? caseData.suspects : [];
   const witnesses = Array.isArray(caseData.witnesses) ? caseData.witnesses : [];
 
@@ -767,10 +944,10 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       widths: number[],
       rowFn: (item: any) => string[],
     ) {
-      need(30);
+      ensureSpace(28);
       const hY = doc.y;
-      filledRect(mL, hY, cW, 22, "#374151");
-      let xPos = mL;
+      filledRect(ML, hY, CW, 22, "#374151");
+      let xPos = ML;
       headers.forEach((h, i) => {
         doc
           .save()
@@ -782,15 +959,25 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         xPos += widths[i];
       });
       doc.y = hY + 24;
+
       items.forEach((item, ri) => {
         const cells = rowFn(item);
-        const maxLen = Math.max(...cells.map((c) => (c || "").length));
-        const rowH = Math.max(24, Math.ceil(maxLen / 36) * 11 + 14);
-        need(rowH + 2);
+        // Measure each cell accurately
+        const maxH = Math.max(
+          ...cells.map((c) =>
+            doc.heightOfString(c || "—", {
+              width: widths[cells.indexOf(c)] - 10,
+              lineGap: 1.5,
+            }),
+          ),
+        );
+        const rowH = Math.max(22, maxH + 14);
+
+        ensureSpace(rowH + 2);
         const rY = doc.y;
-        filledRect(mL, rY, cW, rowH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
-        strokedRect(mL, rY, cW, rowH, "#e2e8f0", 0.5);
-        let cx = mL;
+        filledRect(ML, rY, CW, rowH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
+        strokedRect(ML, rY, CW, rowH, "#e2e8f0", 0.5);
+        let cx = ML;
         cells.forEach((cell, i) => {
           bodyText(cell || "—", cx + 5, rY + 7, widths[i] - 10, "#334155", 8);
           cx += widths[i];
@@ -801,19 +988,19 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     }
 
     if (suspects.length) {
-      need(26);
+      ensureSpace(24);
       doc
         .save()
         .font("Helvetica-Bold")
         .fontSize(8.5)
         .fillColor("#dc2626")
-        .text("SUSPECTS", mL, doc.y, { characterSpacing: 1 })
+        .text("SUSPECTS", ML, doc.y, { characterSpacing: 1 })
         .restore();
       doc.y += 6;
       drawTable(
         suspects,
         ["NAME", "AGE", "DESCRIPTION", "ADDRESS"],
-        [cW * 0.25, cW * 0.1, cW * 0.35, cW * 0.3],
+        [CW * 0.25, CW * 0.1, CW * 0.35, CW * 0.3],
         (s: any) => [
           s.name || "—",
           s.age ? String(s.age) : "—",
@@ -824,27 +1011,27 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     }
 
     if (witnesses.length) {
-      need(26);
+      ensureSpace(24);
       doc
         .save()
         .font("Helvetica-Bold")
         .fontSize(8.5)
         .fillColor("#16a34a")
-        .text("WITNESSES", mL, doc.y, { characterSpacing: 1 })
+        .text("WITNESSES", ML, doc.y, { characterSpacing: 1 })
         .restore();
       doc.y += 6;
       drawTable(
         witnesses,
         ["NAME", "PHONE", "STATEMENT"],
-        [cW * 0.25, cW * 0.2, cW * 0.55],
+        [CW * 0.25, CW * 0.2, CW * 0.55],
         (w: any) => [w.name || "—", w.phone || "—", w.statement || "—"],
       );
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // AUDIT TRAIL
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   const auditLog: any[] = Array.isArray(caseData.auditLog)
     ? caseData.auditLog
     : [];
@@ -852,7 +1039,7 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   if (auditLog.length) {
     sectionBand("Audit Trail", "#374151");
 
-    const aW = [cW * 0.22, cW * 0.34, cW * 0.24, cW * 0.2];
+    const aW = [CW * 0.22, CW * 0.34, CW * 0.24, CW * 0.2];
     const aHeaders = [
       "DATE & TIME",
       "ACTION / DETAILS",
@@ -860,10 +1047,10 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       "STAGE TRANSITION",
     ];
 
-    need(28);
+    ensureSpace(26);
     const ahY = doc.y;
-    filledRect(mL, ahY, cW, 22, "#1e3a8a");
-    let axPos = mL;
+    filledRect(ML, ahY, CW, 22, "#1e3a8a");
+    let axPos = ML;
     aHeaders.forEach((h, i) => {
       doc
         .save()
@@ -877,13 +1064,11 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     doc.y = ahY + 24;
 
     auditLog.forEach((e: any, i: number) => {
-      // Resolve performedBy the same safe way
       const pbObj = e.performedBy;
       const officerStr =
         pbObj && typeof pbObj === "object" && pbObj.fullName
           ? pbObj.fullName
           : "System";
-
       const transition =
         e.fromStage && e.toStage && e.fromStage !== e.toStage
           ? `${(e.fromStage || "").toUpperCase()} → ${(e.toStage || "").toUpperCase()}`
@@ -896,14 +1081,18 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
       const cells = [fmt(e.performedAt), actionLabel, officerStr, transition];
-      const maxLen = Math.max(...cells.map((c) => (c || "").length));
-      const rowH = Math.max(22, Math.ceil(maxLen / 36) * 11 + 10);
+      const measured = Math.max(
+        ...cells.map((c, ci) =>
+          doc.heightOfString(c || "—", { width: aW[ci] - 10, lineGap: 1.5 }),
+        ),
+      );
+      const rowH = Math.max(22, measured + 14);
 
-      need(rowH + 2);
+      ensureSpace(rowH + 2);
       const rY = doc.y;
-      filledRect(mL, rY, cW, rowH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
-      strokedRect(mL, rY, cW, rowH, "#e2e8f0", 0.5);
-      let cx = mL;
+      filledRect(ML, rY, CW, rowH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
+      strokedRect(ML, rY, CW, rowH, "#e2e8f0", 0.5);
+      let cx = ML;
       cells.forEach((cell, ci) => {
         bodyText(cell, cx + 5, rY + 6, aW[ci] - 10, "#334155", 8);
         cx += aW[ci];
@@ -913,9 +1102,9 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     doc.y += 8;
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // CASE TIMELINE
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   const timestamps = [
     { label: "Case Reported", val: caseData.dateReported },
     { label: "Referred to CID", val: caseData.referredAt },
@@ -931,13 +1120,13 @@ async function buildPDF(caseData: any): Promise<Buffer> {
 
     timestamps.forEach((t, i) => {
       const tH = 22;
-      need(tH + 2);
+      ensureSpace(tH + 2);
       const tY = doc.y;
-      filledRect(mL, tY, cW, tH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
-      strokedRect(mL, tY, cW, tH, "#e2e8f0", 0.5);
+      filledRect(ML, tY, CW, tH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
+      strokedRect(ML, tY, CW, tH, "#e2e8f0", 0.5);
       doc
         .save()
-        .circle(mL + 14, tY + 11, 4)
+        .circle(ML + 14, tY + 11, 4)
         .fill(
           i === 0
             ? "#1e40af"
@@ -946,12 +1135,12 @@ async function buildPDF(caseData: any): Promise<Buffer> {
               : "#64748b",
         )
         .restore();
-      boldText(t.label, mL + 26, tY + 6, cW * 0.38, "#374151", 9);
+      boldText(t.label, ML + 26, tY + 6, CW * 0.38, "#374151", 9);
       bodyText(
         fmt(t.val as string),
-        mL + cW * 0.4,
+        ML + CW * 0.4,
         tY + 6,
-        cW * 0.58,
+        CW * 0.58,
         "#475569",
         9,
       );
@@ -960,28 +1149,28 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     doc.y += 10;
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // CERTIFICATION + SIGNATURE BLOCK
-  // ────────────────────────────────────────────────────────────────────────────
-  need(170);
-  doc.y += 14;
+  // ─────────────────────────────────────────────────────────────────────────
+  ensureSpace(170);
+  doc.y += 12;
   hLine(doc.y, "#cbd5e1", 1);
   doc.y += 10;
 
   const certY = doc.y;
 
-  boldText("CERTIFICATION OF AUTHENTICITY", mL, certY, cW * 0.55, "#374151", 8);
+  boldText("CERTIFICATION OF AUTHENTICITY", ML, certY, CW * 0.55, "#374151", 8);
   bodyText(
     "This is a certified digital copy of the official case record generated by the Ghana Police Service Digital Case Book System. This document is an accurate representation of all entries made by authorised officers.",
-    mL,
+    ML,
     certY + 14,
-    cW * 0.55,
+    CW * 0.55,
     "#64748b",
     7.5,
   );
 
-  const dX = mL + cW * 0.6;
-  const dW = cW * 0.4;
+  const dX = ML + CW * 0.6;
+  const dW = CW * 0.4;
   doc
     .save()
     .font("Helvetica-Bold")
@@ -1022,9 +1211,9 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   hLine(doc.y);
   doc.y += 16;
 
-  // Signature blocks
-  need(80);
-  const sigW = cW / 4;
+  // Signature blocks (4 across)
+  ensureSpace(80);
+  const sigW = CW / 4;
   const sigY = doc.y;
   const sigOfficers = [
     { role: "NCO / Station Orderly", officer: caseData.loggedBy },
@@ -1034,7 +1223,7 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   ];
 
   sigOfficers.forEach(({ role, officer }, i) => {
-    const sx = mL + i * sigW;
+    const sx = ML + i * sigW;
     const oObj =
       officer && typeof officer === "object" && officer.fullName
         ? officer
@@ -1076,16 +1265,16 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     );
   });
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // WATERMARK — stamp every buffered page
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // WATERMARK  — stamp every buffered page
+  // ─────────────────────────────────────────────────────────────────────────
   doc.flushPages();
   const { start, count } = doc.bufferedPageRange();
   for (let pi = start; pi < start + count; pi++) {
     doc.switchToPage(pi);
     doc
       .save()
-      .translate(pageW / 2, pageH / 2)
+      .translate(PAGE_W / 2, PAGE_H / 2)
       .rotate(-45)
       .font("Helvetica-Bold")
       .fontSize(64)
@@ -1113,8 +1302,6 @@ export async function GET(req: NextRequest, { params }: Params) {
   try {
     await connectDB();
 
-    // Use .lean() with full population so every sub-document addedBy / performedBy
-    // is resolved to a plain JS object containing { fullName, badgeNumber, role }.
     const caseData = await Case.findById(id)
       .populate("loggedBy", "fullName email role badgeNumber")
       .populate("assignedOfficer", "fullName email role badgeNumber")
@@ -1123,7 +1310,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       .populate("caseBookEntries.addedBy", "fullName role badgeNumber")
       .populate("auditLog.performedBy", "fullName role badgeNumber")
       .populate("notes.addedBy", "fullName role badgeNumber")
-      .lean(); // ← lean() gives plain JS objects; populated refs are plain objects too
+      .lean();
 
     if (!caseData) {
       return NextResponse.json({ error: "Case not found" }, { status: 404 });

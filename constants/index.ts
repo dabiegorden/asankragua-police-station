@@ -22,7 +22,53 @@ export { Navbar, Hero, Footer, AdminNavbar, AdminSidebar };
 export const AdminSidebarLinks = [
   { id: 1, url: "/admin-dashboard", title: "Dashboard", icon: Home },
   { id: 2, url: "/admin-dashboard/users", title: "Users", icon: Users },
-  { id: 12, url: "/", title: "Home", icon: HomeIcon },
+  { id: 3, url: "/admin-dashboard/cases", title: "Cases", icon: FileText },
+  { id: 4, url: "/admin-dashboard/personnel", title: "Personnel", icon: Users },
+  {
+    id: 5,
+    url: "/admin-dashboard/prisoners",
+    title: "Prisoners",
+    icon: UserCheck,
+  },
+  // { id: 5, url: "/admin-dashboard/evidence", title: "Evidence", icon: Package },
+  { id: 6, url: "/admin-dashboard/vehicles", title: "Vehicles", icon: Car },
+  {
+    id: 7,
+    url: "/admin-dashboard/schedule",
+    title: "Schedule",
+    icon: Calendar,
+  },
+  {
+    id: 8,
+    url: "/admin-dashboard/rifle",
+    title: "Rifle Booking",
+    icon: Calendar,
+  },
+  {
+    id: 33,
+    url: "/admin-dashboard/duty-role-star",
+    title: "Duty Role & Star",
+    icon: FileText,
+  },
+  {
+    id: 10,
+    url: "/admin-dashboard/messages",
+    title: "Messages",
+    icon: MessageSquare,
+  },
+  {
+    id: 11,
+    url: "/admin-dashboard/contact",
+    title: "Contacts",
+    icon: Contact2Icon,
+  },
+  {
+    id: 12,
+    url: "/admin-dashboard/reports",
+    title: "Reports",
+    icon: BarChart3,
+  },
+  { id: 13, url: "/", title: "Home", icon: HomeIcon },
 ];
 
 export const CidLinks = [
@@ -57,6 +103,12 @@ export const DcLinks = [
     icon: Calendar,
   },
   {
+    id: 20,
+    url: "/dc-dashboard/duty-role-star",
+    title: "Duty Role & Star",
+    icon: FileText,
+  },
+  {
     id: 10,
     url: "/dc-dashboard/messages",
     title: "Messages",
@@ -75,16 +127,63 @@ export const DcLinks = [
 export const StationOfficerLinks = [
   { id: 1, url: "/so-dashboard", title: "Dashboard", icon: Home },
   { id: 2, url: "/so-dashboard/cases", title: "Cases", icon: FileText },
-  { id: 3, url: "/so-dashboard/profile", title: "Profile", icon: Users },
-  { id: 4, url: "/", title: "Home", icon: HomeIcon },
+  { id: 3, url: "/so-dashboard/personnel", title: "Personnel", icon: Users },
+  {
+    id: 4,
+    url: "/so-dashboard/prisoners",
+    title: "Prisoners",
+    icon: UserCheck,
+  },
+  // { id: 5, url: "/so-dashboard/evidence", title: "Evidence", icon: Package },
+  { id: 5, url: "/so-dashboard/vehicles", title: "Vehicles", icon: Car },
+  {
+    id: 6,
+    url: "/so-dashboard/schedule",
+    title: "Schedule",
+    icon: Calendar,
+  },
+  {
+    id: 7,
+    url: "/so-dashboard/rifle",
+    title: "Rifle Booking",
+    icon: Calendar,
+  },
+  {
+    id: 23,
+    url: "/so-dashboard/duty-role-star",
+    title: "Duty Role & Star",
+    icon: FileText,
+  },
+  {
+    id: 8,
+    url: "/so-dashboard/messages",
+    title: "Messages",
+    icon: MessageSquare,
+  },
+  {
+    id: 9,
+    url: "/so-dashboard/contact",
+    title: "Contacts",
+    icon: Contact2Icon,
+  },
+  { id: 10, url: "/so-dashboard/reports", title: "Reports", icon: BarChart3 },
+  { id: 11, url: "/", title: "Home", icon: HomeIcon },
+  { id: 13, url: "/so-dashboard/profile", title: "Profile", icon: Users },
+  { id: 14, url: "/", title: "Home", icon: HomeIcon },
 ];
 
 export const NcoLinks = [
   { id: 1, url: "/nco-dashboard", title: "Dashboard", icon: Home },
   { id: 2, url: "/nco-dashboard/cases", title: "Cases", icon: FileText },
-  { id: 3, url: "/nco-dashboard/personnel", title: "Personnel", icon: Users },
   {
-    id: 4,
+    id: 3,
+    url: "/nco-dashboard/duty-role-star",
+    title: "Duty Role & Star",
+    icon: FileText,
+  },
+  { id: 4, url: "/nco-dashboard/personnel", title: "Personnel", icon: Users },
+  {
+    id: 5,
     url: "/nco-dashboard/prisoners",
     title: "Person Detained/Immates",
     icon: UserCheck,
@@ -116,6 +215,7 @@ export const NcoLinks = [
     icon: Contact2Icon,
   },
   { id: 9, url: "/nco-dashboard/reports", title: "Reports", icon: BarChart3 },
+  { id: 13, url: "/nco-dashboard/profile", title: "Profile", icon: Users },
   { id: 12, url: "/", title: "Home", icon: HomeIcon },
 ];
 

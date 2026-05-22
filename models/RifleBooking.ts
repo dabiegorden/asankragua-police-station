@@ -11,8 +11,22 @@ export interface IInsurance {
 }
 
 export interface IWeaponReturn {
-  returnedBy?: string;
+  // ── Booking snapshot (captured/editable at return time) ──────────────────
+  typeOfRifle?: string;
+  rifleNumber?: string;
+  serialNumber?: string;
+  sdNumber?: string;
+  ammunitionType?: string;
+  numberOfAmmunition?: number;
+  dateOfBooking?: Date;
+  typeOfDuty?: string;
+  nameOfPersonnel?: string;
+  issuedBy?: string;
   receivedBy?: string;
+  // ── Return-specific fields ────────────────────────────────────────────────
+  returnedBy?: string;
+  /** Officer who receives the weapon back at the armoury */
+  returnReceivedBy?: string;
   returnDate?: Date;
   ammunitionReturned?: number;
   conditionOnReturn?: "good" | "damaged" | "lost";
@@ -34,9 +48,13 @@ export interface IRifleBooking extends Document {
   nameOfPersonnel: string;
   issuedBy: string;
   receivedBy: string;
-  /** Insurance details for the weapon taken out on duty */
+  /** Insurance / issuance details for the weapon taken out on duty */
   insurance?: IInsurance;
-  /** Return details — populated when the weapon comes back from the duty post */
+  /**
+   * Return details — populated when the weapon comes back from the duty post.
+   * Includes a snapshot of the core booking fields (as they stood at return
+   * time) so the return record is self-contained.
+   */
   weaponReturn?: IWeaponReturn;
   status: "active" | "returned" | "overdue";
   createdAt: Date;
@@ -58,8 +76,21 @@ const InsuranceSchema = new Schema<IInsurance>(
 
 const WeaponReturnSchema = new Schema<IWeaponReturn>(
   {
-    returnedBy: { type: String },
+    // ── Booking snapshot fields ────────────────────────────────────────────
+    typeOfRifle: { type: String },
+    rifleNumber: { type: String },
+    serialNumber: { type: String },
+    sdNumber: { type: String },
+    ammunitionType: { type: String },
+    numberOfAmmunition: { type: Number, min: 0 },
+    dateOfBooking: { type: Date },
+    typeOfDuty: { type: String },
+    nameOfPersonnel: { type: String },
+    issuedBy: { type: String },
     receivedBy: { type: String },
+    // ── Return-specific fields ─────────────────────────────────────────────
+    returnedBy: { type: String },
+    returnReceivedBy: { type: String },
     returnDate: { type: Date },
     ammunitionReturned: { type: Number, min: 0 },
     conditionOnReturn: {

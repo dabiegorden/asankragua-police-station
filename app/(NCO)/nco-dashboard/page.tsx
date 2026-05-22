@@ -152,6 +152,7 @@ const DEFAULT_STATS: IDashboardStats = {
   inProgressContacts: 0,
   resolvedContacts: 0,
   urgentContacts: 0,
+  scopedToStation: "true",
 };
 
 // ─── Dashboard component ──────────────────────────────────────────────────
