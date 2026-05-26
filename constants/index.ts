@@ -32,12 +32,12 @@ export const AdminSidebarLinks = [
   },
   // { id: 5, url: "/admin-dashboard/evidence", title: "Evidence", icon: Package },
   { id: 6, url: "/admin-dashboard/vehicles", title: "Vehicles", icon: Car },
-  {
-    id: 7,
-    url: "/admin-dashboard/schedule",
-    title: "Schedule",
-    icon: Calendar,
-  },
+  // {
+  //   id: 7,
+  //   url: "/admin-dashboard/schedule",
+  //   title: "Schedule",
+  //   icon: Calendar,
+  // },
   {
     id: 8,
     url: "/admin-dashboard/rifle",
@@ -90,12 +90,12 @@ export const DcLinks = [
   },
   // { id: 5, url: "/dc-dashboard/evidence", title: "Evidence", icon: Package },
   { id: 6, url: "/dc-dashboard/vehicles", title: "Vehicles", icon: Car },
-  {
-    id: 7,
-    url: "/dc-dashboard/schedule",
-    title: "Schedule",
-    icon: Calendar,
-  },
+  // {
+  //   id: 7,
+  //   url: "/dc-dashboard/schedule",
+  //   title: "Schedule",
+  //   icon: Calendar,
+  // },
   {
     id: 8,
     url: "/dc-dashboard/rifle",
@@ -136,12 +136,12 @@ export const StationOfficerLinks = [
   },
   // { id: 5, url: "/so-dashboard/evidence", title: "Evidence", icon: Package },
   { id: 5, url: "/so-dashboard/vehicles", title: "Vehicles", icon: Car },
-  {
-    id: 6,
-    url: "/so-dashboard/schedule",
-    title: "Schedule",
-    icon: Calendar,
-  },
+  // {
+  //   id: 6,
+  //   url: "/so-dashboard/schedule",
+  //   title: "Schedule",
+  //   icon: Calendar,
+  // },
   {
     id: 7,
     url: "/so-dashboard/rifle",
@@ -190,12 +190,12 @@ export const NcoLinks = [
   },
   // { id: 5, url: "/nco-dashboard/evidence", title: "Evidence", icon: Package },
   { id: 6, url: "/nco-dashboard/vehicles", title: "Vehicles", icon: Car },
-  {
-    id: 7,
-    url: "/nco-dashboard/schedule",
-    title: "Schedule",
-    icon: Calendar,
-  },
+  // {
+  //   id: 7,
+  //   url: "/nco-dashboard/schedule",
+  //   title: "Schedule",
+  //   icon: Calendar,
+  // },
   {
     id: 8,
     url: "/nco-dashboard/rifle",
