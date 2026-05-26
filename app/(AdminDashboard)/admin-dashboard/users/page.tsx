@@ -37,7 +37,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type UserRole = "admin" | "nco" | "cid" | "so" | "dc";
+type UserRole = "admin" | "nco" | "cid" | "so";
 
 interface SystemUser {
   _id: string;
@@ -49,7 +49,6 @@ interface SystemUser {
   createdAt: string;
 }
 
-// Matches the shape returned by GET /api/stations
 interface Station {
   id: string;
   name: string;
@@ -77,10 +76,10 @@ interface UserFormData {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ROLES: UserRole[] = ["admin", "nco", "cid", "so", "dc"];
+const ROLES: UserRole[] = ["admin", "nco", "cid", "so"];
 
 /** These roles must be assigned to a station */
-const STATION_ROLES: UserRole[] = ["nco", "cid", "so", "dc"];
+const STATION_ROLES: UserRole[] = ["nco", "cid", "so"];
 
 const EMPTY_FORM: UserFormData = {
   fullName: "",
@@ -96,7 +95,6 @@ const ROLE_COLORS: Record<UserRole, string> = {
   nco: "bg-blue-100 text-blue-800 border-blue-200",
   cid: "bg-indigo-100 text-indigo-800 border-indigo-200",
   so: "bg-purple-100 text-purple-800 border-purple-200",
-  dc: "bg-amber-100 text-amber-800 border-amber-200",
 };
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -104,7 +102,6 @@ const ROLE_LABELS: Record<UserRole, string> = {
   nco: "NCO / Station Orderly",
   cid: "CID Investigator",
   so: "Station Officer",
-  dc: "District Commander",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -125,7 +122,7 @@ function authHeaders(extra: Record<string, string> = {}): HeadersInit {
 // ─── Station picker sub-component ─────────────────────────────────────────────
 
 interface StationPickerProps {
-  value: string; // currently selected stationId, or ""
+  value: string;
   onChange: (stationId: string) => void;
   stations: Station[];
   loadingStations: boolean;
@@ -287,7 +284,6 @@ function UserForm({
             onValueChange={(v) =>
               onChange({
                 role: v as UserRole,
-                // Clear station when switching to admin
                 stationId: v === "admin" ? "" : formData.stationId,
               })
             }
@@ -312,7 +308,7 @@ function UserForm({
           </Select>
         </div>
 
-        {/* Station — fetched from /api/stations */}
+        {/* Station */}
         <div className="space-y-1.5">
           <Label className="flex items-center gap-1.5">
             <Building2 size={12} className="text-gray-500" />
@@ -331,7 +327,6 @@ function UserForm({
             required={needsStation}
           />
 
-          {/* Contextual hints */}
           {needsStation &&
             !formData.stationId &&
             !loadingStations &&
@@ -384,9 +379,8 @@ function UserForm({
         </p>
         <p className="text-xs text-blue-600 leading-relaxed">
           Each officer's records (cases, arrests, etc.) are tagged to their
-          station. The District Commander uses this to filter and view what each
-          station is doing. Officers at the same station share the same workflow
-          — NCO logs a case, CID investigates, SO reviews, DC decides.
+          station. Officers at the same station share the same workflow — NCO
+          logs a case, CID investigates, SO reviews, DC decides.
         </p>
       </div>
     </div>
@@ -396,17 +390,13 @@ function UserForm({
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function UsersManagementPage() {
-  // ── State ──────────────────────────────────────────────────────────────────
-
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Station data — fetched once, shared across filters + forms
   const [stations, setStations] = useState<Station[]>([]);
   const [loadingStations, setLoadingStations] = useState(true);
   const [stationsError, setStationsError] = useState<string | null>(null);
 
-  // Filters
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [stationFilter, setStationFilter] = useState("all");
@@ -414,41 +404,29 @@ export default function UsersManagementPage() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<Pagination | null>(null);
 
-  // Dialogs
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Forms
   const [createForm, setCreateForm] = useState<UserFormData>(EMPTY_FORM);
   const [editForm, setEditForm] = useState<UserFormData>(EMPTY_FORM);
 
-  // ── Fetch stations from GET /api/stations ────────────────────────────────────
-  // The endpoint requires an authenticated user with role "dc" or "admin".
-  // We pass the JWT via the Authorization header using authHeaders().
+  // ── Fetch stations ────────────────────────────────────────────────────────────
 
   const fetchStations = useCallback(async () => {
     setLoadingStations(true);
     setStationsError(null);
     try {
-      const res = await fetch("/api/stations", {
-        headers: authHeaders(),
-      });
+      const res = await fetch("/api/stations", { headers: authHeaders() });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401 || res.status === 403)
         throw new Error("Not authorised to load stations");
-      }
-      if (!res.ok) {
-        throw new Error(`Station fetch failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`Station fetch failed (${res.status})`);
 
       const data: StationsApiResponse = await res.json();
-
-      // Validate shape — data.stations must be an array
-      if (!Array.isArray(data.stations)) {
+      if (!Array.isArray(data.stations))
         throw new Error("Unexpected response format from /api/stations");
-      }
 
       setStations(data.stations);
     } catch (err: any) {
@@ -463,7 +441,7 @@ export default function UsersManagementPage() {
     fetchStations();
   }, [fetchStations]);
 
-  // ── Fetch users ──────────────────────────────────────────────────────────────
+  // ── Fetch users ───────────────────────────────────────────────────────────────
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -496,12 +474,11 @@ export default function UsersManagementPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Reset to page 1 on filter change
   useEffect(() => {
     setPage(1);
   }, [search, roleFilter, stationFilter, activeFilter]);
 
-  // ── Create user ──────────────────────────────────────────────────────────────
+  // ── Create user ───────────────────────────────────────────────────────────────
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -546,7 +523,7 @@ export default function UsersManagementPage() {
     }
   }
 
-  // ── Edit user ────────────────────────────────────────────────────────────────
+  // ── Edit user ─────────────────────────────────────────────────────────────────
 
   function openEditModal(u: SystemUser) {
     setEditingUser(u);
@@ -596,7 +573,7 @@ export default function UsersManagementPage() {
     }
   }
 
-  // ── Delete user ──────────────────────────────────────────────────────────────
+  // ── Delete user ───────────────────────────────────────────────────────────────
 
   async function handleDelete(u: SystemUser) {
     if (!confirm(`Delete ${u.fullName}? This cannot be undone.`)) return;
@@ -617,14 +594,10 @@ export default function UsersManagementPage() {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
-
   function stationName(id?: string | null): string {
     if (!id) return "—";
     return stations.find((s) => s.id === id)?.name ?? id;
   }
-
-  // ─── Shared form props ────────────────────────────────────────────────────────
 
   const sharedFormProps = {
     stations,
@@ -646,7 +619,6 @@ export default function UsersManagementPage() {
           </p>
         </div>
 
-        {/* Station load error banner */}
         {stationsError && (
           <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             <AlertCircle size={14} />
@@ -660,7 +632,6 @@ export default function UsersManagementPage() {
           </div>
         )}
 
-        {/* Create dialog */}
         <Dialog
           open={isCreateOpen}
           onOpenChange={(open) => {
@@ -710,7 +681,6 @@ export default function UsersManagementPage() {
       <Card>
         <CardContent className="pt-4 pb-4">
           <div className="flex flex-wrap gap-3">
-            {/* Search */}
             <div className="relative flex-1 min-w-48">
               <Search
                 size={14}
@@ -724,7 +694,6 @@ export default function UsersManagementPage() {
               />
             </div>
 
-            {/* Role filter */}
             <Select value={roleFilter} onValueChange={setRoleFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="All Roles" />
@@ -739,7 +708,6 @@ export default function UsersManagementPage() {
               </SelectContent>
             </Select>
 
-            {/* Station filter — driven by the same fetched stations list */}
             <Select value={stationFilter} onValueChange={setStationFilter}>
               <SelectTrigger className="w-52">
                 {loadingStations ? (
@@ -764,7 +732,6 @@ export default function UsersManagementPage() {
               </SelectContent>
             </Select>
 
-            {/* Active filter */}
             <Select value={activeFilter} onValueChange={setActiveFilter}>
               <SelectTrigger className="w-36">
                 <SelectValue placeholder="All Status" />
@@ -824,7 +791,10 @@ export default function UsersManagementPage() {
                       </td>
                       <td className="py-2.5 px-3">
                         <span
-                          className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border ${ROLE_COLORS[u.role]}`}
+                          className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border ${
+                            ROLE_COLORS[u.role] ??
+                            "bg-gray-100 text-gray-700 border-gray-200"
+                          }`}
                         >
                           {u.role.toUpperCase()}
                         </span>
@@ -877,7 +847,6 @@ export default function UsersManagementPage() {
             </div>
           )}
 
-          {/* Pagination */}
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
               <p className="text-xs text-gray-500">

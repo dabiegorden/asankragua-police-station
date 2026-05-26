@@ -27,7 +27,7 @@ export const AdminSidebarLinks = [
   {
     id: 5,
     url: "/admin-dashboard/prisoners",
-    title: "Prisoners",
+    title: "Person Detained/Immates",
     icon: UserCheck,
   },
   // { id: 5, url: "/admin-dashboard/evidence", title: "Evidence", icon: Package },
@@ -46,8 +46,8 @@ export const AdminSidebarLinks = [
   },
   {
     id: 33,
-    url: "/admin-dashboard/duty-role-star",
-    title: "Duty Role & Star",
+    url: "/admin-dashboard/duty-roster",
+    title: "Duty Roster",
     icon: FileText,
   },
   {
@@ -85,7 +85,7 @@ export const DcLinks = [
   {
     id: 4,
     url: "/dc-dashboard/prisoners",
-    title: "Prisoners",
+    title: "Person Detained/Immates",
     icon: UserCheck,
   },
   // { id: 5, url: "/dc-dashboard/evidence", title: "Evidence", icon: Package },
@@ -104,8 +104,8 @@ export const DcLinks = [
   },
   {
     id: 20,
-    url: "/dc-dashboard/duty-role-star",
-    title: "Duty Role & Star",
+    url: "/dc-dashboard/duty-roster",
+    title: "Duty Roster",
     icon: FileText,
   },
   {
@@ -131,7 +131,7 @@ export const StationOfficerLinks = [
   {
     id: 4,
     url: "/so-dashboard/prisoners",
-    title: "Prisoners",
+    title: "Person Detained/Immates",
     icon: UserCheck,
   },
   // { id: 5, url: "/so-dashboard/evidence", title: "Evidence", icon: Package },
@@ -150,8 +150,8 @@ export const StationOfficerLinks = [
   },
   {
     id: 23,
-    url: "/so-dashboard/duty-role-star",
-    title: "Duty Role & Star",
+    url: "/so-dashboard/duty-roster",
+    title: "Duty Roster",
     icon: FileText,
   },
   {
@@ -177,8 +177,8 @@ export const NcoLinks = [
   { id: 2, url: "/nco-dashboard/cases", title: "Cases", icon: FileText },
   {
     id: 3,
-    url: "/nco-dashboard/duty-role-star",
-    title: "Duty Role & Star",
+    url: "/nco-dashboard/duty-roster",
+    title: "Duty Roster",
     icon: FileText,
   },
   { id: 4, url: "/nco-dashboard/personnel", title: "Personnel", icon: Users },
