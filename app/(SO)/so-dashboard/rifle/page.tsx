@@ -508,9 +508,9 @@ function InsuranceFields({
   const p = idPrefix;
   return (
     <div className="space-y-4 rounded-md border p-4 bg-muted/30">
-      <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+      {/* <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
         <ShieldCheck className="h-4 w-4" /> Issuance Details (optional)
-      </p>
+      </p> */}
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor={`${p}insurancePolicyNumber`}>Policy Number</Label>
@@ -555,7 +555,7 @@ function InsuranceFields({
           />
         </div>
       </div>
-      <div>
+      {/* <div>
         <Label htmlFor={`${p}insuranceNotes`}>Issuance Notes</Label>
         <Textarea
           id={`${p}insuranceNotes`}
@@ -564,7 +564,7 @@ function InsuranceFields({
           onChange={(e) => onChange({ insuranceNotes: e.target.value })}
           rows={2}
         />
-      </div>
+      </div> */}
     </div>
   );
 }
@@ -591,9 +591,9 @@ function BookingModalForm({
           <TabsTrigger value="core">
             <Shield className="h-4 w-4 mr-1" /> Booking Info
           </TabsTrigger>
-          <TabsTrigger value="insurance">
+          {/* <TabsTrigger value="insurance">
             <ShieldCheck className="h-4 w-4 mr-1" /> Issuance
-          </TabsTrigger>
+          </TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="core" className="space-y-4 pt-2">
@@ -817,9 +817,9 @@ function ViewRecordModal({
             <TabsTrigger value="core">
               <Shield className="h-4 w-4 mr-1" /> Booking Info
             </TabsTrigger>
-            <TabsTrigger value="insurance">
+            {/* <TabsTrigger value="insurance">
               <ShieldCheck className="h-4 w-4 mr-1" /> Issuance
-            </TabsTrigger>
+            </TabsTrigger> */}
             <TabsTrigger value="return">
               <RotateCcw className="h-4 w-4 mr-1" /> Return Info
             </TabsTrigger>
@@ -1344,7 +1344,7 @@ function RifleBookingContent() {
         <div>
           <h1 className="text-3xl font-bold">Rifle Bookings</h1>
           <p className="text-muted-foreground">
-            Manage rifle assignments, issuance, and returns
+            Manage rifle assignments, and returns
           </p>
         </div>
 
@@ -1443,7 +1443,7 @@ function RifleBookingContent() {
                     <th className="text-left p-3">Serial</th>
                     <th className="text-left p-3">Duty</th>
                     <th className="text-left p-3">Booking Date</th>
-                    <th className="text-left p-3">Issuance</th>
+                    {/* <th className="text-left p-3">Issuance</th> */}
                     <th className="text-left p-3">Return</th>
                     <th className="text-left p-3">Status</th>
                     <th className="text-left p-3">Actions</th>
