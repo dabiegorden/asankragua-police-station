@@ -5,6 +5,7 @@ import Vehicle from "@/models/Vehicle";
 
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
+// ── GET /api/vehicles ──────────────────────────────────────────────────────
 async function getVehicles(request: NextRequest) {
   const { user, error } = requireAuth(request);
   if (error) return error;
@@ -24,10 +25,8 @@ async function getVehicles(request: NextRequest) {
     const search = searchParams.get("search");
 
     const query: Record<string, any> = {};
-
     if (status && status !== "all") query.status = status;
     if (type && type !== "all") query.type = type;
-
     if (search) {
       query.$or = [
         { vehicleNumber: { $regex: search, $options: "i" } },
@@ -41,6 +40,11 @@ async function getVehicles(request: NextRequest) {
     const [vehicles, total] = await Promise.all([
       Vehicle.find(query)
         .populate("currentDriver", "firstName lastName badgeNumber")
+        .populate(
+          "dispatchHistory.dispatchedTo",
+          "firstName lastName badgeNumber",
+        )
+        .populate("dispatchHistory.dispatchedBy", "firstName lastName")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -65,6 +69,7 @@ async function getVehicles(request: NextRequest) {
   }
 }
 
+// ── POST /api/vehicles ─────────────────────────────────────────────────────
 async function createVehicle(request: NextRequest) {
   const { user, error } = requireAuth(request);
   if (error) return error;
@@ -91,9 +96,7 @@ async function createVehicle(request: NextRequest) {
 
     if (!licensePlate || !make || !model || !type) {
       return NextResponse.json(
-        {
-          error: "Required fields: licensePlate, make, model, type",
-        },
+        { error: "Required fields: licensePlate, make, model, type" },
         { status: 400 },
       );
     }
@@ -131,17 +134,15 @@ async function createVehicle(request: NextRequest) {
     );
   } catch (err) {
     console.error("Create vehicle error:", err);
-
     if (err instanceof Error && err.name === "ValidationError") {
       const messages = Object.values((err as any).errors).map(
-        (e: any) => (e as any).message,
+        (e: any) => e.message,
       );
       return NextResponse.json(
         { error: `Validation failed: ${messages.join(", ")}` },
         { status: 400 },
       );
     }
-
     return NextResponse.json(
       { error: "Failed to create vehicle" },
       { status: 500 },

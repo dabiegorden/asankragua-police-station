@@ -26,14 +26,20 @@ interface UpdatePrisonerArrestDetails {
   charges?: Array<{ charge: string; severity?: "misdemeanor" | "felony" }>;
 }
 
-interface UpdatePrisonerBody extends Partial<Omit<IPrisoner, "dateOfBirth" | "arrestDetails">> {
+interface UpdatePrisonerBody extends Partial<
+  Omit<IPrisoner, "dateOfBirth" | "arrestDetails">
+> {
   dateOfBirth?: string;
   arrestDetails?: UpdatePrisonerArrestDetails;
   address?: IAddress;
   emergencyContact?: IEmergencyContact;
   medicalInfo?: IMedicalInfo;
   action?: "release" | "add-visitor";
-  releaseType?: "bail" | "court-order" | "charges-dropped" | "sentence-completed";
+  releaseType?:
+    | "bail"
+    | "court-order"
+    | "charges-dropped"
+    | "sentence-completed";
   bailAmount?: number;
   notes?: string;
   visitorName?: string;
@@ -121,14 +127,14 @@ export async function PUT(
     // Validate status if provided
     if (
       updateData.status &&
-      !["Jailed", "Bailed", "Remanded", "Transferred"].includes(
+      !["Custody", "Jailed", "Bailed", "Remanded", "Transferred"].includes(
         updateData.status,
       )
     ) {
       return NextResponse.json(
         {
           error:
-            "Invalid status. Must be one of: Jailed, Bailed, Remanded, Transferred",
+            "Invalid status. Must be one of: Custody, Jailed, Bailed, Remanded, Transferred",
         },
         { status: 400 },
       );
@@ -188,7 +194,10 @@ export async function PUT(
 
       // Handle caseId / otherCase update
       if ("caseId" in updateData) {
-        const newCaseId = updateData.caseId as unknown as string | mongoose.Types.ObjectId | null;
+        const newCaseId = updateData.caseId as unknown as
+          | string
+          | mongoose.Types.ObjectId
+          | null;
         if (newCaseId === "others") {
           prisoner.caseId = null;
           prisoner.otherCase = otherCase?.trim() ?? "";
@@ -226,7 +235,12 @@ export async function PUT(
       }
 
       // Apply remaining top-level fields
-      const NESTED = ["arrestDetails", "address", "emergencyContact", "medicalInfo"];
+      const NESTED = [
+        "arrestDetails",
+        "address",
+        "emergencyContact",
+        "medicalInfo",
+      ];
       Object.keys(updateData).forEach((key) => {
         if (
           updateData[key as keyof typeof updateData] !== undefined &&

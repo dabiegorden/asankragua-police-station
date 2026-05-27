@@ -97,6 +97,7 @@ interface VisitorLog {
 interface ReleaseDetails {
   releaseDate?: string;
   releaseType?:
+    | "Custody"
     | "bail"
     | "court-order"
     | "charges-dropped"
@@ -136,7 +137,7 @@ interface Prisoner {
   caseId?: Case | string | null;
   otherCase?: string;
   cellNumber: "Male" | "Female";
-  status: "Jailed" | "Bailed" | "Remanded" | "Transferred";
+  status: "Custody" | "Jailed" | "Bailed" | "Remanded" | "Transferred";
   releaseDetails?: ReleaseDetails;
   briefNote: string;
   medicalInfo: MedicalInfo;
@@ -179,7 +180,7 @@ interface PrisonerFormData {
   /** free-text description shown when caseId === "others" */
   otherCase: string;
   cellNumber: "Male" | "Female";
-  status: "Jailed" | "Bailed" | "Remanded" | "Transferred";
+  status: "Custody" | "Jailed" | "Bailed" | "Remanded" | "Transferred";
   briefNote: string;
   medicalInfo: {
     allergies: string[];
@@ -193,18 +194,20 @@ interface PrisonerFormData {
 // ==================== Constants ====================
 
 const GENDERS: ("male" | "female" | "other")[] = ["male", "female", "other"];
-const STATUSES: ("Jailed" | "Bailed" | "Remanded" | "Transferred")[] = [
-  "Jailed",
-  "Bailed",
-  "Remanded",
-  "Transferred",
-];
+const STATUSES: (
+  | "Custody"
+  | "Jailed"
+  | "Bailed"
+  | "Remanded"
+  | "Transferred"
+)[] = ["Custody", "Jailed", "Bailed", "Remanded", "Transferred"];
 const CELL_NUMBERS: ("Male" | "Female")[] = ["Male", "Female"];
 
 const getToken = (): string | null => localStorage.getItem("token");
 
 const getStatusColor = (status: Prisoner["status"]): string => {
   const colors: Record<Prisoner["status"], string> = {
+    Custody: "bg-yellow-100 text-yellow-800",
     Jailed: "bg-red-100 text-red-800",
     Bailed: "bg-green-100 text-green-800",
     Remanded: "bg-blue-100 text-blue-800",

@@ -34,7 +34,10 @@ type PersonnelRole =
   | "District Commander"
   | "Station Officer"
   | "Counter NCO"
-  | "Counter SO";
+  | "Counter SO"
+  | "CID"
+  | "Detective";
+
 type PersonnelRank =
   | "Constable"
   | "Lance Corporal"
@@ -214,6 +217,8 @@ const ROLES: PersonnelRole[] = [
   "Station Officer",
   "Counter NCO",
   "Counter SO",
+  "CID",
+  "Detective",
 ];
 
 // ==================== Helper Functions ====================
@@ -236,6 +241,8 @@ const getRoleColor = (role: PersonnelRole): string => {
     "Station Officer": "bg-blue-100 text-blue-800",
     "Counter NCO": "bg-orange-100 text-orange-800",
     "Counter SO": "bg-indigo-100 text-indigo-800",
+    CID: "bg-green-100 text-green-800",
+    Detective: "bg-blue-100 text-blue-800",
   };
   return colors[role] || "bg-gray-100 text-gray-800";
 };

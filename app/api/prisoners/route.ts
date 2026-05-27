@@ -112,7 +112,7 @@ interface CreatePrisonerBody {
   caseId?: string;
   otherCase?: string;
   cellNumber: "Male" | "Female";
-  status?: "Jailed" | "Bailed" | "Remanded" | "Transferred";
+  status?: "Custody" | "Jailed" | "Bailed" | "Remanded" | "Transferred";
   briefNote?: string;
   medicalInfo?: IMedicalInfo;
   personalEffects?: IPersonalEffect[];
@@ -200,12 +200,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Validate status
     if (
       status &&
-      !["Jailed", "Bailed", "Remanded", "Transferred"].includes(status)
+      !["Custody", "Jailed", "Bailed", "Remanded", "Transferred"].includes(
+        status,
+      )
     ) {
       return NextResponse.json(
         {
           error:
-            "Invalid status. Must be one of: Jailed, Bailed, Remanded, Transferred",
+            "Invalid status. Must be one of: Custody, Jailed, Bailed, Remanded, Transferred",
         },
         { status: 400 },
       );
@@ -240,7 +242,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         caseId && caseId !== "none" && caseId !== "others" ? caseId : null,
       otherCase: caseId === "others" ? (otherCase?.trim() ?? "") : "",
       cellNumber,
-      status: status || "Jailed",
+      status: status || "Custody",
       briefNote: briefNote || "",
       medicalInfo: medicalInfo || {},
       personalEffects: personalEffects || [],
@@ -266,7 +268,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (err instanceof Error && err.name === "ValidationError") {
       const validationError = err as mongoose.Error.ValidationError;
       const errors = Object.values(validationError.errors).map(
-        (e: mongoose.Error.ValidatorError | mongoose.Error.CastError) => e.message,
+        (e: mongoose.Error.ValidatorError | mongoose.Error.CastError) =>
+          e.message,
       );
       return NextResponse.json(
         { error: `Validation failed: ${errors.join(", ")}` },

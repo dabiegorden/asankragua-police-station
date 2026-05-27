@@ -81,7 +81,7 @@ export interface IPrisoner extends Document {
   caseId?: mongoose.Types.ObjectId | null;
   otherCase?: string;
   cellNumber: "Male" | "Female";
-  status: "Jailed" | "Bailed" | "Remanded" | "Transferred";
+  status: "Custody" | "Jailed" | "Bailed" | "Remanded" | "Transferred";
   releaseDetails?: IReleaseDetails;
   briefNote?: string;
   medicalInfo?: IMedicalInfo;
@@ -189,8 +189,8 @@ const PrisonerSchema = new Schema<IPrisoner>(
     },
     status: {
       type: String,
-      enum: ["Jailed", "Bailed", "Remanded", "Transferred"],
-      default: "Jailed",
+      enum: ["Custody", "Jailed", "Bailed", "Remanded", "Transferred"],
+      default: "Custody",
     },
     releaseDetails: {
       releaseDate: Date,

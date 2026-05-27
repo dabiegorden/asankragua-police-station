@@ -9,13 +9,27 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+// Helper: fully populate a vehicle document
+async function populateVehicle(id: string) {
+  return Vehicle.findById(id)
+    .populate("currentDriver", "firstName lastName badgeNumber email")
+    .populate(
+      "dispatchHistory.dispatchedTo",
+      "firstName lastName badgeNumber email",
+    )
+    .populate("dispatchHistory.dispatchedBy", "firstName lastName")
+    .populate("assignmentHistory.assignedTo", "firstName lastName badgeNumber")
+    .populate("fuelHistory.filledBy", "firstName lastName")
+    .populate("returnHistory.returnedBy", "firstName lastName");
+}
+
+// ── GET /api/vehicles/[id] ─────────────────────────────────────────────────
 async function getVehicleById(
   request: NextRequest,
   context: RouteContext,
 ): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
-
   if (!ALLOWED_ROLES.includes(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -23,20 +37,10 @@ async function getVehicleById(
   const { id } = await context.params;
   try {
     await connectDB();
-
-    const vehicle = await Vehicle.findById(id)
-      .populate("currentDriver", "firstName lastName badgeNumber email")
-      .populate(
-        "assignmentHistory.assignedTo",
-        "firstName lastName badgeNumber",
-      )
-      .populate("fuelHistory.filledBy", "firstName lastName")
-      .populate("returnHistory.returnedBy", "firstName lastName");
-
+    const vehicle = await populateVehicle(id);
     if (!vehicle) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
     }
-
     return NextResponse.json({ vehicle });
   } catch (err) {
     console.error("Get vehicle by ID error:", err);
@@ -47,13 +51,13 @@ async function getVehicleById(
   }
 }
 
+// ── PUT /api/vehicles/[id] ─────────────────────────────────────────────────
 async function updateVehicle(
   request: NextRequest,
   context: RouteContext,
 ): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
-
   if (!ALLOWED_ROLES.includes(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -70,7 +74,114 @@ async function updateVehicle(
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
     }
 
-    if (action === "add-maintenance") {
+    // ── Dispatch vehicle to an operation ───────────────────────────────────
+    if (action === "dispatch-vehicle") {
+      const {
+        // linked user (optional)
+        dispatchedToUserId,
+        // manual driver details (all optional)
+        driverName,
+        driverBadgeNumber,
+        driverPhone,
+        driverEmail,
+        driverRank,
+        driverUnit,
+        // operation info (all optional)
+        destination,
+        operationName,
+        operationType,
+        purpose,
+        expectedReturnDate,
+        notes: dispatchNotes,
+      } = updateData;
+
+      vehicle.dispatchHistory.push({
+        dispatchedTo: dispatchedToUserId || null,
+        driverDetails: {
+          name: driverName || "",
+          badgeNumber: driverBadgeNumber || "",
+          phone: driverPhone || "",
+          email: driverEmail || "",
+          rank: driverRank || "",
+          unit: driverUnit || "",
+        },
+        destination: destination || "",
+        operationName: operationName || "",
+        operationType: operationType || "patrol",
+        purpose: purpose || "",
+        dispatchedDate: new Date(),
+        expectedReturnDate: expectedReturnDate
+          ? new Date(expectedReturnDate)
+          : null,
+        startMileage: vehicle.mileage,
+        dispatchedBy: user.userId,
+        notes: dispatchNotes || "",
+      });
+
+      // If a linked user was supplied, track them as current driver
+      if (dispatchedToUserId) {
+        vehicle.currentDriver = dispatchedToUserId;
+      }
+      vehicle.status = "in-use";
+    }
+
+    // ── Return vehicle ─────────────────────────────────────────────────────
+    else if (action === "return-vehicle") {
+      const {
+        location,
+        driverName,
+        duty,
+        fuelLevelOnReturn,
+        returnTime,
+        conditionNotes,
+        endMileage,
+      } = updateData;
+
+      if (!location || !driverName || !duty) {
+        return NextResponse.json(
+          {
+            error:
+              "location, driverName and duty are required to return a vehicle",
+          },
+          { status: 400 },
+        );
+      }
+
+      // Close the last open dispatch record
+      const lastDispatch =
+        vehicle.dispatchHistory[vehicle.dispatchHistory.length - 1];
+      if (lastDispatch && !lastDispatch.returnedDate) {
+        lastDispatch.returnedDate = new Date();
+        if (endMileage) lastDispatch.endMileage = endMileage;
+      }
+
+      // Close legacy assignment record if present
+      const lastAssignment =
+        vehicle.assignmentHistory[vehicle.assignmentHistory.length - 1];
+      if (lastAssignment && !lastAssignment.returnedDate) {
+        lastAssignment.returnedDate = new Date();
+        if (endMileage) lastAssignment.endMileage = endMileage;
+      }
+
+      vehicle.returnHistory.push({
+        returnedDate: new Date(),
+        location,
+        driverName,
+        duty,
+        fuelLevelOnReturn: fuelLevelOnReturn || "",
+        returnTime: returnTime || "",
+        conditionNotes: conditionNotes || "",
+        endMileage: endMileage || null,
+        returnedBy: user.userId,
+      });
+
+      vehicle.currentDriver = null;
+      vehicle.status = "available";
+      if (endMileage) vehicle.mileage = endMileage;
+    }
+
+    // ── Add maintenance record ─────────────────────────────────────────────
+    else if (action === "add-maintenance") {
       vehicle.maintenanceHistory.push({
         date: new Date(updateData.date),
         type: updateData.maintenanceType,
@@ -82,7 +193,10 @@ async function updateVehicle(
           ? new Date(updateData.nextServiceDue)
           : undefined,
       });
-    } else if (action === "add-fuel") {
+    }
+
+    // ── Add fuel record ────────────────────────────────────────────────────
+    else if (action === "add-fuel") {
       vehicle.fuelHistory.push({
         amount: updateData.amount,
         cost: updateData.cost,
@@ -92,7 +206,10 @@ async function updateVehicle(
       if (updateData.newFuelLevel !== undefined) {
         vehicle.fuelLevel = updateData.newFuelLevel;
       }
-    } else if (action === "assign-driver") {
+    }
+
+    // ── Legacy assign-driver (kept for backward-compat) ───────────────────
+    else if (action === "assign-driver") {
       vehicle.currentDriver = updateData.driverId;
       vehicle.status = "in-use";
       vehicle.assignmentHistory.push({
@@ -101,50 +218,28 @@ async function updateVehicle(
         purpose: updateData.purpose || "Patrol duty",
         startMileage: vehicle.mileage,
       });
-    } else if (action === "return-vehicle") {
-      // Update last open assignment
-      const lastAssignment =
-        vehicle.assignmentHistory[vehicle.assignmentHistory.length - 1];
-      if (lastAssignment && !lastAssignment.returnedDate) {
-        lastAssignment.returnedDate = new Date();
-        lastAssignment.endMileage = updateData.endMileage;
-      }
-      vehicle.currentDriver = null;
-      vehicle.status = "available";
-      if (updateData.endMileage) {
-        vehicle.mileage = updateData.endMileage;
-      }
+    }
 
-      // Log a full return record
-      vehicle.returnHistory.push({
-        returnedDate: new Date(),
-        location: updateData.location,
-        driverName: updateData.driverName,
-        duty: updateData.duty,
-        fuelLevelOnReturn: updateData.fuelLevelOnReturn || "",
-        returnTime: updateData.returnTime || "",
-        conditionNotes: updateData.conditionNotes || "",
-        returnedBy: user.userId,
-      });
-    } else {
-      // Regular field update
+    // ── Generic field update ───────────────────────────────────────────────
+    else {
+      const PROTECTED = [
+        "_id",
+        "vehicleNumber",
+        "dispatchHistory",
+        "returnHistory",
+        "assignmentHistory",
+        "fuelHistory",
+        "maintenanceHistory",
+      ];
       Object.keys(updateData).forEach((key) => {
-        if (updateData[key] !== undefined) {
+        if (!PROTECTED.includes(key) && updateData[key] !== undefined) {
           vehicle[key] = updateData[key];
         }
       });
     }
 
     await vehicle.save();
-
-    const updatedVehicle = await Vehicle.findById(id)
-      .populate("currentDriver", "firstName lastName badgeNumber email")
-      .populate(
-        "assignmentHistory.assignedTo",
-        "firstName lastName badgeNumber",
-      )
-      .populate("fuelHistory.filledBy", "firstName lastName")
-      .populate("returnHistory.returnedBy", "firstName lastName");
+    const updatedVehicle = await populateVehicle(id);
 
     return NextResponse.json({
       message: "Vehicle updated successfully",
@@ -159,13 +254,13 @@ async function updateVehicle(
   }
 }
 
+// ── DELETE /api/vehicles/[id] ──────────────────────────────────────────────
 async function deleteVehicle(
   request: NextRequest,
   context: RouteContext,
 ): Promise<NextResponse> {
   const { user, error } = requireAuth(request);
   if (error) return error;
-
   if (!ALLOWED_ROLES.includes(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -173,12 +268,10 @@ async function deleteVehicle(
   const { id } = await context.params;
   try {
     await connectDB();
-
     const vehicle = await Vehicle.findByIdAndDelete(id);
     if (!vehicle) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
     }
-
     return NextResponse.json({ message: "Vehicle deleted successfully" });
   } catch (err) {
     console.error("Delete vehicle error:", err);

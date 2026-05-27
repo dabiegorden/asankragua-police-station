@@ -87,6 +87,8 @@ const PersonnelSchema = new Schema<IPersonnel>(
         "Station Officer",
         "Counter NCO",
         "Counter SO",
+        "CID",
+        "Detective",
       ],
       required: true,
     },
