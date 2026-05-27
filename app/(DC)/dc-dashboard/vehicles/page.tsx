@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   Search,
@@ -36,20 +37,27 @@ import {
   Wrench,
   Droplet,
   ClipboardList,
-  Shield,
-  CreditCard,
-  Hash,
-  PaintBucket,
-  Gauge,
   Package,
-  AlertCircle,
-  CheckCircle,
   Clock,
+  MapPin,
+  RotateCcw,
+  Hash,
+  Gauge,
+  Send,
+  Phone,
+  Mail,
+  Shield,
+  Navigation,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
-// ==================== TypeScript Interfaces ====================
+// =====================================================================
+// TypeScript Interfaces
+// =====================================================================
 
-interface User {
+interface UserRef {
   _id: string;
   firstName: string;
   lastName: string;
@@ -57,17 +65,37 @@ interface User {
   email?: string;
 }
 
-interface InsuranceDetails {
-  provider: string;
-  policyNumber: string;
-  expiryDate: string;
-  coverage: string;
+interface DriverDetails {
+  name: string;
+  badgeNumber: string;
+  phone: string;
+  email: string;
+  rank: string;
+  unit: string;
 }
 
-interface RegistrationDetails {
-  registrationNumber: string;
-  expiryDate: string;
-  registeredTo: string;
+interface DispatchRecord {
+  _id?: string;
+  dispatchedTo?: UserRef | string | null;
+  driverDetails: DriverDetails;
+  destination: string;
+  operationName: string;
+  operationType:
+    | "patrol"
+    | "escort"
+    | "investigation"
+    | "emergency"
+    | "transport"
+    | "training"
+    | "other";
+  purpose: string;
+  dispatchedDate: string;
+  expectedReturnDate?: string;
+  returnedDate?: string;
+  startMileage: number;
+  endMileage?: number;
+  dispatchedBy?: UserRef | string | null;
+  notes: string;
 }
 
 interface MaintenanceRecord {
@@ -87,17 +115,30 @@ interface FuelRecord {
   amount: number;
   cost: number;
   mileage: number;
-  filledBy: User | string;
+  filledBy: UserRef | string;
 }
 
 interface AssignmentRecord {
   _id?: string;
-  assignedTo: User | string;
+  assignedTo: UserRef | string;
   assignedDate: string;
   returnedDate?: string;
   purpose: string;
   startMileage: number;
   endMileage?: number;
+}
+
+interface ReturnRecord {
+  _id?: string;
+  returnedDate: string;
+  location: string;
+  driverName: string;
+  duty: string;
+  fuelLevelOnReturn: string;
+  returnTime: string;
+  conditionNotes: string;
+  endMileage?: number;
+  returnedBy?: UserRef | string;
 }
 
 interface Equipment {
@@ -112,19 +153,16 @@ interface Vehicle {
   licensePlate: string;
   make: string;
   model: string;
-  year: number;
-  color: string;
   type: "patrol-car" | "motorcycle" | "van" | "truck" | "suv" | "other";
-  vin?: string;
   mileage: number;
-  fuelLevel: number;
+  fuelLevel: string;
   status: "available" | "in-use" | "maintenance" | "out-of-service";
-  currentDriver?: User | string;
-  insuranceDetails: InsuranceDetails;
-  registrationDetails: RegistrationDetails;
+  currentDriver?: UserRef | string | null;
+  dispatchHistory: DispatchRecord[];
+  assignmentHistory: AssignmentRecord[];
+  returnHistory: ReturnRecord[];
   maintenanceHistory: MaintenanceRecord[];
   fuelHistory: FuelRecord[];
-  assignmentHistory: AssignmentRecord[];
   equipment: Equipment[];
   notes: string;
   createdAt?: string;
@@ -135,59 +173,83 @@ interface VehicleFormData {
   licensePlate: string;
   make: string;
   model: string;
-  year: string;
-  color: string;
   type: string;
-  vin: string;
   mileage: number;
-  fuelLevel: number;
+  fuelLevel: string;
   status: string;
-  insuranceDetails: InsuranceDetails;
-  registrationDetails: RegistrationDetails;
   equipment: Equipment[];
   notes: string;
 }
 
-interface VehiclesResponse {
-  vehicles: Vehicle[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
+interface DispatchFormData {
+  // linked user
+  dispatchedToUserId: string;
+  // manual driver fields (all optional)
+  driverName: string;
+  driverBadgeNumber: string;
+  driverPhone: string;
+  driverEmail: string;
+  driverRank: string;
+  driverUnit: string;
+  // operation fields (all optional)
+  destination: string;
+  operationName: string;
+  operationType: string;
+  purpose: string;
+  expectedReturnDate: string;
+  notes: string;
 }
 
-interface PersonnelResponse {
-  personnel: User[];
+interface ReturnFormData {
+  location: string;
+  driverName: string;
+  duty: string;
+  fuelLevelOnReturn: string;
+  returnTime: string;
+  conditionNotes: string;
+  endMileage: number;
 }
 
-// ==================== Constants ====================
+// =====================================================================
+// Constants
+// =====================================================================
 
-const EMPTY_FORM: VehicleFormData = {
+const EMPTY_VEHICLE_FORM: VehicleFormData = {
   licensePlate: "",
   make: "",
   model: "",
-  year: "",
-  color: "",
   type: "",
-  vin: "",
   mileage: 0,
-  fuelLevel: 100,
+  fuelLevel: "",
   status: "available",
-  insuranceDetails: {
-    provider: "",
-    policyNumber: "",
-    expiryDate: "",
-    coverage: "",
-  },
-  registrationDetails: {
-    registrationNumber: "",
-    expiryDate: "",
-    registeredTo: "",
-  },
   equipment: [],
   notes: "",
+};
+
+const EMPTY_DISPATCH_FORM: DispatchFormData = {
+  dispatchedToUserId: "",
+  driverName: "",
+  driverBadgeNumber: "",
+  driverPhone: "",
+  driverEmail: "",
+  driverRank: "",
+  driverUnit: "",
+  destination: "",
+  operationName: "",
+  operationType: "patrol",
+  purpose: "",
+  expectedReturnDate: "",
+  notes: "",
+};
+
+const EMPTY_RETURN_FORM: ReturnFormData = {
+  location: "",
+  driverName: "",
+  duty: "",
+  fuelLevelOnReturn: "",
+  returnTime: "",
+  conditionNotes: "",
+  endMileage: 0,
 };
 
 const VEHICLE_TYPES = [
@@ -206,417 +268,1034 @@ const STATUSES = [
   "out-of-service",
 ] as const;
 
-type VehicleType = (typeof VEHICLE_TYPES)[number];
+const OPERATION_TYPES = [
+  "patrol",
+  "escort",
+  "investigation",
+  "emergency",
+  "transport",
+  "training",
+  "other",
+] as const;
+
 type VehicleStatus = (typeof STATUSES)[number];
 
 const STATUS_COLORS: Record<VehicleStatus, string> = {
-  available: "bg-green-100 text-green-800",
-  "in-use": "bg-blue-100 text-blue-800",
-  maintenance: "bg-yellow-100 text-yellow-800",
-  "out-of-service": "bg-red-100 text-red-800",
+  available: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  "in-use": "bg-blue-100 text-blue-800 border-blue-200",
+  maintenance: "bg-amber-100 text-amber-800 border-amber-200",
+  "out-of-service": "bg-red-100 text-red-800 border-red-200",
 };
 
-const MAINTENANCE_TYPE_COLORS = {
+const MAINTENANCE_TYPE_COLORS: Record<string, string> = {
   routine: "bg-blue-100 text-blue-800",
   repair: "bg-red-100 text-red-800",
   inspection: "bg-yellow-100 text-yellow-800",
   emergency: "bg-purple-100 text-purple-800",
 };
 
-const EQUIPMENT_CONDITION_COLORS = {
+const EQUIPMENT_CONDITION_COLORS: Record<string, string> = {
   excellent: "bg-green-100 text-green-800",
   good: "bg-blue-100 text-blue-800",
   fair: "bg-yellow-100 text-yellow-800",
   poor: "bg-red-100 text-red-800",
 };
 
-// ==================== Helper Functions ====================
-
-const formatStatus = (status: string): string => {
-  return status.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const OPERATION_TYPE_COLORS: Record<string, string> = {
+  patrol: "bg-blue-100 text-blue-800",
+  escort: "bg-indigo-100 text-indigo-800",
+  investigation: "bg-purple-100 text-purple-800",
+  emergency: "bg-red-100 text-red-800",
+  transport: "bg-cyan-100 text-cyan-800",
+  training: "bg-green-100 text-green-800",
+  other: "bg-gray-100 text-gray-800",
 };
 
-const getStatusColor = (status: VehicleStatus): string => {
-  return STATUS_COLORS[status] || "bg-gray-100 text-gray-800";
-};
+// =====================================================================
+// Helpers
+// =====================================================================
 
-const getFuelLevelColor = (level: number): string => {
-  if (level > 50) return "text-green-600";
-  if (level > 25) return "text-yellow-600";
-  return "text-red-600";
-};
+const fmt = (s: string) =>
+  s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-const getToken = (): string | null => localStorage.getItem("token");
+const getStatusColor = (s: VehicleStatus) =>
+  STATUS_COLORS[s] || "bg-gray-100 text-gray-800";
 
-const formatDate = (dateString: string): string => {
-  if (!dateString) return "N/A";
-  return new Date(dateString).toLocaleDateString();
-};
+const getToken = () =>
+  typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
-};
+const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString() : "N/A");
 
-// ==================== Vehicle Details Modal ====================
+const fmtDateTime = (d?: string) => (d ? new Date(d).toLocaleString() : "N/A");
 
-interface VehicleDetailsModalProps {
+const fmtCurrency = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    n,
+  );
+
+// =====================================================================
+// Sub-components
+// =====================================================================
+
+// ── Section Header ────────────────────────────────────────────────────
+const SectionHeader = ({
+  icon: Icon,
+  title,
+  count,
+}: {
+  icon: React.ElementType;
+  title: string;
+  count?: number;
+}) => (
+  <div className="flex items-center gap-2 mb-3">
+    <Icon className="w-4 h-4 text-gray-500" />
+    <h3 className="font-semibold text-gray-800">{title}</h3>
+    {count !== undefined && (
+      <Badge variant="outline" className="ml-auto text-xs">
+        {count}
+      </Badge>
+    )}
+  </div>
+);
+
+// ── Empty State ───────────────────────────────────────────────────────
+const EmptyState = ({
+  icon: Icon,
+  message,
+}: {
+  icon: React.ElementType;
+  message: string;
+}) => (
+  <div className="text-center py-10 text-gray-400">
+    <Icon className="w-12 h-12 mx-auto mb-3 opacity-30" />
+    <p className="text-sm">{message}</p>
+  </div>
+);
+
+// ── Info Row ──────────────────────────────────────────────────────────
+const InfoRow = ({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon?: React.ElementType;
+  label: string;
+  value?: string | React.ReactNode;
+}) => (
+  <div className="space-y-0.5">
+    <p className="text-xs text-gray-500 flex items-center gap-1">
+      {Icon && <Icon className="w-3 h-3" />}
+      {label}
+    </p>
+    <p className="text-sm font-medium text-gray-900">{value || "—"}</p>
+  </div>
+);
+
+// =====================================================================
+// Dispatch Modal
+// =====================================================================
+
+interface DispatchModalProps {
   vehicle: Vehicle | null;
+  personnel: UserRef[];
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (o: boolean) => void;
+  onSubmit: (vehicleId: string, data: DispatchFormData) => Promise<void>;
+  submitting: boolean;
 }
 
-const VehicleDetailsModal = ({
+const DispatchModal = ({
+  vehicle,
+  personnel,
+  open,
+  onOpenChange,
+  onSubmit,
+  submitting,
+}: DispatchModalProps) => {
+  const [form, setForm] = useState<DispatchFormData>(EMPTY_DISPATCH_FORM);
+
+  useEffect(() => {
+    if (open) setForm(EMPTY_DISPATCH_FORM);
+  }, [open]);
+
+  if (!vehicle) return null;
+
+  const set = (k: keyof DispatchFormData, v: string) =>
+    setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit(vehicle._id, form);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Send className="w-5 h-5 text-blue-600" />
+            Dispatch Vehicle — {vehicle.licensePlate}
+          </DialogTitle>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {vehicle.make} {vehicle.model} · {vehicle.vehicleNumber}
+          </p>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-5 pt-1">
+          {/* ── Linked User (optional) ── */}
+          <div>
+            <Label className="text-sm font-semibold text-gray-700">
+              Link to Personnel{" "}
+              <span className="font-normal text-gray-400">(optional)</span>
+            </Label>
+            <Select
+              value={form.dispatchedToUserId}
+              onValueChange={(v) => set("dispatchedToUserId", v)}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Select from personnel list…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {personnel.map((p) => (
+                  <SelectItem key={p._id} value={p._id}>
+                    {p.firstName} {p.lastName}
+                    {p.badgeNumber ? ` · #${p.badgeNumber}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+
+          {/* ── Driver Details (all optional) ── */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+              <User className="w-4 h-4" /> Driver Details{" "}
+              <span className="font-normal text-gray-400">(all optional)</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="d-name" className="text-xs text-gray-500">
+                  Full Name
+                </Label>
+                <Input
+                  id="d-name"
+                  placeholder="e.g. Sgt. John Mensah"
+                  value={form.driverName}
+                  onChange={(e) => set("driverName", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label htmlFor="d-badge" className="text-xs text-gray-500">
+                  Badge / ID Number
+                </Label>
+                <Input
+                  id="d-badge"
+                  placeholder="e.g. GPS-00412"
+                  value={form.driverBadgeNumber}
+                  onChange={(e) => set("driverBadgeNumber", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label
+                  htmlFor="d-phone"
+                  className="text-xs text-gray-500 flex items-center gap-1"
+                >
+                  <Phone className="w-3 h-3" /> Phone Number
+                </Label>
+                <Input
+                  id="d-phone"
+                  type="tel"
+                  placeholder="+233 XX XXX XXXX"
+                  value={form.driverPhone}
+                  onChange={(e) => set("driverPhone", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label
+                  htmlFor="d-email"
+                  className="text-xs text-gray-500 flex items-center gap-1"
+                >
+                  <Mail className="w-3 h-3" /> Email Address
+                </Label>
+                <Input
+                  id="d-email"
+                  type="email"
+                  placeholder="officer@police.gov.gh"
+                  value={form.driverEmail}
+                  onChange={(e) => set("driverEmail", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label
+                  htmlFor="d-rank"
+                  className="text-xs text-gray-500 flex items-center gap-1"
+                >
+                  <Shield className="w-3 h-3" /> Rank
+                </Label>
+                <Input
+                  id="d-rank"
+                  placeholder="e.g. Inspector, Constable"
+                  value={form.driverRank}
+                  onChange={(e) => set("driverRank", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label htmlFor="d-unit" className="text-xs text-gray-500">
+                  Unit / Division
+                </Label>
+                <Input
+                  id="d-unit"
+                  placeholder="e.g. CID, Traffic, K9"
+                  value={form.driverUnit}
+                  onChange={(e) => set("driverUnit", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* ── Operation / Destination (all optional) ── */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+              <Navigation className="w-4 h-4" /> Operation & Destination{" "}
+              <span className="font-normal text-gray-400">(all optional)</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label
+                  htmlFor="d-dest"
+                  className="text-xs text-gray-500 flex items-center gap-1"
+                >
+                  <MapPin className="w-3 h-3" /> Destination / Location
+                </Label>
+                <Input
+                  id="d-dest"
+                  placeholder="e.g. Tema Motorway, Airport Hills"
+                  value={form.destination}
+                  onChange={(e) => set("destination", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label htmlFor="d-opname" className="text-xs text-gray-500">
+                  Operation Name
+                </Label>
+                <Input
+                  id="d-opname"
+                  placeholder="e.g. Op. Nightwatch"
+                  value={form.operationName}
+                  onChange={(e) => set("operationName", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label htmlFor="d-optype" className="text-xs text-gray-500">
+                  Operation Type
+                </Label>
+                <Select
+                  value={form.operationType}
+                  onValueChange={(v) => set("operationType", v)}
+                >
+                  <SelectTrigger className="mt-1 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OPERATION_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {fmt(t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Label htmlFor="d-purpose" className="text-xs text-gray-500">
+                  Purpose / Brief
+                </Label>
+                <Input
+                  id="d-purpose"
+                  placeholder="Short description of the assignment"
+                  value={form.purpose}
+                  onChange={(e) => set("purpose", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label
+                  htmlFor="d-expret"
+                  className="text-xs text-gray-500 flex items-center gap-1"
+                >
+                  <Calendar className="w-3 h-3" /> Expected Return
+                </Label>
+                <Input
+                  id="d-expret"
+                  type="datetime-local"
+                  value={form.expectedReturnDate}
+                  onChange={(e) => set("expectedReturnDate", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label htmlFor="d-notes" className="text-xs text-gray-500">
+                  Additional Notes
+                </Label>
+                <Input
+                  id="d-notes"
+                  placeholder="Any extra info…"
+                  value={form.notes}
+                  onChange={(e) => set("notes", e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <Send className="w-4 h-4 mr-2" />
+              Dispatch Vehicle
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// =====================================================================
+// Return Modal
+// =====================================================================
+
+interface ReturnModalProps {
+  vehicle: Vehicle | null;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSubmit: (vehicleId: string, data: ReturnFormData) => Promise<void>;
+  submitting: boolean;
+}
+
+const ReturnModal = ({
   vehicle,
   open,
   onOpenChange,
-}: VehicleDetailsModalProps) => {
-  const [activeTab, setActiveTab] = useState<
-    "details" | "maintenance" | "fuel" | "assignments" | "equipment"
-  >("details");
+  onSubmit,
+  submitting,
+}: ReturnModalProps) => {
+  const [form, setForm] = useState<ReturnFormData>(EMPTY_RETURN_FORM);
+
+  useEffect(() => {
+    if (open && vehicle) {
+      setForm({
+        ...EMPTY_RETURN_FORM,
+        endMileage: vehicle.mileage,
+        returnTime: new Date().toTimeString().slice(0, 5),
+      });
+    }
+  }, [open, vehicle]);
+
+  if (!vehicle) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.location || !form.driverName || !form.duty) {
+      toast.error("Location, driver name and duty are required");
+      return;
+    }
+    await onSubmit(vehicle._id, form);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <RotateCcw className="w-5 h-5 text-emerald-600" />
+            Return Vehicle — {vehicle.licensePlate}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <Label htmlFor="ret-location">
+                Return Location <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative mt-1">
+                <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                <Input
+                  id="ret-location"
+                  className="pl-9"
+                  placeholder="e.g. Central Station, Depot A"
+                  value={form.location}
+                  onChange={(e) =>
+                    setForm({ ...form, location: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-driver">
+                Name of Driver <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative mt-1">
+                <User className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                <Input
+                  id="ret-driver"
+                  className="pl-9"
+                  placeholder="Full name of returning driver"
+                  value={form.driverName}
+                  onChange={(e) =>
+                    setForm({ ...form, driverName: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-duty">
+                Duty / Assignment <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="ret-duty"
+                placeholder="e.g. Town Patrol, Airport Escort"
+                value={form.duty}
+                onChange={(e) => setForm({ ...form, duty: e.target.value })}
+                required
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="ret-fuel">Fuel Level on Return</Label>
+              <Input
+                id="ret-fuel"
+                placeholder="e.g. Half, Full, Quarter"
+                value={form.fuelLevelOnReturn}
+                onChange={(e) =>
+                  setForm({ ...form, fuelLevelOnReturn: e.target.value })
+                }
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="ret-time">Return Time</Label>
+              <Input
+                id="ret-time"
+                type="time"
+                value={form.returnTime}
+                onChange={(e) =>
+                  setForm({ ...form, returnTime: e.target.value })
+                }
+                className="mt-1"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-mileage">End Mileage (km)</Label>
+              <Input
+                id="ret-mileage"
+                type="number"
+                min={vehicle.mileage}
+                value={form.endMileage}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    endMileage: parseInt(e.target.value) || 0,
+                  })
+                }
+                className="mt-1"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ret-notes">Condition Notes</Label>
+              <Textarea
+                id="ret-notes"
+                placeholder="Any damage, issues, or observations…"
+                value={form.conditionNotes}
+                onChange={(e) =>
+                  setForm({ ...form, conditionNotes: e.target.value })
+                }
+                rows={3}
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Confirm Return
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// =====================================================================
+// Details Modal
+// =====================================================================
+
+type DetailTab =
+  | "details"
+  | "dispatch"
+  | "maintenance"
+  | "fuel"
+  | "returns"
+  | "equipment";
+
+interface DetailsModalProps {
+  vehicle: Vehicle | null;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}
+
+const DetailsModal = ({ vehicle, open, onOpenChange }: DetailsModalProps) => {
+  const [tab, setTab] = useState<DetailTab>("details");
+
+  useEffect(() => {
+    if (open) setTab("details");
+  }, [open]);
 
   if (!vehicle) return null;
 
   const driver =
-    typeof vehicle.currentDriver === "object" ? vehicle.currentDriver : null;
+    vehicle.currentDriver && typeof vehicle.currentDriver === "object"
+      ? (vehicle.currentDriver as UserRef)
+      : null;
 
-  const isExpiringSoon = (date: string) => {
-    if (!date) return false;
-    const expiryDate = new Date(date);
-    const today = new Date();
-    const daysUntilExpiry = Math.ceil(
-      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    return daysUntilExpiry <= 30 && daysUntilExpiry > 0;
-  };
-
-  const isExpired = (date: string) => {
-    if (!date) return false;
-    return new Date(date) < new Date();
-  };
+  const tabs: {
+    id: DetailTab;
+    label: string;
+    icon: React.ElementType;
+    count?: number;
+  }[] = [
+    { id: "details", label: "Details", icon: FileText },
+    {
+      id: "dispatch",
+      label: "Dispatches",
+      icon: Send,
+      count: vehicle.dispatchHistory?.length,
+    },
+    {
+      id: "maintenance",
+      label: "Maintenance",
+      icon: Wrench,
+      count: vehicle.maintenanceHistory?.length,
+    },
+    {
+      id: "fuel",
+      label: "Fuel",
+      icon: Droplet,
+      count: vehicle.fuelHistory?.length,
+    },
+    {
+      id: "returns",
+      label: "Returns",
+      icon: RotateCcw,
+      count: vehicle.returnHistory?.length,
+    },
+    {
+      id: "equipment",
+      label: "Equipment",
+      icon: Package,
+      count: vehicle.equipment?.length,
+    },
+  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Car className="w-6 h-6" />
-            {vehicle.licensePlate} - {vehicle.make} {vehicle.model}
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <Car className="w-6 h-6 text-blue-600" />
+            {vehicle.licensePlate} — {vehicle.make} {vehicle.model}
           </DialogTitle>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-sm text-gray-500 font-mono">
+              {vehicle.vehicleNumber}
+            </span>
+            <Badge
+              className={`${getStatusColor(vehicle.status as VehicleStatus)} text-xs`}
+            >
+              {fmt(vehicle.status)}
+            </Badge>
+          </div>
         </DialogHeader>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b pb-2">
-          {[
-            { id: "details", label: "Details", icon: FileText },
-            { id: "maintenance", label: "Maintenance", icon: Wrench },
-            { id: "fuel", label: "Fuel Records", icon: Droplet },
-            { id: "assignments", label: "Assignments", icon: ClipboardList },
-            { id: "equipment", label: "Equipment", icon: Package },
-          ].map((tab) => (
+        <div className="flex flex-wrap gap-1.5 border-b pb-2">
+          {tabs.map(({ id, label, icon: Icon, count }) => (
             <Button
-              key={tab.id}
-              variant={activeTab === tab.id ? "default" : "outline"}
+              key={id}
+              variant={tab === id ? "default" : "outline"}
               size="sm"
-              onClick={() => setActiveTab(tab.id as any)}
-              className="gap-2"
+              onClick={() => setTab(id)}
+              className="gap-1.5 h-8 text-xs"
             >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+              {count !== undefined && count > 0 && (
+                <span
+                  className={`ml-0.5 rounded-full px-1.5 py-0 text-xs font-semibold ${
+                    tab === id
+                      ? "bg-white/20 text-white"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
             </Button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="space-y-4">
-          {activeTab === "details" && (
-            <div className="space-y-6">
-              {/* Basic Info */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500 flex items-center gap-1">
-                    <Hash className="w-3 h-3" /> Vehicle Number
-                  </Label>
-                  <p className="font-mono text-sm font-medium">
-                    {vehicle.vehicleNumber}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500 flex items-center gap-1">
-                    <Car className="w-3 h-3" /> License Plate
-                  </Label>
-                  <p className="font-medium">{vehicle.licensePlate}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500 flex items-center gap-1">
-                    <PaintBucket className="w-3 h-3" /> Color
-                  </Label>
-                  <p>{vehicle.color}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500">Make/Model</Label>
-                  <p>
-                    {vehicle.make} {vehicle.model}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500">Year</Label>
-                  <p>{vehicle.year}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500">Type</Label>
-                  <Badge variant="outline">{formatStatus(vehicle.type)}</Badge>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500 flex items-center gap-1">
-                    <Gauge className="w-3 h-3" /> Mileage
-                  </Label>
-                  <p>{vehicle.mileage.toLocaleString()} km</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500 flex items-center gap-1">
-                    <Fuel className="w-3 h-3" /> Fuel Level
-                  </Label>
-                  <p className={getFuelLevelColor(vehicle.fuelLevel)}>
-                    {vehicle.fuelLevel}%
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-gray-500">Status</Label>
-                  <Badge
-                    className={getStatusColor(vehicle.status as VehicleStatus)}
-                  >
-                    {formatStatus(vehicle.status)}
-                  </Badge>
-                </div>
-                {vehicle.vin && (
-                  <div className="space-y-1 col-span-2">
-                    <Label className="text-xs text-gray-500">VIN</Label>
-                    <p className="font-mono text-sm">{vehicle.vin}</p>
-                  </div>
-                )}
+        <div className="space-y-4 pt-1">
+          {/* ── DETAILS ── */}
+          {tab === "details" && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 rounded-lg p-4">
+                <InfoRow
+                  icon={Hash}
+                  label="Vehicle Number"
+                  value={vehicle.vehicleNumber}
+                />
+                <InfoRow
+                  icon={Car}
+                  label="License Plate"
+                  value={vehicle.licensePlate}
+                />
+                <InfoRow
+                  label="Make / Model"
+                  value={`${vehicle.make} ${vehicle.model}`}
+                />
+                <InfoRow
+                  label="Type"
+                  value={<Badge variant="outline">{fmt(vehicle.type)}</Badge>}
+                />
+                <InfoRow
+                  icon={Gauge}
+                  label="Mileage"
+                  value={`${vehicle.mileage.toLocaleString()} km`}
+                />
+                <InfoRow
+                  icon={Fuel}
+                  label="Fuel Level"
+                  value={vehicle.fuelLevel || "N/A"}
+                />
                 {driver && (
-                  <div className="space-y-1 col-span-2">
-                    <Label className="text-xs text-gray-500 flex items-center gap-1">
-                      <User className="w-3 h-3" /> Current Driver
-                    </Label>
-                    <p>
-                      {driver.firstName} {driver.lastName}
-                    </p>
-                  </div>
+                  <InfoRow
+                    icon={User}
+                    label="Current Driver"
+                    value={`${driver.firstName} ${driver.lastName}`}
+                  />
                 )}
               </div>
-
-              {/* Insurance Details */}
-              <div className="border-t pt-4">
-                <h3 className="font-semibold flex items-center gap-2 mb-3">
-                  <Shield className="w-4 h-4" /> Insurance Details
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Provider</Label>
-                    <p>{vehicle.insuranceDetails?.provider || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">
-                      Policy Number
-                    </Label>
-                    <p>{vehicle.insuranceDetails?.policyNumber || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> Expiry Date
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <span>
-                        {formatDate(vehicle.insuranceDetails?.expiryDate)}
-                      </span>
-                      {isExpiringSoon(vehicle.insuranceDetails?.expiryDate) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-yellow-100 text-yellow-800"
-                        >
-                          Expiring Soon
-                        </Badge>
-                      )}
-                      {isExpired(vehicle.insuranceDetails?.expiryDate) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-red-100 text-red-800"
-                        >
-                          Expired
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Coverage</Label>
-                    <p>{vehicle.insuranceDetails?.coverage || "N/A"}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Registration Details */}
-              <div className="border-t pt-4">
-                <h3 className="font-semibold flex items-center gap-2 mb-3">
-                  <CreditCard className="w-4 h-4" /> Registration Details
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">
-                      Registration Number
-                    </Label>
-                    <p>
-                      {vehicle.registrationDetails?.registrationNumber || "N/A"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">
-                      Registered To
-                    </Label>
-                    <p>{vehicle.registrationDetails?.registeredTo || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> Expiry Date
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <span>
-                        {formatDate(vehicle.registrationDetails?.expiryDate)}
-                      </span>
-                      {isExpiringSoon(
-                        vehicle.registrationDetails?.expiryDate,
-                      ) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-yellow-100 text-yellow-800"
-                        >
-                          Expiring Soon
-                        </Badge>
-                      )}
-                      {isExpired(vehicle.registrationDetails?.expiryDate) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-red-100 text-red-800"
-                        >
-                          Expired
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes */}
               {vehicle.notes && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold flex items-center gap-2 mb-3">
-                    <FileText className="w-4 h-4" /> Notes
-                  </h3>
-                  <p className="text-sm text-gray-600">{vehicle.notes}</p>
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
+                  <SectionHeader icon={FileText} title="Notes" />
+                  <p className="text-sm text-gray-700">{vehicle.notes}</p>
                 </div>
               )}
             </div>
           )}
 
-          {activeTab === "maintenance" && (
-            <div className="space-y-4">
-              {vehicle.maintenanceHistory &&
-              vehicle.maintenanceHistory.length > 0 ? (
-                vehicle.maintenanceHistory.map((record, index) => (
-                  <Card key={record._id || index}>
+          {/* ── DISPATCH HISTORY ── */}
+          {tab === "dispatch" && (
+            <div className="space-y-3">
+              <SectionHeader
+                icon={Send}
+                title="Dispatch Records"
+                count={vehicle.dispatchHistory?.length}
+              />
+              {vehicle.dispatchHistory?.length > 0 ? (
+                [...vehicle.dispatchHistory].reverse().map((rec, i) => {
+                  const dispatchedTo =
+                    rec.dispatchedTo && typeof rec.dispatchedTo === "object"
+                      ? (rec.dispatchedTo as UserRef)
+                      : null;
+                  const dispatchedBy =
+                    rec.dispatchedBy && typeof rec.dispatchedBy === "object"
+                      ? (rec.dispatchedBy as UserRef)
+                      : null;
+
+                  return (
+                    <Card
+                      key={rec._id || i}
+                      className="border-l-4 border-l-blue-400"
+                    >
+                      <CardContent className="pt-4 pb-4">
+                        {/* Header row */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={
+                                OPERATION_TYPE_COLORS[rec.operationType] ||
+                                "bg-gray-100"
+                              }
+                            >
+                              {fmt(rec.operationType)}
+                            </Badge>
+                            {rec.operationName && (
+                              <span className="font-semibold text-sm">
+                                {rec.operationName}
+                              </span>
+                            )}
+                          </div>
+                          <Badge
+                            variant={rec.returnedDate ? "outline" : "default"}
+                            className="text-xs"
+                          >
+                            {rec.returnedDate ? "Returned" : "Active"}
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {/* Driver details */}
+                          {(rec.driverDetails?.name || dispatchedTo) && (
+                            <div className="col-span-2 md:col-span-1">
+                              <InfoRow
+                                icon={User}
+                                label="Driver"
+                                value={
+                                  rec.driverDetails?.name ||
+                                  (dispatchedTo
+                                    ? `${dispatchedTo.firstName} ${dispatchedTo.lastName}`
+                                    : undefined)
+                                }
+                              />
+                            </div>
+                          )}
+                          {rec.driverDetails?.badgeNumber && (
+                            <InfoRow
+                              icon={Hash}
+                              label="Badge #"
+                              value={rec.driverDetails.badgeNumber}
+                            />
+                          )}
+                          {rec.driverDetails?.rank && (
+                            <InfoRow
+                              icon={Shield}
+                              label="Rank"
+                              value={rec.driverDetails.rank}
+                            />
+                          )}
+                          {rec.driverDetails?.unit && (
+                            <InfoRow
+                              label="Unit"
+                              value={rec.driverDetails.unit}
+                            />
+                          )}
+                          {rec.driverDetails?.phone && (
+                            <InfoRow
+                              icon={Phone}
+                              label="Phone"
+                              value={rec.driverDetails.phone}
+                            />
+                          )}
+                          {rec.driverDetails?.email && (
+                            <InfoRow
+                              icon={Mail}
+                              label="Email"
+                              value={rec.driverDetails.email}
+                            />
+                          )}
+                          {rec.destination && (
+                            <InfoRow
+                              icon={MapPin}
+                              label="Destination"
+                              value={rec.destination}
+                            />
+                          )}
+                          {rec.purpose && (
+                            <InfoRow label="Purpose" value={rec.purpose} />
+                          )}
+                          <InfoRow
+                            icon={Calendar}
+                            label="Dispatched"
+                            value={fmtDateTime(rec.dispatchedDate)}
+                          />
+                          {rec.expectedReturnDate && (
+                            <InfoRow
+                              icon={Clock}
+                              label="Expected Return"
+                              value={fmtDateTime(rec.expectedReturnDate)}
+                            />
+                          )}
+                          {rec.returnedDate && (
+                            <InfoRow
+                              icon={RotateCcw}
+                              label="Returned"
+                              value={fmtDateTime(rec.returnedDate)}
+                            />
+                          )}
+                          <InfoRow
+                            icon={Gauge}
+                            label="Start Mileage"
+                            value={`${rec.startMileage?.toLocaleString()} km`}
+                          />
+                          {rec.endMileage != null && (
+                            <InfoRow
+                              icon={Gauge}
+                              label="End Mileage"
+                              value={`${rec.endMileage.toLocaleString()} km`}
+                            />
+                          )}
+                          {dispatchedBy && (
+                            <InfoRow
+                              icon={User}
+                              label="Dispatched By"
+                              value={`${dispatchedBy.firstName} ${dispatchedBy.lastName}`}
+                            />
+                          )}
+                        </div>
+
+                        {rec.notes && (
+                          <p className="mt-3 text-xs text-gray-500 italic border-t pt-2">
+                            {rec.notes}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <EmptyState icon={Send} message="No dispatch records found" />
+              )}
+            </div>
+          )}
+
+          {/* ── MAINTENANCE ── */}
+          {tab === "maintenance" && (
+            <div className="space-y-3">
+              <SectionHeader
+                icon={Wrench}
+                title="Maintenance History"
+                count={vehicle.maintenanceHistory?.length}
+              />
+              {vehicle.maintenanceHistory?.length > 0 ? (
+                [...vehicle.maintenanceHistory].reverse().map((rec, i) => (
+                  <Card key={rec._id || i}>
                     <CardContent className="pt-4">
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2">
-                          <Badge
-                            className={MAINTENANCE_TYPE_COLORS[record.type]}
-                          >
-                            {record.type.toUpperCase()}
+                          <Badge className={MAINTENANCE_TYPE_COLORS[rec.type]}>
+                            {rec.type.toUpperCase()}
                           </Badge>
                           <span className="text-sm text-gray-500">
-                            <Calendar className="inline w-3 h-3 mr-1" />
-                            {formatDate(record.date)}
+                            {fmtDate(rec.date)}
                           </span>
                         </div>
-                        <span className="font-semibold">
-                          {formatCurrency(record.cost)}
+                        <span className="font-semibold text-sm">
+                          {fmtCurrency(rec.cost)}
                         </span>
                       </div>
-                      <p className="text-sm font-medium mb-1">
-                        {record.description}
+                      <p className="text-sm font-medium mb-2">
+                        {rec.description}
                       </p>
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <p>Performed By: {record.performedBy}</p>
-                        <p>
-                          Mileage at Service:{" "}
-                          {record.mileageAtService.toLocaleString()} km
-                        </p>
-                        {record.nextServiceDue && (
-                          <p>
-                            Next Service Due:{" "}
-                            {formatDate(record.nextServiceDue)}
-                          </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <InfoRow label="Performed By" value={rec.performedBy} />
+                        <InfoRow
+                          icon={Gauge}
+                          label="Mileage at Service"
+                          value={`${rec.mileageAtService?.toLocaleString()} km`}
+                        />
+                        {rec.nextServiceDue && (
+                          <InfoRow
+                            icon={Calendar}
+                            label="Next Service Due"
+                            value={fmtDate(rec.nextServiceDue)}
+                          />
                         )}
                       </div>
                     </CardContent>
                   </Card>
                 ))
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Wrench className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No maintenance records found</p>
-                </div>
+                <EmptyState
+                  icon={Wrench}
+                  message="No maintenance records found"
+                />
               )}
             </div>
           )}
 
-          {activeTab === "fuel" && (
-            <div className="space-y-4">
-              {vehicle.fuelHistory && vehicle.fuelHistory.length > 0 ? (
-                vehicle.fuelHistory.map((record, index) => {
+          {/* ── FUEL ── */}
+          {tab === "fuel" && (
+            <div className="space-y-3">
+              <SectionHeader
+                icon={Droplet}
+                title="Fuel Records"
+                count={vehicle.fuelHistory?.length}
+              />
+              {vehicle.fuelHistory?.length > 0 ? (
+                [...vehicle.fuelHistory].reverse().map((rec, i) => {
                   const filledBy =
-                    typeof record.filledBy === "object"
-                      ? record.filledBy
-                      : null;
+                    typeof rec.filledBy === "object" ? rec.filledBy : null;
                   return (
-                    <Card key={record._id || index}>
+                    <Card key={rec._id || i}>
                       <CardContent className="pt-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2">
-                            <Droplet className="w-4 h-4 text-blue-500" />
-                            <span className="text-sm text-gray-500">
-                              <Calendar className="inline w-3 h-3 mr-1" />
-                              {formatDate(record.date)}
-                            </span>
-                          </div>
-                          <span className="font-semibold">
-                            {formatCurrency(record.cost)}
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm text-gray-500">
+                            {fmtDate(rec.date)}
+                          </span>
+                          <span className="font-semibold text-sm">
+                            {fmtCurrency(rec.cost)}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <Label className="text-xs text-gray-500">
-                              Amount
-                            </Label>
-                            <p>{record.amount} L</p>
-                          </div>
-                          <div>
-                            <Label className="text-xs text-gray-500">
-                              Mileage
-                            </Label>
-                            <p>{record.mileage.toLocaleString()} km</p>
-                          </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <InfoRow label="Amount" value={`${rec.amount} L`} />
+                          <InfoRow
+                            icon={Gauge}
+                            label="Mileage"
+                            value={`${rec.mileage?.toLocaleString()} km`}
+                          />
                           {filledBy && (
-                            <div className="col-span-2">
-                              <Label className="text-xs text-gray-500">
-                                Filled By
-                              </Label>
-                              <p>
-                                {filledBy.firstName} {filledBy.lastName}
-                              </p>
-                            </div>
+                            <InfoRow
+                              icon={User}
+                              label="Filled By"
+                              value={`${filledBy.firstName} ${filledBy.lastName}`}
+                            />
                           )}
                         </div>
                       </CardContent>
@@ -624,88 +1303,99 @@ const VehicleDetailsModal = ({
                   );
                 })
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Droplet className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No fuel records found</p>
-                </div>
+                <EmptyState icon={Droplet} message="No fuel records found" />
               )}
             </div>
           )}
 
-          {activeTab === "assignments" && (
-            <div className="space-y-4">
-              {vehicle.assignmentHistory &&
-              vehicle.assignmentHistory.length > 0 ? (
-                vehicle.assignmentHistory.map((record, index) => {
-                  const assignedTo =
-                    typeof record.assignedTo === "object"
-                      ? record.assignedTo
-                      : null;
-                  return (
-                    <Card key={record._id || index}>
-                      <CardContent className="pt-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-500" />
-                            <span className="font-medium">
-                              {assignedTo
-                                ? `${assignedTo.firstName} ${assignedTo.lastName}`
-                                : "Unknown"}
-                            </span>
+          {/* ── RETURNS ── */}
+          {tab === "returns" && (
+            <div className="space-y-3">
+              <SectionHeader
+                icon={RotateCcw}
+                title="Return Records"
+                count={vehicle.returnHistory?.length}
+              />
+              {vehicle.returnHistory?.length > 0 ? (
+                [...vehicle.returnHistory].reverse().map((rec, i) => (
+                  <Card
+                    key={rec._id || i}
+                    className="border-l-4 border-l-emerald-400"
+                  >
+                    <CardContent className="pt-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <span className="font-semibold text-sm">
+                          {rec.driverName}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {fmtDate(rec.returnedDate)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <InfoRow
+                          icon={MapPin}
+                          label="Location"
+                          value={rec.location}
+                        />
+                        <InfoRow label="Duty" value={rec.duty} />
+                        <InfoRow
+                          icon={Fuel}
+                          label="Fuel on Return"
+                          value={rec.fuelLevelOnReturn || "N/A"}
+                        />
+                        <InfoRow
+                          icon={Clock}
+                          label="Return Time"
+                          value={rec.returnTime || "N/A"}
+                        />
+                        {rec.endMileage != null && (
+                          <InfoRow
+                            icon={Gauge}
+                            label="End Mileage"
+                            value={`${rec.endMileage.toLocaleString()} km`}
+                          />
+                        )}
+                        {rec.conditionNotes && (
+                          <div className="col-span-2 md:col-span-3">
+                            <InfoRow
+                              label="Condition Notes"
+                              value={rec.conditionNotes}
+                            />
                           </div>
-                          <Badge
-                            variant={
-                              record.returnedDate ? "outline" : "default"
-                            }
-                          >
-                            {record.returnedDate ? "Returned" : "Active"}
-                          </Badge>
-                        </div>
-                        <div className="text-sm space-y-1">
-                          <p>
-                            <Calendar className="inline w-3 h-3 mr-1" />
-                            Assigned: {formatDate(record.assignedDate)}
-                          </p>
-                          {record.returnedDate && (
-                            <p>
-                              <Clock className="inline w-3 h-3 mr-1" />
-                              Returned: {formatDate(record.returnedDate)}
-                            </p>
-                          )}
-                          <p>Purpose: {record.purpose}</p>
-                          <p>
-                            Start Mileage:{" "}
-                            {record.startMileage.toLocaleString()} km
-                          </p>
-                          {record.endMileage && (
-                            <p>
-                              End Mileage: {record.endMileage.toLocaleString()}{" "}
-                              km
-                            </p>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <ClipboardList className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No assignment records found</p>
-                </div>
+                <EmptyState
+                  icon={RotateCcw}
+                  message="No return records found"
+                />
               )}
             </div>
           )}
 
-          {activeTab === "equipment" && (
-            <div className="space-y-4">
-              {vehicle.equipment && vehicle.equipment.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {vehicle.equipment.map((item, index) => (
-                    <Card key={index}>
+          {/* ── EQUIPMENT ── */}
+          {tab === "equipment" && (
+            <div>
+              <SectionHeader
+                icon={Package}
+                title="Equipment"
+                count={vehicle.equipment?.length}
+              />
+              {vehicle.equipment?.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {vehicle.equipment.map((item, i) => (
+                    <Card key={i}>
                       <CardContent className="pt-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-semibold">{item.name}</h4>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-semibold text-sm">{item.name}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              SN: {item.serialNumber}
+                            </p>
+                          </div>
                           <Badge
                             className={
                               EQUIPMENT_CONDITION_COLORS[item.condition]
@@ -714,18 +1404,15 @@ const VehicleDetailsModal = ({
                             {item.condition.toUpperCase()}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-500">
-                          Serial: {item.serialNumber}
-                        </p>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No equipment records found</p>
-                </div>
+                <EmptyState
+                  icon={Package}
+                  message="No equipment records found"
+                />
               )}
             </div>
           )}
@@ -735,12 +1422,14 @@ const VehicleDetailsModal = ({
   );
 };
 
-// ==================== Vehicle Form Component ====================
+// =====================================================================
+// Vehicle Form (create / edit)
+// =====================================================================
 
 interface VehicleFormProps {
   formData: VehicleFormData;
-  setFormData: (data: VehicleFormData) => void;
-  selectedVehicle: Vehicle | null;
+  setFormData: (d: VehicleFormData) => void;
+  isEdit: boolean;
   submitting: boolean;
   onSubmit: (e: React.FormEvent) => Promise<void>;
   onClose: () => void;
@@ -749,16 +1438,17 @@ interface VehicleFormProps {
 const VehicleForm = ({
   formData,
   setFormData,
-  selectedVehicle,
+  isEdit,
   submitting,
   onSubmit,
   onClose,
 }: VehicleFormProps) => (
   <form onSubmit={onSubmit} className="space-y-4">
-    {/* Basic Info */}
     <div className="grid grid-cols-2 gap-4">
       <div>
-        <Label htmlFor="licensePlate">License Plate *</Label>
+        <Label htmlFor="licensePlate">
+          License Plate <span className="text-red-500">*</span>
+        </Label>
         <Input
           id="licensePlate"
           value={formData.licensePlate}
@@ -766,21 +1456,24 @@ const VehicleForm = ({
             setFormData({ ...formData, licensePlate: e.target.value })
           }
           required
+          className="mt-1"
         />
       </div>
       <div>
-        <Label htmlFor="type">Vehicle Type *</Label>
+        <Label htmlFor="type">
+          Vehicle Type <span className="text-red-500">*</span>
+        </Label>
         <Select
           value={formData.type}
-          onValueChange={(value) => setFormData({ ...formData, type: value })}
+          onValueChange={(v) => setFormData({ ...formData, type: v })}
         >
-          <SelectTrigger>
+          <SelectTrigger className="mt-1">
             <SelectValue placeholder="Select type" />
           </SelectTrigger>
           <SelectContent>
             {VEHICLE_TYPES.map((t) => (
               <SelectItem key={t} value={t}>
-                {formatStatus(t)}
+                {fmt(t)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -788,220 +1481,78 @@ const VehicleForm = ({
       </div>
     </div>
 
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 gap-4">
       <div>
-        <Label htmlFor="make">Make *</Label>
+        <Label htmlFor="make">
+          Make <span className="text-red-500">*</span>
+        </Label>
         <Input
           id="make"
           value={formData.make}
           onChange={(e) => setFormData({ ...formData, make: e.target.value })}
           required
+          className="mt-1"
         />
       </div>
       <div>
-        <Label htmlFor="model">Model *</Label>
+        <Label htmlFor="model">
+          Model <span className="text-red-500">*</span>
+        </Label>
         <Input
           id="model"
           value={formData.model}
           onChange={(e) => setFormData({ ...formData, model: e.target.value })}
           required
-        />
-      </div>
-      <div>
-        <Label htmlFor="year">Year *</Label>
-        <Input
-          id="year"
-          type="number"
-          min="1900"
-          max={new Date().getFullYear() + 1}
-          value={formData.year}
-          onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-          required
+          className="mt-1"
         />
       </div>
     </div>
 
     <div className="grid grid-cols-2 gap-4">
       <div>
-        <Label htmlFor="color">Color *</Label>
-        <Input
-          id="color"
-          value={formData.color}
-          onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="vin">VIN</Label>
-        <Input
-          id="vin"
-          value={formData.vin}
-          onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
-        />
-      </div>
-    </div>
-
-    <div className="grid grid-cols-3 gap-4">
-      <div>
-        <Label htmlFor="mileage">Mileage</Label>
+        <Label htmlFor="mileage">Mileage (km)</Label>
         <Input
           id="mileage"
           type="number"
           min="0"
           value={formData.mileage}
           onChange={(e) =>
-            setFormData({
-              ...formData,
-              mileage: parseInt(e.target.value) || 0,
-            })
+            setFormData({ ...formData, mileage: parseInt(e.target.value) || 0 })
           }
+          className="mt-1"
         />
       </div>
       <div>
-        <Label htmlFor="fuelLevel">Fuel Level (%)</Label>
+        <Label htmlFor="fuelLevel">Fuel Level</Label>
         <Input
           id="fuelLevel"
-          type="number"
-          min="0"
-          max="100"
+          placeholder="Full, Half, Quarter, Empty"
           value={formData.fuelLevel}
           onChange={(e) =>
-            setFormData({
-              ...formData,
-              fuelLevel: parseInt(e.target.value) || 0,
-            })
+            setFormData({ ...formData, fuelLevel: e.target.value })
           }
-        />
-      </div>
-      <div>
-        <Label htmlFor="status">Status</Label>
-        <Select
-          value={formData.status}
-          onValueChange={(value) => setFormData({ ...formData, status: value })}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {formatStatus(s)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-
-    {/* Insurance */}
-    <div>
-      <Label className="text-sm font-semibold">Insurance Details</Label>
-      <div className="grid grid-cols-2 gap-3 mt-2">
-        <Input
-          placeholder="Provider"
-          value={formData.insuranceDetails.provider}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              insuranceDetails: {
-                ...formData.insuranceDetails,
-                provider: e.target.value,
-              },
-            })
-          }
-        />
-        <Input
-          placeholder="Policy Number"
-          value={formData.insuranceDetails.policyNumber}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              insuranceDetails: {
-                ...formData.insuranceDetails,
-                policyNumber: e.target.value,
-              },
-            })
-          }
-        />
-        <div>
-          <Label className="text-xs text-gray-500">Expiry Date</Label>
-          <Input
-            type="date"
-            value={formData.insuranceDetails.expiryDate}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                insuranceDetails: {
-                  ...formData.insuranceDetails,
-                  expiryDate: e.target.value,
-                },
-              })
-            }
-          />
-        </div>
-        <Input
-          placeholder="Coverage"
-          value={formData.insuranceDetails.coverage}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              insuranceDetails: {
-                ...formData.insuranceDetails,
-                coverage: e.target.value,
-              },
-            })
-          }
+          className="mt-1"
         />
       </div>
     </div>
 
-    {/* Registration */}
     <div>
-      <Label className="text-sm font-semibold">Registration Details</Label>
-      <div className="grid grid-cols-2 gap-3 mt-2">
-        <Input
-          placeholder="Registration Number"
-          value={formData.registrationDetails.registrationNumber}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              registrationDetails: {
-                ...formData.registrationDetails,
-                registrationNumber: e.target.value,
-              },
-            })
-          }
-        />
-        <Input
-          placeholder="Registered To"
-          value={formData.registrationDetails.registeredTo}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              registrationDetails: {
-                ...formData.registrationDetails,
-                registeredTo: e.target.value,
-              },
-            })
-          }
-        />
-        <div>
-          <Label className="text-xs text-gray-500">Expiry Date</Label>
-          <Input
-            type="date"
-            value={formData.registrationDetails.expiryDate}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                registrationDetails: {
-                  ...formData.registrationDetails,
-                  expiryDate: e.target.value,
-                },
-              })
-            }
-          />
-        </div>
-      </div>
+      <Label htmlFor="status">Status</Label>
+      <Select
+        value={formData.status}
+        onValueChange={(v) => setFormData({ ...formData, status: v })}
+      >
+        <SelectTrigger className="mt-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STATUSES.map((s) => (
+            <SelectItem key={s} value={s}>
+              {fmt(s)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
 
     <div>
@@ -1011,105 +1562,129 @@ const VehicleForm = ({
         value={formData.notes}
         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
         rows={3}
+        className="mt-1"
       />
     </div>
 
-    <div className="flex justify-end space-x-2 pt-2">
+    <div className="flex justify-end gap-2 pt-2 border-t">
       <Button type="button" variant="outline" onClick={onClose}>
         Cancel
       </Button>
       <Button type="submit" disabled={submitting}>
         {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-        {selectedVehicle ? "Update Vehicle" : "Create Vehicle"}
+        {isEdit ? "Update Vehicle" : "Create Vehicle"}
       </Button>
     </div>
   </form>
 );
 
-// ==================== Main Component ====================
+// =====================================================================
+// Main Page Component
+// =====================================================================
 
-const Vehicles = () => {
+const VehiclesPage = () => {
+  // Data
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [personnel, setPersonnel] = useState<User[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [totalPages, setTotalPages] = useState<number>(1);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  const [personnel, setPersonnel] = useState<UserRef[]>([]);
+
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [dispatchSubmitting, setDispatchSubmitting] = useState(false);
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+
+  // Filters / pagination
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Modals
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isDispatchOpen, setIsDispatchOpen] = useState(false);
+  const [isReturnOpen, setIsReturnOpen] = useState(false);
+
+  // Selected items
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [viewingVehicle, setViewingVehicle] = useState<Vehicle | null>(null);
-  const [formData, setFormData] = useState<VehicleFormData>(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [dispatchingVehicle, setDispatchingVehicle] = useState<Vehicle | null>(
+    null,
+  );
+  const [returningVehicle, setReturningVehicle] = useState<Vehicle | null>(
+    null,
+  );
 
-  // Debounce search term
+  // Form data
+  const [vehicleForm, setVehicleForm] =
+    useState<VehicleFormData>(EMPTY_VEHICLE_FORM);
+
+  // ── Debounce search ──────────────────────────────────────────────────
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 500);
-
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(t);
   }, [searchTerm]);
 
-  // Reset to page 1 when search term changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, statusFilter, typeFilter]);
-
-  // ==================== API Calls ====================
+  }, [debouncedSearch, statusFilter, typeFilter]);
 
   useEffect(() => {
     fetchVehicles();
-  }, [currentPage, debouncedSearchTerm, statusFilter, typeFilter]);
+  }, [currentPage, debouncedSearch, statusFilter, typeFilter]);
 
   useEffect(() => {
     fetchPersonnel();
   }, []);
 
-  const fetchVehicles = async (): Promise<void> => {
+  // ── API helpers ──────────────────────────────────────────────────────
+  const authHeaders = () => ({
+    Authorization: `Bearer ${getToken()}`,
+    "Content-Type": "application/json",
+  });
+
+  const fetchVehicles = useCallback(async () => {
     try {
       setLoading(true);
-      const token = getToken();
       const params = new URLSearchParams({
         page: currentPage.toString(),
         limit: "10",
-        ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
-        ...(statusFilter && statusFilter !== "all" && { status: statusFilter }),
-        ...(typeFilter && typeFilter !== "all" && { type: typeFilter }),
+        ...(debouncedSearch && { search: debouncedSearch }),
+        ...(statusFilter !== "all" && { status: statusFilter }),
+        ...(typeFilter !== "all" && { type: typeFilter }),
       });
 
-      const response = await fetch(`/api/vehicles?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`/api/vehicles?${params}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
       });
 
-      if (response.ok) {
-        const data: VehiclesResponse = await response.json();
+      if (res.ok) {
+        const data = await res.json();
         setVehicles(data.vehicles);
         setTotalPages(data.pagination.pages);
+        setTotalCount(data.pagination.total);
       } else {
-        const err = await response.json();
+        const err = await res.json();
         toast.error(err.error || "Failed to fetch vehicles");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to fetch vehicles");
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, debouncedSearch, statusFilter, typeFilter]);
 
-  const fetchPersonnel = async (): Promise<void> => {
+  const fetchPersonnel = async () => {
     try {
-      const token = getToken();
-      const response = await fetch("/api/personnel?limit=200", {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch("/api/personnel?limit=200", {
+        headers: { Authorization: `Bearer ${getToken()}` },
       });
-
-      if (response.ok) {
-        const data: PersonnelResponse = await response.json();
+      if (res.ok) {
+        const data = await res.json();
         setPersonnel(data.personnel || []);
       }
     } catch {
@@ -1117,43 +1692,35 @@ const Vehicles = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+  // ── CRUD ─────────────────────────────────────────────────────────────
+  const handleVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const token = getToken();
       const url = selectedVehicle
         ? `/api/vehicles/${selectedVehicle._id}`
         : "/api/vehicles";
       const method = selectedVehicle ? "PUT" : "POST";
 
-      const payload = {
-        ...formData,
-        year: Number(formData.year),
-        mileage: Number(formData.mileage),
-        fuelLevel: Number(formData.fuelLevel),
-        vin: formData.vin || undefined,
-      };
-
-      const response = await fetch(url, {
+      const res = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
+        headers: authHeaders(),
+        body: JSON.stringify({
+          ...vehicleForm,
+          mileage: Number(vehicleForm.mileage),
+        }),
       });
 
-      if (response.ok) {
+      if (res.ok) {
         toast.success(
           `Vehicle ${selectedVehicle ? "updated" : "created"} successfully`,
         );
-        setIsCreateModalOpen(false);
-        setIsEditModalOpen(false);
-        resetForm();
+        setIsCreateOpen(false);
+        setIsEditOpen(false);
+        resetVehicleForm();
         fetchVehicles();
       } else {
-        const err = await response.json();
+        const err = await res.json();
         toast.error(err.error || "Operation failed");
       }
     } catch {
@@ -1163,21 +1730,18 @@ const Vehicles = () => {
     }
   };
 
-  const handleDelete = async (vehicleId: string): Promise<void> => {
+  const handleDelete = async (vehicleId: string) => {
     if (!confirm("Are you sure you want to delete this vehicle?")) return;
-
     try {
-      const token = getToken();
-      const response = await fetch(`/api/vehicles/${vehicleId}`, {
+      const res = await fetch(`/api/vehicles/${vehicleId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${getToken()}` },
       });
-
-      if (response.ok) {
-        toast.success("Vehicle deleted successfully");
+      if (res.ok) {
+        toast.success("Vehicle deleted");
         fetchVehicles();
       } else {
-        const err = await response.json();
+        const err = await res.json();
         toast.error(err.error || "Failed to delete vehicle");
       }
     } catch {
@@ -1185,166 +1749,186 @@ const Vehicles = () => {
     }
   };
 
-  const handleAssignDriver = async (
-    vehicleId: string,
-    driverId: string,
-  ): Promise<void> => {
+  const handleDispatch = async (vehicleId: string, data: DispatchFormData) => {
+    setDispatchSubmitting(true);
     try {
-      const token = getToken();
-      const response = await fetch(`/api/vehicles/${vehicleId}`, {
+      const res = await fetch(`/api/vehicles/${vehicleId}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          action: "assign-driver",
-          driverId,
-          purpose: "Patrol duty",
-        }),
+        headers: authHeaders(),
+        body: JSON.stringify({ action: "dispatch-vehicle", ...data }),
       });
-
-      if (response.ok) {
-        toast.success("Driver assigned successfully");
+      if (res.ok) {
+        toast.success("Vehicle dispatched successfully");
+        setIsDispatchOpen(false);
+        setDispatchingVehicle(null);
         fetchVehicles();
       } else {
-        const err = await response.json();
-        toast.error(err.error || "Failed to assign driver");
+        const err = await res.json();
+        toast.error(err.error || "Failed to dispatch vehicle");
       }
     } catch {
-      toast.error("Failed to assign driver");
+      toast.error("Failed to dispatch vehicle");
+    } finally {
+      setDispatchSubmitting(false);
     }
   };
 
-  const handleReturnVehicle = async (
-    vehicleId: string,
-    endMileage: number,
-  ): Promise<void> => {
+  const handleReturn = async (vehicleId: string, data: ReturnFormData) => {
+    setReturnSubmitting(true);
     try {
-      const token = getToken();
-      const response = await fetch(`/api/vehicles/${vehicleId}`, {
+      const res = await fetch(`/api/vehicles/${vehicleId}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ action: "return-vehicle", endMileage }),
+        headers: authHeaders(),
+        body: JSON.stringify({ action: "return-vehicle", ...data }),
       });
-
-      if (response.ok) {
+      if (res.ok) {
         toast.success("Vehicle returned successfully");
+        setIsReturnOpen(false);
+        setReturningVehicle(null);
         fetchVehicles();
       } else {
-        const err = await response.json();
+        const err = await res.json();
         toast.error(err.error || "Failed to return vehicle");
       }
     } catch {
       toast.error("Failed to return vehicle");
+    } finally {
+      setReturnSubmitting(false);
     }
   };
 
-  const resetForm = (): void => {
-    setFormData(EMPTY_FORM);
+  // ── Helpers ───────────────────────────────────────────────────────────
+  const resetVehicleForm = () => {
+    setVehicleForm(EMPTY_VEHICLE_FORM);
     setSelectedVehicle(null);
   };
 
-  const openEditModal = (vehicle: Vehicle): void => {
-    setSelectedVehicle(vehicle);
-    setFormData({
-      licensePlate: vehicle.licensePlate,
-      make: vehicle.make,
-      model: vehicle.model,
-      year: vehicle.year.toString(),
-      color: vehicle.color,
-      type: vehicle.type,
-      vin: vehicle.vin || "",
-      mileage: vehicle.mileage,
-      fuelLevel: vehicle.fuelLevel,
-      status: vehicle.status,
-      insuranceDetails: {
-        ...vehicle.insuranceDetails,
-        expiryDate: vehicle.insuranceDetails?.expiryDate
-          ? vehicle.insuranceDetails.expiryDate.slice(0, 10)
-          : "",
-      },
-      registrationDetails: {
-        ...vehicle.registrationDetails,
-        expiryDate: vehicle.registrationDetails?.expiryDate
-          ? vehicle.registrationDetails.expiryDate.slice(0, 10)
-          : "",
-      },
-      equipment: vehicle.equipment || [],
-      notes: vehicle.notes || "",
+  const openEdit = (v: Vehicle) => {
+    setSelectedVehicle(v);
+    setVehicleForm({
+      licensePlate: v.licensePlate,
+      make: v.make,
+      model: v.model,
+      type: v.type,
+      mileage: v.mileage,
+      fuelLevel: v.fuelLevel || "",
+      status: v.status,
+      equipment: v.equipment || [],
+      notes: v.notes || "",
     });
-    setIsEditModalOpen(true);
+    setIsEditOpen(true);
   };
 
-  const openViewModal = (vehicle: Vehicle): void => {
-    setViewingVehicle(vehicle);
-    setIsViewModalOpen(true);
+  const openView = (v: Vehicle) => {
+    setViewingVehicle(v);
+    setIsViewOpen(true);
   };
 
-  // ==================== Render ====================
+  const openDispatch = (v: Vehicle) => {
+    setDispatchingVehicle(v);
+    setIsDispatchOpen(true);
+  };
 
-  if (loading && vehicles.length === 0) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
+  const openReturn = (v: Vehicle) => {
+    setReturningVehicle(v);
+    setIsReturnOpen(true);
+  };
 
+  // ── Summary stats ─────────────────────────────────────────────────────
+  const stats = STATUSES.map((s) => ({
+    status: s,
+    count: vehicles.filter((v) => v.status === s).length,
+  }));
+
+  // ── Render ────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 pt-12">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Vehicle Management</h1>
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+    <div className="space-y-6 pt-12 px-1">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Vehicle Management
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {totalCount} vehicle{totalCount !== 1 ? "s" : ""} registered
+          </p>
+        </div>
+        <Dialog
+          open={isCreateOpen}
+          onOpenChange={(o) => {
+            setIsCreateOpen(o);
+            if (!o) resetVehicleForm();
+          }}
+        >
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="w-4 h-4 mr-2" />
+            <Button onClick={resetVehicleForm} className="gap-2">
+              <Plus className="w-4 h-4" />
               Add Vehicle
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add New Vehicle</DialogTitle>
+              <DialogTitle>Register New Vehicle</DialogTitle>
             </DialogHeader>
             <VehicleForm
-              formData={formData}
-              setFormData={setFormData}
-              selectedVehicle={selectedVehicle}
+              formData={vehicleForm}
+              setFormData={setVehicleForm}
+              isEdit={false}
               submitting={submitting}
-              onSubmit={handleSubmit}
-              onClose={() => setIsCreateModalOpen(false)}
+              onSubmit={handleVehicleSubmit}
+              onClose={() => setIsCreateOpen(false)}
             />
           </DialogContent>
         </Dialog>
       </div>
 
+      {/* Status Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {stats.map(({ status, count }) => (
+          <button
+            key={status}
+            onClick={() =>
+              setStatusFilter(statusFilter === status ? "all" : status)
+            }
+            className={`rounded-lg border p-3 text-left transition-all hover:shadow-sm ${
+              statusFilter === status
+                ? "ring-2 ring-offset-1 ring-blue-500"
+                : "bg-white"
+            }`}
+          >
+            <p className="text-xs text-gray-500 capitalize mb-1">
+              {fmt(status)}
+            </p>
+            <p className="text-2xl font-bold text-gray-900">{count}</p>
+            <div
+              className={`mt-2 h-1.5 rounded-full ${
+                status === "available"
+                  ? "bg-emerald-400"
+                  : status === "in-use"
+                    ? "bg-blue-400"
+                    : status === "maintenance"
+                      ? "bg-amber-400"
+                      : "bg-red-400"
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-50">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search by plate, make, model..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                  }}
-                  className="pl-10"
-                />
-              </div>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="flex-1 min-w-56 relative">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search plate, make, model…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
             </div>
-            <Select
-              value={statusFilter}
-              onValueChange={(v) => {
-                setStatusFilter(v);
-              }}
-            >
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
@@ -1352,17 +1936,12 @@ const Vehicles = () => {
                 <SelectItem value="all">All Statuses</SelectItem>
                 {STATUSES.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {formatStatus(s)}
+                    {fmt(s)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={typeFilter}
-              onValueChange={(v) => {
-                setTypeFilter(v);
-              }}
-            >
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
@@ -1370,7 +1949,7 @@ const Vehicles = () => {
                 <SelectItem value="all">All Types</SelectItem>
                 {VEHICLE_TYPES.map((t) => (
                   <SelectItem key={t} value={t}>
-                    {formatStatus(t)}
+                    {fmt(t)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1381,212 +1960,254 @@ const Vehicles = () => {
 
       {/* Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Vehicles ({vehicles.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-2">Vehicle #</th>
-                  <th className="text-left p-2">License Plate</th>
-                  <th className="text-left p-2">Make / Model</th>
-                  <th className="text-left p-2">Type</th>
-                  <th className="text-left p-2">Status</th>
-                  <th className="text-left p-2">Current Driver</th>
-                  <th className="text-left p-2">Fuel</th>
-                  <th className="text-left p-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vehicles.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center p-8 text-gray-500">
-                      No vehicles found.
-                    </td>
+        <CardContent className="p-0">
+          {loading && vehicles.length === 0 ? (
+            <div className="flex justify-center items-center h-48">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                    <th className="text-left px-4 py-3 font-medium">Vehicle</th>
+                    <th className="text-left px-4 py-3 font-medium">Type</th>
+                    <th className="text-left px-4 py-3 font-medium">Status</th>
+                    <th className="text-left px-4 py-3 font-medium">Fuel</th>
+                    <th className="text-left px-4 py-3 font-medium">Mileage</th>
+                    <th className="text-left px-4 py-3 font-medium">
+                      Current Driver
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium">Actions</th>
                   </tr>
-                ) : (
-                  vehicles.map((vehicle) => {
-                    const driver =
-                      typeof vehicle.currentDriver === "object"
-                        ? vehicle.currentDriver
-                        : null;
-
-                    return (
-                      <tr
-                        key={vehicle._id}
-                        className="border-b hover:bg-gray-50"
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {vehicles.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="text-center py-12 text-gray-400"
                       >
-                        <td className="p-2 font-mono text-sm">
-                          {vehicle.vehicleNumber}
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center space-x-2">
-                            <Car className="w-4 h-4 text-gray-400" />
-                            <span className="font-medium">
-                              {vehicle.licensePlate}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          {vehicle.make} {vehicle.model} ({vehicle.year})
-                        </td>
-                        <td className="p-2">
-                          <Badge variant="outline">
-                            {formatStatus(vehicle.type)}
-                          </Badge>
-                        </td>
-                        <td className="p-2">
-                          <Badge
-                            className={getStatusColor(
-                              vehicle.status as VehicleStatus,
-                            )}
-                          >
-                            {formatStatus(vehicle.status)}
-                          </Badge>
-                        </td>
-                        <td className="p-2">
-                          {driver ? (
+                        <Car className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                        No vehicles found
+                      </td>
+                    </tr>
+                  ) : (
+                    vehicles.map((v) => {
+                      const driver =
+                        v.currentDriver && typeof v.currentDriver === "object"
+                          ? (v.currentDriver as UserRef)
+                          : null;
+                      // Last dispatch for driver name fallback
+                      const lastDispatch =
+                        v.dispatchHistory?.[v.dispatchHistory.length - 1];
+                      const dispatchDriverName =
+                        lastDispatch?.driverDetails?.name;
+
+                      return (
+                        <tr
+                          key={v._id}
+                          className="hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="flex items-center space-x-1">
-                                <User className="w-4 h-4 text-gray-400" />
-                                <span className="text-sm">
-                                  {driver.firstName} {driver.lastName}
-                                </span>
+                              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                                <Car className="w-4 h-4 text-gray-500" />
                               </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">
+                                  {v.licensePlate}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {v.make} {v.model} · {v.vehicleNumber}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="outline" className="text-xs">
+                              {fmt(v.type)}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge
+                              className={`${getStatusColor(v.status as VehicleStatus)} text-xs border`}
+                            >
+                              {fmt(v.status)}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-gray-600">
+                              <Fuel className="w-3.5 h-3.5" />
+                              <span className="text-xs">
+                                {v.fuelLevel || "—"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 text-xs">
+                            {v.mileage.toLocaleString()} km
+                          </td>
+                          <td className="px-4 py-3">
+                            {driver ? (
+                              <div className="text-xs">
+                                <p className="font-medium text-gray-800">
+                                  {driver.firstName} {driver.lastName}
+                                </p>
+                                {driver.badgeNumber && (
+                                  <p className="text-gray-400">
+                                    #{driver.badgeNumber}
+                                  </p>
+                                )}
+                              </div>
+                            ) : dispatchDriverName ? (
+                              <span className="text-xs text-gray-600">
+                                {dispatchDriverName}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
                               <Button
                                 size="sm"
-                                variant="outline"
-                                className="text-xs h-6 px-2"
-                                onClick={() =>
-                                  handleReturnVehicle(
-                                    vehicle._id,
-                                    vehicle.mileage,
-                                  )
-                                }
+                                variant="ghost"
+                                title="View details"
+                                onClick={() => openView(v)}
+                                className="h-7 w-7 p-0"
                               >
-                                Return
+                                <Eye className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Edit"
+                                onClick={() => openEdit(v)}
+                                className="h-7 w-7 p-0"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Dispatch vehicle"
+                                onClick={() => openDispatch(v)}
+                                className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Return vehicle"
+                                onClick={() => openReturn(v)}
+                                className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Delete"
+                                onClick={() => handleDelete(v._id)}
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             </div>
-                          ) : (
-                            <Select
-                              onValueChange={(value) =>
-                                handleAssignDriver(vehicle._id, value)
-                              }
-                            >
-                              <SelectTrigger className="w-36 h-8">
-                                <SelectValue placeholder="Assign driver" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {personnel.map((p) => (
-                                  <SelectItem key={p._id} value={p._id}>
-                                    {p.firstName} {p.lastName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center space-x-1">
-                            <Fuel className="w-4 h-4 text-gray-400" />
-                            <span
-                              className={`text-sm font-medium ${getFuelLevelColor(
-                                vehicle.fuelLevel,
-                              )}`}
-                            >
-                              {vehicle.fuelLevel}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openViewModal(vehicle)}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openEditModal(vehicle)}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDelete(vehicle._id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination */}
-          <div className="flex justify-between items-center mt-4">
-            <div className="text-sm text-gray-600">
-              Page {currentPage} of {totalPages}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+              <p className="text-xs text-gray-500">
+                Page {currentPage} of {totalPages} · {totalCount} total
+              </p>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="h-7 px-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(p + 1, totalPages))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="h-7 px-2"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                }
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Edit Modal */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+      {/* ── Edit Modal ── */}
+      <Dialog
+        open={isEditOpen}
+        onOpenChange={(o) => {
+          setIsEditOpen(o);
+          if (!o) resetVehicleForm();
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Vehicle</DialogTitle>
           </DialogHeader>
           <VehicleForm
-            formData={formData}
-            setFormData={setFormData}
-            selectedVehicle={selectedVehicle}
+            formData={vehicleForm}
+            setFormData={setVehicleForm}
+            isEdit
             submitting={submitting}
-            onSubmit={handleSubmit}
-            onClose={() => setIsEditModalOpen(false)}
+            onSubmit={handleVehicleSubmit}
+            onClose={() => setIsEditOpen(false)}
           />
         </DialogContent>
       </Dialog>
 
-      {/* View Details Modal */}
-      <VehicleDetailsModal
+      {/* ── View Details Modal ── */}
+      <DetailsModal
         vehicle={viewingVehicle}
-        open={isViewModalOpen}
-        onOpenChange={setIsViewModalOpen}
+        open={isViewOpen}
+        onOpenChange={setIsViewOpen}
+      />
+
+      {/* ── Dispatch Modal ── */}
+      <DispatchModal
+        vehicle={dispatchingVehicle}
+        personnel={personnel}
+        open={isDispatchOpen}
+        onOpenChange={setIsDispatchOpen}
+        onSubmit={handleDispatch}
+        submitting={dispatchSubmitting}
+      />
+
+      {/* ── Return Modal ── */}
+      <ReturnModal
+        vehicle={returningVehicle}
+        open={isReturnOpen}
+        onOpenChange={setIsReturnOpen}
+        onSubmit={handleReturn}
+        submitting={returnSubmitting}
       />
     </div>
   );
 };
 
-export default Vehicles;
+export default VehiclesPage;
