@@ -34,6 +34,7 @@ import {
   Users,
   Eye,
 } from "lucide-react";
+import { useStation } from "@/context/StationContext";
 
 // ─── Types aligned to ISchedule / IPersonnel models ───────────────────────────
 
@@ -376,6 +377,7 @@ function ScheduleForm({
           <Input
             id="startDate"
             type="datetime-local"
+            max={new Date().toISOString().slice(0, 16)}
             value={formData.startDate}
             onChange={(e) => field("startDate", e.target.value)}
             required
@@ -386,6 +388,8 @@ function ScheduleForm({
           <Input
             id="endDate"
             type="datetime-local"
+            min={formData.startDate || undefined}
+            max={new Date().toISOString().slice(0, 16)}
             value={formData.endDate}
             onChange={(e) => field("endDate", e.target.value)}
             required
@@ -535,6 +539,7 @@ function ScheduleForm({
                 </Label>
                 <Input
                   type="date"
+                  max={new Date().toISOString().split("T")[0]}
                   value={formData.recurrence.endDate ?? ""}
                   onChange={(e) =>
                     field("recurrence", {
@@ -763,6 +768,7 @@ function ViewSchedule({ schedule }: { schedule: Schedule }) {
 // ─── Main Page Component ────────────────────────────────────────────────────────
 
 const SchedulePage = () => {
+  const { stationParam } = useStation();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [personnelOptions, setPersonnelOptions] = useState<PersonnelOption[]>(
     [],
@@ -796,6 +802,7 @@ const SchedulePage = () => {
         ...(searchTerm && { search: searchTerm }),
         ...(typeFilter !== "all" && { type: typeFilter }),
         ...(statusFilter !== "all" && { status: statusFilter }),
+        ...(stationParam && { stationId: stationParam }),
       });
 
       const res = await fetch(`/api/schedule?${params}`, {
@@ -822,15 +829,16 @@ const SchedulePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, typeFilter, statusFilter]);
+  }, [currentPage, searchTerm, typeFilter, statusFilter, stationParam]);
 
   const fetchDropdownData = useCallback(async () => {
     const headers = authHeaders();
+    const sq = stationParam ? `&stationId=${stationParam}` : "";
 
     const [personnelRes, casesRes, vehiclesRes] = await Promise.allSettled([
-      fetch("/api/personnel?limit=100", { headers }),
-      fetch("/api/cases?limit=100", { headers }),
-      fetch("/api/vehicles?limit=100", { headers }),
+      fetch(`/api/personnel?limit=100${sq}`, { headers }),
+      fetch(`/api/cases?limit=100${sq}`, { headers }),
+      fetch(`/api/vehicles?limit=100${sq}`, { headers }),
     ]);
 
     if (personnelRes.status === "fulfilled" && personnelRes.value.ok) {
@@ -849,7 +857,7 @@ const SchedulePage = () => {
       };
       setVehicleOptions(d.vehicles ?? []);
     }
-  }, []);
+  }, [stationParam]);
 
   useEffect(() => {
     fetchDropdownData();
@@ -859,10 +867,10 @@ const SchedulePage = () => {
     fetchSchedules();
   }, [fetchSchedules]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or station change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, typeFilter, statusFilter]);
+  }, [searchTerm, typeFilter, statusFilter, stationParam]);
 
   // ── CRUD handlers ─────────────────────────────────────────────────────────────
 
@@ -883,7 +891,7 @@ const SchedulePage = () => {
       const res = await fetch(url, {
         method,
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(buildPayload(formData)),
+        body: JSON.stringify({ ...buildPayload(formData), ...(stationParam && { stationId: stationParam }) }),
       });
 
       if (!res.ok) {

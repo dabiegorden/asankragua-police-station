@@ -23,8 +23,27 @@ async function getVehicles(request: NextRequest) {
     const status = searchParams.get("status");
     const type = searchParams.get("type");
     const search = searchParams.get("search");
+    const stationId = searchParams.get("stationId");
 
     const query: Record<string, any> = {};
+
+    // Station scoping
+    switch (user.role) {
+      case "nco":
+      case "so":
+        if (!user.stationId) return NextResponse.json({ vehicles: [], pagination: { page, limit, total: 0, pages: 0 } });
+        query.stationId = user.stationId;
+        break;
+      case "dc": {
+        const target = stationId || user.stationId;
+        if (target) query.stationId = target;
+        break;
+      }
+      case "admin":
+        if (stationId) query.stationId = stationId;
+        break;
+    }
+
     if (status && status !== "all") query.status = status;
     if (type && type !== "all") query.type = type;
     if (search) {
@@ -94,6 +113,15 @@ async function createVehicle(request: NextRequest) {
       notes,
     } = body;
 
+    const resolvedStationId =
+      (["dc", "admin"].includes(user.role) && body.stationId)
+        ? body.stationId
+        : user.stationId;
+
+    if (!resolvedStationId) {
+      return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });
+    }
+
     if (!licensePlate || !make || !model || !type) {
       return NextResponse.json(
         { error: "Required fields: licensePlate, make, model, type" },
@@ -114,6 +142,7 @@ async function createVehicle(request: NextRequest) {
     const vehicleNumber = `VEH-${yearNow}-${String(count + 1).padStart(4, "0")}`;
 
     const newVehicle = new Vehicle({
+      stationId: resolvedStationId,
       vehicleNumber,
       licensePlate,
       make,

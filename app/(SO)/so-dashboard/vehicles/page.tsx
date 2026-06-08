@@ -640,6 +640,7 @@ const DispatchModal = ({
                 <Input
                   id="d-expret"
                   type="datetime-local"
+                  max={new Date().toISOString().slice(0, 16)}
                   value={form.expectedReturnDate}
                   onChange={(e) => set("expectedReturnDate", e.target.value)}
                   className="mt-1 h-9"

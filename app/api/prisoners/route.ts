@@ -44,8 +44,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const status = searchParams.get("status");
     const cellNumber = searchParams.get("cellNumber");
     const search = searchParams.get("search");
+    const stationId = searchParams.get("stationId");
 
     const query: PrisonerQuery = {};
+
+    // Station scoping
+    switch (user.role) {
+      case "nco":
+      case "so":
+        if (!user.stationId) return NextResponse.json({ prisoners: [], pagination: { page, limit, total: 0, pages: 0 } });
+        (query as Record<string, unknown>).stationId = user.stationId;
+        break;
+      case "dc": {
+        const target = stationId || user.stationId;
+        if (target) (query as Record<string, unknown>).stationId = target;
+        break;
+      }
+      case "admin":
+        if (stationId) (query as Record<string, unknown>).stationId = stationId;
+        break;
+    }
 
     if (status && status !== "all") query.status = status;
     if (cellNumber && cellNumber !== "all") query.cellNumber = cellNumber;
@@ -99,6 +117,7 @@ interface CreatePrisonerArrestDetails {
 }
 
 interface CreatePrisonerBody {
+  stationId?: string;
   firstName: string;
   lastName: string;
   middleName?: string;
@@ -151,6 +170,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       personalEffects,
       mugshot,
     } = body;
+
+    const resolvedStationId =
+      (["dc", "admin"].includes(user.role) && body.stationId)
+        ? body.stationId
+        : user.stationId;
+
+    if (!resolvedStationId) {
+      return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });
+    }
 
     // Validate required fields
     if (!firstName || !lastName || !dateOfBirth || !gender || !arrestDetails) {
@@ -219,6 +247,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const prisonerNumber = `PRS-${year}-${String(count + 1).padStart(4, "0")}`;
 
     const newPrisoner = new Prisoner({
+      stationId: resolvedStationId,
       prisonerNumber,
       firstName,
       lastName,

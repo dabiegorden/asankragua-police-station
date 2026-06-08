@@ -435,6 +435,7 @@ function CoreFields({
           <Input
             id={`${p}dateOfBooking`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={data.dateOfBooking}
             onChange={(e) => onChange({ dateOfBooking: e.target.value })}
             readOnly={readOnly}
@@ -539,6 +540,7 @@ function InsuranceFields({
           <Input
             id={`${p}insuranceCoverageStart`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={data.insuranceCoverageStart}
             onChange={(e) =>
               onChange({ insuranceCoverageStart: e.target.value })
@@ -550,6 +552,8 @@ function InsuranceFields({
           <Input
             id={`${p}insuranceCoverageEnd`}
             type="date"
+            min={data.insuranceCoverageStart || undefined}
+            max={new Date().toISOString().split("T")[0]}
             value={data.insuranceCoverageEnd}
             onChange={(e) => onChange({ insuranceCoverageEnd: e.target.value })}
           />
@@ -706,6 +710,7 @@ function ReturnModalForm({
               <Input
                 id="returnDate"
                 type="date"
+                max={new Date().toISOString().split("T")[0]}
                 value={formData.returnDate}
                 onChange={(e) => onChange({ returnDate: e.target.value })}
                 required

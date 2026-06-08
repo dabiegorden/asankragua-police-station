@@ -52,6 +52,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { useStation } from "@/context/StationContext";
 
 // =====================================================================
 // TypeScript Interfaces
@@ -640,6 +641,7 @@ const DispatchModal = ({
                 <Input
                   id="d-expret"
                   type="datetime-local"
+                  max={new Date().toISOString().slice(0, 16)}
                   value={form.expectedReturnDate}
                   onChange={(e) => set("expectedReturnDate", e.target.value)}
                   className="mt-1 h-9"
@@ -1583,6 +1585,7 @@ const VehicleForm = ({
 // =====================================================================
 
 const VehiclesPage = () => {
+  const { stationParam } = useStation();
   // Data
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [personnel, setPersonnel] = useState<UserRef[]>([]);
@@ -1631,11 +1634,11 @@ const VehiclesPage = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, statusFilter, typeFilter]);
+  }, [debouncedSearch, statusFilter, typeFilter, stationParam]);
 
   useEffect(() => {
     fetchVehicles();
-  }, [currentPage, debouncedSearch, statusFilter, typeFilter]);
+  }, [currentPage, debouncedSearch, statusFilter, typeFilter, stationParam]);
 
   useEffect(() => {
     fetchPersonnel();
@@ -1656,6 +1659,7 @@ const VehiclesPage = () => {
         ...(debouncedSearch && { search: debouncedSearch }),
         ...(statusFilter !== "all" && { status: statusFilter }),
         ...(typeFilter !== "all" && { type: typeFilter }),
+        ...(stationParam && { stationId: stationParam }),
       });
 
       const res = await fetch(`/api/vehicles?${params}`, {
@@ -1676,11 +1680,11 @@ const VehiclesPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, debouncedSearch, statusFilter, typeFilter]);
+  }, [currentPage, debouncedSearch, statusFilter, typeFilter, stationParam]);
 
   const fetchPersonnel = async () => {
     try {
-      const res = await fetch("/api/personnel?limit=200", {
+      const res = await fetch(`/api/personnel?limit=200${stationParam ? `&stationId=${stationParam}` : ""}`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       if (res.ok) {
@@ -1708,6 +1712,7 @@ const VehiclesPage = () => {
         body: JSON.stringify({
           ...vehicleForm,
           mileage: Number(vehicleForm.mileage),
+          ...(stationParam && { stationId: stationParam }),
         }),
       });
 

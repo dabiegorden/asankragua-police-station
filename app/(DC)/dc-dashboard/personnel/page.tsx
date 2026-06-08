@@ -26,6 +26,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
+import { useStation } from "@/context/StationContext";
 
 // ==================== Type Definitions ====================
 
@@ -273,6 +274,7 @@ const INITIAL_FORM_DATA: PersonnelFormData = {
 // ==================== Main Component ====================
 
 const PersonnelContent = () => {
+  const { stationParam } = useStation();
   const [personnel, setPersonnel] = useState<Personnel[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -318,6 +320,7 @@ const PersonnelContent = () => {
             statusFilter !== "all" && { status: statusFilter }),
           ...(rankFilter && rankFilter !== "all" && { rank: rankFilter }),
           ...(roleFilter && roleFilter !== "all" && { role: roleFilter }),
+          ...(stationParam && { stationId: stationParam }),
         });
 
         const response = await fetch(`/api/personnel?${params}`, {
@@ -344,7 +347,7 @@ const PersonnelContent = () => {
         setSearching(false);
       }
     },
-    [currentPage, statusFilter, rankFilter, roleFilter, lastSearchTerm],
+    [currentPage, statusFilter, rankFilter, roleFilter, lastSearchTerm, stationParam],
   );
 
   // Handle manual search (Enter key or search button)
@@ -364,11 +367,11 @@ const PersonnelContent = () => {
     }
   }, [debouncedSearchTerm, fetchPersonnel, lastSearchTerm]);
 
-  // Handle filter changes
+  // Handle filter changes and station switch
   useEffect(() => {
     setCurrentPage(1);
     fetchPersonnel(searchTerm);
-  }, [statusFilter, rankFilter, roleFilter]);
+  }, [statusFilter, rankFilter, roleFilter, stationParam]);
 
   // Handle page changes
   useEffect(() => {
@@ -461,6 +464,7 @@ const PersonnelContent = () => {
 
       // Prepare payload matching backend expectations
       const payload = {
+        ...(stationParam && { stationId: stationParam }),
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -760,6 +764,7 @@ const PersonnelContent = () => {
           <Input
             id="dateOfBirth"
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.dateOfBirth}
             onChange={(e) =>
               setFormData({ ...formData, dateOfBirth: e.target.value })
@@ -772,6 +777,7 @@ const PersonnelContent = () => {
           <Input
             id="dateJoined"
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.dateJoined}
             onChange={(e) =>
               setFormData({ ...formData, dateJoined: e.target.value })

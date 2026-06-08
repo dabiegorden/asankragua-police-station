@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const VehicleSchema = new mongoose.Schema(
   {
+    stationId: { type: String, required: true, index: true },
     vehicleNumber: {
       type: String,
       required: true,

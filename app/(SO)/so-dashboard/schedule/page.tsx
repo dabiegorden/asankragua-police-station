@@ -376,6 +376,7 @@ function ScheduleForm({
           <Input
             id="startDate"
             type="datetime-local"
+            max={new Date().toISOString().slice(0, 16)}
             value={formData.startDate}
             onChange={(e) => field("startDate", e.target.value)}
             required
@@ -386,6 +387,8 @@ function ScheduleForm({
           <Input
             id="endDate"
             type="datetime-local"
+            min={formData.startDate || undefined}
+            max={new Date().toISOString().slice(0, 16)}
             value={formData.endDate}
             onChange={(e) => field("endDate", e.target.value)}
             required
@@ -535,6 +538,7 @@ function ScheduleForm({
                 </Label>
                 <Input
                   type="date"
+                  max={new Date().toISOString().split("T")[0]}
                   value={formData.recurrence.endDate ?? ""}
                   onChange={(e) =>
                     field("recurrence", {

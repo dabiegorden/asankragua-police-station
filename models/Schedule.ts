@@ -17,6 +17,7 @@ export interface IRecurrence {
 // ─── Main document interface ───────────────────────────────────────────────
 
 export interface ISchedule extends Document {
+  stationId: string;
   title: string;
   description?: string;
   type:
@@ -47,6 +48,7 @@ export interface ISchedule extends Document {
 
 const ScheduleSchema = new Schema<ISchedule>(
   {
+    stationId: { type: String, required: true, index: true },
     title: { type: String, required: true },
     description: { type: String },
     type: {

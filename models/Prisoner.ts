@@ -65,6 +65,7 @@ export interface IVisitorLog {
 // ─── Main document interface ───────────────────────────────────────────────
 
 export interface IPrisoner extends Document {
+  stationId: string;
   prisonerNumber: string;
   firstName: string;
   lastName: string;
@@ -95,6 +96,7 @@ export interface IPrisoner extends Document {
 
 const PrisonerSchema = new Schema<IPrisoner>(
   {
+    stationId: { type: String, required: true, index: true },
     prisonerNumber: {
       type: String,
       required: true,

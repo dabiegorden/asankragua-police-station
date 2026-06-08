@@ -1,12 +1,3 @@
-// src/components/cases/CaseBookPDFButton.tsx
-// Plug-and-play PDF download button for the Digital Case Book
-// Drop this into any case detail view — NCO, CID, SO, or DC pages.
-//
-// Usage:
-//   <CaseBookPDFButton caseId={caseItem._id} caseNumber={caseItem.caseNumber} />
-//
-// The button calls GET /api/cases/[id]/pdf and downloads the file automatically.
-
 "use client";
 
 import { useState } from "react";

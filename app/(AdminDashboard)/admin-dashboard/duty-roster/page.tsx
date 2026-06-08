@@ -882,6 +882,7 @@ function RosterForm({
           <input
             type="date"
             className={inp}
+            max={new Date().toISOString().split("T")[0]}
             value={form.startDate}
             onChange={(e) => patch("startDate", e.target.value)}
             disabled={!canEdit}
@@ -891,6 +892,8 @@ function RosterForm({
           <input
             type="date"
             className={inp}
+            min={form.startDate || undefined}
+            max={new Date().toISOString().split("T")[0]}
             value={form.endDate}
             onChange={(e) => patch("endDate", e.target.value)}
             disabled={!canEdit}

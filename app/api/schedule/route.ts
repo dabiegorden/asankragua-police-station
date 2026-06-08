@@ -7,6 +7,7 @@ import Schedule, { ISchedule } from "@/models/Schedule";
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
 interface CreateScheduleBody {
+  stationId?: string;
   title: string;
   type: string;
   location: string;
@@ -39,8 +40,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const search = searchParams.get("search");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    const stationId = searchParams.get("stationId");
 
     const query: Record<string, unknown> = {};
+
+    // Station scoping
+    switch (user.role) {
+      case "nco":
+      case "so":
+        if (!user.stationId) return NextResponse.json({ schedules: [], pagination: { page, limit, total: 0, pages: 0 } });
+        query.stationId = user.stationId;
+        break;
+      case "dc": {
+        const target = stationId || user.stationId;
+        if (target) query.stationId = target;
+        break;
+      }
+      case "admin":
+        if (stationId) query.stationId = stationId;
+        break;
+    }
 
     if (type && type !== "all") query.type = type;
     if (status && status !== "all") query.status = status;
@@ -128,6 +147,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       notes,
     } = body;
 
+    const resolvedStationId =
+      (["dc", "admin"].includes(user.role) && body.stationId)
+        ? body.stationId
+        : user.stationId;
+
+    if (!resolvedStationId) {
+      return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });
+    }
+
     if (!title || !type || !startDate || !endDate || !location) {
       return NextResponse.json(
         { error: "Required fields: title, type, startDate, endDate, location" },
@@ -162,6 +190,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         : undefined;
 
     const newSchedule = new Schedule({
+      stationId: resolvedStationId,
       title,
       description: description ?? "",
       type,

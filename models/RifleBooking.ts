@@ -36,6 +36,7 @@ export interface IWeaponReturn {
 // ─── Main document interface ───────────────────────────────────────────────
 
 export interface IRifleBooking extends Document {
+  stationId: string;
   bookingNumber: string;
   typeOfRifle: string;
   rifleNumber: string;
@@ -104,6 +105,7 @@ const WeaponReturnSchema = new Schema<IWeaponReturn>(
 
 const RifleBookingSchema = new Schema<IRifleBooking>(
   {
+    stationId: { type: String, required: true, index: true },
     bookingNumber: { type: String, required: true, unique: true },
     typeOfRifle: { type: String, required: true },
     rifleNumber: { type: String, required: true },

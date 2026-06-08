@@ -710,6 +710,7 @@ const PersonnelContent = () => {
           <Input
             id="dateOfBirth"
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.dateOfBirth}
             onChange={(e) =>
               setFormData({ ...formData, dateOfBirth: e.target.value })
@@ -722,6 +723,7 @@ const PersonnelContent = () => {
           <Input
             id="dateJoined"
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.dateJoined}
             onChange={(e) =>
               setFormData({ ...formData, dateJoined: e.target.value })

@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
+import { useStation } from "@/context/StationContext";
 
 // ==================== Type Definitions ====================
 
@@ -404,6 +405,7 @@ const PrisonerFormFields = ({
           <Input
             id={`${prefix}dateOfBirth`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.dateOfBirth}
             onChange={(e) =>
               setFormData((p) => ({ ...p, dateOfBirth: e.target.value }))
@@ -510,6 +512,7 @@ const PrisonerFormFields = ({
           <Input
             id={`${prefix}arrestDate`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.arrestDetails.arrestDate}
             onChange={(e) =>
               setFormData((p) => ({
@@ -789,6 +792,7 @@ const PrisonerFormFields = ({
 
 const PrisonersContent = () => {
   useSearchParams(); // keep router sync
+  const { stationParam } = useStation();
 
   // Data state
   const [prisoners, setPrisoners] = useState<Prisoner[]>([]);
@@ -833,6 +837,7 @@ const PrisonersContent = () => {
         params.append("search", debouncedSearchTerm.trim());
       if (statusFilter && statusFilter !== "all")
         params.append("status", statusFilter);
+      if (stationParam) params.append("stationId", stationParam);
 
       const response = await fetch(`/api/prisoners?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -856,7 +861,7 @@ const PrisonersContent = () => {
       setLoading(false);
       setSearching(false);
     }
-  }, [currentPage, debouncedSearchTerm, statusFilter]);
+  }, [currentPage, debouncedSearchTerm, statusFilter, stationParam]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -897,7 +902,7 @@ const PrisonersContent = () => {
   }, [fetchPrisoners]);
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, statusFilter]);
+  }, [debouncedSearchTerm, statusFilter, stationParam]);
 
   // ── Image upload ──
 
@@ -966,6 +971,7 @@ const PrisonersContent = () => {
       const method = selectedPrisoner ? "PUT" : "POST";
 
       const dataToSend = {
+        ...(stationParam && { stationId: stationParam }),
         firstName: formData.firstName,
         lastName: formData.lastName,
         middleName: formData.middleName || undefined,

@@ -1019,6 +1019,7 @@ function CaseForm({
           <input
             className={inputCls}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={form.dateOccurred}
             onChange={(e) => set("dateOccurred", e.target.value)}
             required

@@ -22,8 +22,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const rank = searchParams.get("rank");
     const role = searchParams.get("role");
     const search = searchParams.get("search");
+    const stationId = searchParams.get("stationId");
 
     const query: Record<string, unknown> = {};
+
+    // Station scoping: nco/so are hard-locked to their own station;
+    // dc defaults to their station but can view another via ?stationId=;
+    // admin sees all unless ?stationId= is provided.
+    switch (user.role) {
+      case "nco":
+      case "so":
+        if (!user.stationId) return NextResponse.json({ personnel: [], pagination: { page, limit, total: 0, pages: 0 } });
+        query.stationId = user.stationId;
+        break;
+      case "dc": {
+        const target = stationId || user.stationId;
+        if (target) query.stationId = target;
+        break;
+      }
+      case "admin":
+        if (stationId) query.stationId = stationId;
+        break;
+    }
 
     if (status && status !== "all") query.status = status;
     if (rank && rank !== "all") query.rank = rank;
@@ -76,6 +96,7 @@ interface CreatePersonnelBody extends Pick<
   | "rank"
   | "phoneNumber"
 > {
+  stationId?: string;
   serviceNumber?: string;
   specialization?: IPersonnel["specialization"];
   emergencyContact?: IPersonnel["emergencyContact"];
@@ -117,6 +138,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       status,
     } = body;
 
+    // Resolve the station: dc/admin may pass stationId in body; otherwise fall back to user's own station
+    const resolvedStationId =
+      (["dc", "admin"].includes(user.role) && body.stationId)
+        ? body.stationId
+        : user.stationId;
+
+    if (!resolvedStationId) {
+      return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });
+    }
+
     if (
       !firstName ||
       !lastName ||
@@ -157,6 +188,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const newPersonnel = new Personnel({
+      stationId: resolvedStationId,
       firstName,
       lastName,
       email,

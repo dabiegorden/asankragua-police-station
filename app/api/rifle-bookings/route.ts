@@ -11,6 +11,7 @@ type AllowedRole = (typeof ALLOWED_ROLES)[number];
 // ─── Request body type ─────────────────────────────────────────────────────
 
 interface CreateRifleBookingBody {
+  stationId?: string;
   typeOfRifle: string;
   rifleNumber: string;
   serialNumber: string;
@@ -44,8 +45,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const limit = Math.max(1, parseInt(searchParams.get("limit") ?? "10", 10));
     const status = searchParams.get("status");
     const search = searchParams.get("search");
+    const stationId = searchParams.get("stationId");
 
     const query: Record<string, unknown> = {};
+
+    // Station scoping
+    switch (user.role) {
+      case "nco":
+      case "so":
+        if (!user.stationId) return NextResponse.json({ bookings: [], pagination: { page, limit, total: 0, pages: 0 } });
+        query.stationId = user.stationId;
+        break;
+      case "dc": {
+        const target = stationId || user.stationId;
+        if (target) query.stationId = target;
+        break;
+      }
+      case "admin":
+        if (stationId) query.stationId = stationId;
+        break;
+    }
 
     if (status && status !== "all") query.status = status;
 
@@ -97,6 +116,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await connectDB();
 
     const body = (await request.json()) as CreateRifleBookingBody;
+
+    const resolvedStationId =
+      (["dc", "admin"].includes(user.role) && body.stationId)
+        ? body.stationId
+        : user.stationId;
+
+    if (!resolvedStationId) {
+      return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });
+    }
 
     const {
       typeOfRifle,
@@ -163,6 +191,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const newBooking = new RifleBooking({
+      stationId: resolvedStationId,
       bookingNumber,
       typeOfRifle,
       rifleNumber,

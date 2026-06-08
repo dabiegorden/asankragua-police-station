@@ -31,6 +31,7 @@ export interface IAssignment {
 // ─── Main document interface ───────────────────────────────────────────────
 
 export interface IPersonnel extends Document {
+  stationId: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -76,6 +77,7 @@ export interface IPersonnel extends Document {
 
 const PersonnelSchema = new Schema<IPersonnel>(
   {
+    stationId: { type: String, required: true, index: true },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },

@@ -359,6 +359,7 @@ const Reports = () => {
               <Input
                 id="fromDate"
                 type="date"
+                max={new Date().toISOString().split("T")[0]}
                 value={dateRange.from}
                 onChange={(e) =>
                   setDateRange((prev) => ({ ...prev, from: e.target.value }))
@@ -371,6 +372,8 @@ const Reports = () => {
               <Input
                 id="toDate"
                 type="date"
+                min={dateRange.from || undefined}
+                max={new Date().toISOString().split("T")[0]}
                 value={dateRange.to}
                 onChange={(e) =>
                   setDateRange((prev) => ({ ...prev, to: e.target.value }))

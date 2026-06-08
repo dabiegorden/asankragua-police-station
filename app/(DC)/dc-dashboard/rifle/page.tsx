@@ -49,6 +49,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
 import { debounce } from "lodash";
+import { useStation } from "@/context/StationContext";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -435,6 +436,7 @@ function CoreFields({
           <Input
             id={`${p}dateOfBooking`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={data.dateOfBooking}
             onChange={(e) => onChange({ dateOfBooking: e.target.value })}
             readOnly={readOnly}
@@ -539,6 +541,7 @@ function InsuranceFields({
           <Input
             id={`${p}insuranceCoverageStart`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={data.insuranceCoverageStart}
             onChange={(e) =>
               onChange({ insuranceCoverageStart: e.target.value })
@@ -550,6 +553,8 @@ function InsuranceFields({
           <Input
             id={`${p}insuranceCoverageEnd`}
             type="date"
+            min={data.insuranceCoverageStart || undefined}
+            max={new Date().toISOString().split("T")[0]}
             value={data.insuranceCoverageEnd}
             onChange={(e) => onChange({ insuranceCoverageEnd: e.target.value })}
           />
@@ -706,6 +711,7 @@ function ReturnModalForm({
               <Input
                 id="returnDate"
                 type="date"
+                max={new Date().toISOString().split("T")[0]}
                 value={formData.returnDate}
                 onChange={(e) => onChange({ returnDate: e.target.value })}
                 required
@@ -1087,6 +1093,7 @@ function ViewRecordModal({
 // ─── Main Page Content ─────────────────────────────────────────────────────
 
 function RifleBookingContent() {
+  const { stationParam } = useStation();
   const [bookings, setBookings] = useState<RifleBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -1134,6 +1141,7 @@ function RifleBookingContent() {
       });
       if (deferredSearch) params.append("search", deferredSearch);
       if (statusFilter !== "all") params.append("status", statusFilter);
+      if (stationParam) params.append("stationId", stationParam);
 
       const res = await fetch(`/api/rifle-bookings?${params}`);
       const data = (await res.json()) as {
@@ -1154,7 +1162,7 @@ function RifleBookingContent() {
       setLoading(false);
       setIsSearching(false);
     }
-  }, [currentPage, deferredSearch, statusFilter]);
+  }, [currentPage, deferredSearch, statusFilter, stationParam]);
 
   useEffect(() => {
     fetchBookings();
@@ -1208,6 +1216,7 @@ function RifleBookingContent() {
       insurance.notes = bookingForm.insuranceNotes;
 
     const payload = {
+      ...(stationParam && { stationId: stationParam }),
       typeOfRifle: bookingForm.typeOfRifle,
       rifleNumber: bookingForm.rifleNumber,
       serialNumber: bookingForm.serialNumber,

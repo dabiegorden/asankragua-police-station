@@ -404,6 +404,7 @@ const PrisonerFormFields = ({
           <Input
             id={`${prefix}dateOfBirth`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.dateOfBirth}
             onChange={(e) =>
               setFormData((p) => ({ ...p, dateOfBirth: e.target.value }))
@@ -510,6 +511,7 @@ const PrisonerFormFields = ({
           <Input
             id={`${prefix}arrestDate`}
             type="date"
+            max={new Date().toISOString().split("T")[0]}
             value={formData.arrestDetails.arrestDate}
             onChange={(e) =>
               setFormData((p) => ({
