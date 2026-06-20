@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useStation } from "@/context/StationContext";
+import DashboardWelcome from "@/components/DashboardWelcome";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -266,6 +267,8 @@ const DcDashboardPage = () => {
 
   return (
     <div className="space-y-8 pt-6 pb-16 max-w-7xl mx-auto">
+      <DashboardWelcome />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

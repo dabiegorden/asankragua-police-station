@@ -37,20 +37,19 @@ export function StationProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore last-selected station from localStorage
+    // Restore last-selected station from localStorage. The DC oversees every
+    // station, so the default (no saved selection) is "All Stations" (null).
     const saved = localStorage.getItem("dc_selected_station");
     fetch("/api/stations", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
         const list: Station[] = d.stations || [];
         setStations(list);
-        if (saved) {
+        if (saved && saved !== "__all__") {
           const found = list.find((s) => s.id === saved);
           if (found) setSelectedStationState(found);
-          else if (list[0]) setSelectedStationState(list[0]);
-        } else if (list[0]) {
-          setSelectedStationState(list[0]);
         }
+        // Otherwise leave selectedStation as null → all stations.
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -58,8 +57,8 @@ export function StationProvider({ children }: { children: ReactNode }) {
 
   function setSelectedStation(s: Station | null) {
     setSelectedStationState(s);
-    if (s) localStorage.setItem("dc_selected_station", s.id);
-    else localStorage.removeItem("dc_selected_station");
+    // Persist the explicit "All Stations" choice so it survives reloads.
+    localStorage.setItem("dc_selected_station", s ? s.id : "__all__");
   }
 
   return (

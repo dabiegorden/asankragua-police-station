@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
+import { resolveCreateStation } from "@/lib/stationScope";
 import RifleBooking, { IInsurance, IWeaponReturn } from "@/models/RifleBooking";
 
 // ─── Role guard ────────────────────────────────────────────────────────────
@@ -57,12 +58,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         query.stationId = user.stationId;
         break;
       case "dc": {
-        const target = stationId || user.stationId;
-        if (target) query.stationId = target;
+        // DC oversees all stations; only narrows when a station is requested.
+        if (stationId) query.stationId = stationId;
         break;
       }
       case "admin":
-        if (stationId) query.stationId = stationId;
+        if (user.stationId) query.stationId = user.stationId;
+        else if (stationId) query.stationId = stationId;
         break;
     }
 
@@ -117,10 +119,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const body = (await request.json()) as CreateRifleBookingBody;
 
-    const resolvedStationId =
-      (["dc", "admin"].includes(user.role) && body.stationId)
-        ? body.stationId
-        : user.stationId;
+    const resolvedStationId = resolveCreateStation(user, body.stationId);
 
     if (!resolvedStationId) {
       return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });

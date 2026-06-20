@@ -497,11 +497,17 @@ async function buildPDF(caseData: any): Promise<Buffer> {
       const badge = entry.addedBy?.badgeNumber
         ? ` \u00b7 Badge: ${entry.addedBy.badgeNumber}`
         : "";
-      const contentTxt = entry.content || "";
+      const contentTxt = entry.content || "—";
 
-      // Estimate box height from text length
-      const textLines = Math.ceil(contentTxt.length / 82) + 1;
-      const boxH = Math.max(72, textLines * 13 + 52);
+      // Measure the ACTUAL rendered height of the content (honours word-wrap and
+      // explicit line breaks) so the box always fully contains the text instead
+      // of clipping long entries behind the following box.
+      doc.font("Helvetica").fontSize(9);
+      const contentH = doc.heightOfString(contentTxt, {
+        width: cW - 28,
+        lineGap: 2,
+      });
+      const boxH = Math.max(72, 34 + contentH + 22);
       need(boxH + 12);
 
       const eY = doc.y + 4;
@@ -604,10 +610,15 @@ async function buildPDF(caseData: any): Promise<Buffer> {
 
       items.forEach((item, ri) => {
         const cells = rowFn(item);
-        const lineC = Math.max(
-          ...cells.map((c) => Math.ceil((c || "").length / 32)),
+        doc.font("Helvetica").fontSize(8);
+        const rowH = Math.max(
+          22,
+          Math.max(
+            ...cells.map((c, i) =>
+              doc.heightOfString(c || "—", { width: widths[i] - 8 }),
+            ),
+          ) + 12,
         );
-        const rowH = Math.max(22, lineC * 12 + 10);
         need(rowH + 2);
         const rY = doc.y;
         rect(mL, rY, cW, rowH, ri % 2 === 0 ? "#f8fafc" : "#ffffff");
@@ -704,8 +715,12 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   if (handoffs.length) {
     sectionBand("Official Handoff Notes", "#374151");
     for (const hn of handoffs) {
-      const tLines = Math.ceil((hn.val || "").length / 88) + 1;
-      const boxH = Math.max(46, tLines * 12 + 24);
+      doc.font("Helvetica").fontSize(9);
+      const valH = doc.heightOfString(hn.val || "—", {
+        width: cW - 28,
+        lineGap: 1.5,
+      });
+      const boxH = Math.max(46, 30 + valH);
       need(boxH + 12);
       const hnY = doc.y + 4;
       rect(mL, hnY, cW, boxH, "#f8fafc", 3);
@@ -753,10 +768,15 @@ async function buildPDF(caseData: any): Promise<Buffer> {
         e.performedBy?.fullName || "System",
         transition,
       ];
-      const lc = Math.max(
-        ...cells.map((c) => Math.ceil((c || "").length / 32)),
+      doc.font("Helvetica").fontSize(8);
+      const rowH = Math.max(
+        22,
+        Math.max(
+          ...cells.map((c, ci) =>
+            doc.heightOfString(c || "—", { width: aW[ci] - 8 }),
+          ),
+        ) + 12,
       );
-      const rowH = Math.max(22, lc * 12 + 10);
       need(rowH + 2);
       const rY = doc.y;
       rect(mL, rY, cW, rowH, i % 2 === 0 ? "#f8fafc" : "#ffffff");
@@ -1365,6 +1385,50 @@ export async function PUT(req: NextRequest, { params }: Params) {
       return NextResponse.json({ case: await populateCase(id) });
     }
 
+    // ── DC returns the case back down to the Station Officer with a directive ──
+    // This keeps the case in the recurrent loop (DC ⇄ SO ⇄ CID) instead of
+    // closing it. The case only closes when the DC issues a final decision.
+    if (action === "dc-return") {
+      if (!["dc", "admin"].includes(user.role))
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      const { dcReturnNote } = fields;
+      if (!dcReturnNote?.trim())
+        return NextResponse.json(
+          { error: "Directive note required" },
+          { status: 400 },
+        );
+      if (!caseDoc.assignedSO)
+        return NextResponse.json(
+          { error: "No Station Officer is assigned to receive this case" },
+          { status: 400 },
+        );
+      caseDoc.dcNote = dcReturnNote.trim();
+      caseDoc.dcReviewedAt = new Date();
+      caseDoc.status = "under_review";
+      caseDoc.currentStage = "so";
+      caseDoc.caseBookEntries.push({
+        stage: "dc",
+        entryType: "directive",
+        content: dcReturnNote.trim(),
+        addedBy: user.userId,
+        roleSnapshot: user.role,
+        addedAt: new Date(),
+        attachments: uploadedAttachments,
+        isEditable: false,
+      });
+      caseDoc.auditLog.push({
+        action: "returned_to_so",
+        performedBy: user.userId,
+        performedAt: new Date(),
+        fromStage: "dc",
+        toStage: "so",
+        details: "Case returned to Station Officer with directive by DC",
+      });
+      await caseDoc.save();
+      return NextResponse.json({ case: await populateCase(id) });
+    }
+
+    // ── DC issues the FINAL decision — this is the only path that closes a case ─
     if (action === "dc-decide") {
       if (!["dc", "admin"].includes(user.role))
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -1374,10 +1438,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
           { error: "Decision note required" },
           { status: 400 },
         );
-      if (!["closed", "suspended", "investigating"].includes(outcome))
+      if (!["closed", "suspended"].includes(outcome))
         return NextResponse.json(
           {
-            error: "Valid outcome required: closed | suspended | investigating",
+            error:
+              "Final outcome required: closed | suspended. To send the case back for more work, use the Return to Station Officer action.",
           },
           { status: 400 },
         );
@@ -1396,12 +1461,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         isEditable: false,
       });
       caseDoc.auditLog.push({
-        action:
-          outcome === "closed"
-            ? "case_closed"
-            : outcome === "suspended"
-              ? "case_suspended"
-              : "case_updated",
+        action: outcome === "closed" ? "case_closed" : "case_suspended",
         performedBy: user.userId,
         performedAt: new Date(),
         fromStage: "dc",

@@ -78,7 +78,7 @@ const DcLayout = ({ children }: { children: React.ReactNode }) => {
               <div className="bg-amber-50 border-b border-amber-100 px-6 py-2 flex items-center gap-3">
                 <StationSelector />
                 <span className="text-xs text-amber-600 italic hidden md:block">
-                  All data below is scoped to the selected station.
+                  Showing all stations by default — pick one to focus the view.
                 </span>
               </div>
             </header>

@@ -73,7 +73,10 @@ export async function GET(req: NextRequest) {
       }
 
       case "admin": {
-        if (stationIdParam) {
+        // Station admin is locked to its own station; super admin may filter.
+        if (user.stationId) {
+          filter.stationId = user.stationId.toLowerCase();
+        } else if (stationIdParam) {
           filter.stationId = stationIdParam.toLowerCase();
         }
         break;
@@ -156,9 +159,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Station guard: nco / so locked to own station ─────────────────────
+    // ── Station guard: nco / so / station-admin locked to own station ─────
     if (
-      (user.role === "nco" || user.role === "so") &&
+      (user.role === "nco" || user.role === "so" || user.role === "admin") &&
       user.stationId &&
       stationId.toLowerCase() !== user.stationId.toLowerCase()
     ) {

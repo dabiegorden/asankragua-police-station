@@ -4,6 +4,11 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { requireRole } from "@/middleware/auth";
+import {
+  resolveScopeStation,
+  resolveCreateStation,
+  isSuperAdmin,
+} from "@/lib/stationScope";
 
 export async function GET(req: NextRequest) {
   const { user, error } = requireRole(req, ["admin", "nco", "so", "dc"]);
@@ -34,13 +39,16 @@ export async function GET(req: NextRequest) {
     if (role) filter.role = role;
     if (isActive !== "") filter.isActive = isActive === "true";
 
-    // Scope by station for DC (or any role that passes ?stationId=)
-    if (user.role === "dc" && !stationId && user.stationId) {
-      // Default to the DC's own station if no override is given
-      filter.stationId = user.stationId;
-    } else if (stationId) {
-      filter.stationId = stationId;
+    // Station scoping: station-bound roles (nco/so/station-admin) are locked to
+    // their own station; dc defaults to own but may filter; super admin sees all.
+    const scopeStation = resolveScopeStation(user, stationId);
+    if (scopeStation === undefined) {
+      return NextResponse.json({
+        users: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
     }
+    if (scopeStation) filter.stationId = scopeStation;
 
     const skip = (page - 1) * limit;
 
@@ -89,6 +97,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
+    // Only the super admin may create administrator or district-commander
+    // accounts. A station admin can only manage accounts within its own station.
+    if ((role === "admin" || role === "dc") && !isSuperAdmin(user)) {
+      return NextResponse.json(
+        { error: "Only the super admin can create administrators or district commanders" },
+        { status: 403 },
+      );
+    }
+
+    // Resolve the station: super admin may assign any station; a station admin
+    // is pinned to its own station regardless of the submitted value.
+    const resolvedStationId = isSuperAdmin(user)
+      ? stationId || null
+      : resolveCreateStation(user, stationId);
+
+    // Admins and district commanders are not tied to a single station
+    // (the DC oversees every station); all other roles require one.
+    if (role !== "admin" && role !== "dc" && !resolvedStationId) {
+      return NextResponse.json(
+        { error: "A station must be assigned for this role" },
+        { status: 400 },
+      );
+    }
+
+    // Force the DC to be stationless regardless of any submitted value.
+    const finalStationId = role === "dc" ? null : resolvedStationId;
+
     const existing = await User.findOne({ email });
     if (existing) {
       return NextResponse.json(
@@ -104,7 +139,7 @@ export async function POST(req: NextRequest) {
       email,
       password: hashedPassword,
       role,
-      stationId: stationId || null,
+      stationId: finalStationId,
       isActive: isActive !== undefined ? isActive : true,
     });
 

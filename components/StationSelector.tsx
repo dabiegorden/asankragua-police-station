@@ -16,15 +16,21 @@ export function StationSelector() {
 
   if (loading || stations.length === 0) return null;
 
+  const ALL = "__all__";
+
   return (
     <div className="flex items-center gap-2">
       <Building2 size={14} className="text-amber-600 shrink-0" />
       <span className="text-xs font-medium text-gray-500 hidden sm:block">
-        Viewing station:
+        Viewing:
       </span>
       <Select
-        value={selectedStation?.id ?? ""}
+        value={selectedStation?.id ?? ALL}
         onValueChange={(id) => {
+          if (id === ALL) {
+            setSelectedStation(null);
+            return;
+          }
           const station = stations.find((s) => s.id === id) ?? null;
           setSelectedStation(station);
         }}
@@ -33,6 +39,9 @@ export function StationSelector() {
           <SelectValue placeholder="Select station" />
         </SelectTrigger>
         <SelectContent>
+          <SelectItem value={ALL} className="text-xs">
+            All Stations (District-wide)
+          </SelectItem>
           {stations.map((s) => (
             <SelectItem key={s.id} value={s.id} className="text-xs">
               {s.name}

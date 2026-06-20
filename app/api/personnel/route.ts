@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
+import { resolveCreateStation } from "@/lib/stationScope";
 import Personnel, { IPersonnel } from "@/models/Personnel";
 
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"] as const;
@@ -36,12 +37,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         query.stationId = user.stationId;
         break;
       case "dc": {
-        const target = stationId || user.stationId;
-        if (target) query.stationId = target;
+        // DC oversees all stations; only narrows when a station is requested.
+        if (stationId) query.stationId = stationId;
         break;
       }
       case "admin":
-        if (stationId) query.stationId = stationId;
+        // Station admin is hard-locked to its own station; super admin may filter.
+        if (user.stationId) query.stationId = user.stationId;
+        else if (stationId) query.stationId = stationId;
         break;
     }
 
@@ -138,11 +141,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       status,
     } = body;
 
-    // Resolve the station: dc/admin may pass stationId in body; otherwise fall back to user's own station
-    const resolvedStationId =
-      (["dc", "admin"].includes(user.role) && body.stationId)
-        ? body.stationId
-        : user.stationId;
+    // Resolve the station: dc/super-admin may target any station; everyone else
+    // (incl. station admins, nco, so) is pinned to their own station.
+    const resolvedStationId = resolveCreateStation(user, body.stationId);
 
     if (!resolvedStationId) {
       return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });

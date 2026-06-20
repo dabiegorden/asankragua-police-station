@@ -26,6 +26,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
+import { ASANKRAGUA_STATIONS, getStationName } from "@/lib/stations";
+import { getCurrentUser, isSuperAdminUser } from "@/lib/clientUser";
 
 // ==================== Type Definitions ====================
 
@@ -93,6 +95,7 @@ interface Assignment {
 
 interface Personnel {
   _id: string;
+  stationId?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -131,6 +134,7 @@ interface UploadResponse {
 }
 
 interface PersonnelFormData {
+  stationId: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -224,6 +228,7 @@ const getRoleColor = (role: PersonnelRole): string => {
 // ==================== Initial Form Data ====================
 
 const INITIAL_FORM_DATA: PersonnelFormData = {
+  stationId: "",
   firstName: "",
   lastName: "",
   email: "",
@@ -264,6 +269,11 @@ const PersonnelContent = () => {
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] =
     useState<PersonnelFormData>(INITIAL_FORM_DATA);
+
+  // The logged-in admin. A super admin (no station) may assign personnel to any
+  // station; a station admin is pinned to their own station.
+  const currentUser = useMemo(() => getCurrentUser(), []);
+  const canChooseStation = isSuperAdminUser(currentUser);
 
   const searchParams = useSearchParams();
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -413,12 +423,20 @@ const PersonnelContent = () => {
         return;
       }
 
+      if (canChooseStation && !formData.stationId) {
+        toast.error("Please select a police station for this personnel");
+        return;
+      }
+
       const url = selectedPersonnel
         ? `/api/personnel/${selectedPersonnel._id}`
         : "/api/personnel";
       const method = selectedPersonnel ? "PUT" : "POST";
 
       const payload = {
+        // Only the super admin may direct personnel to a chosen station; the
+        // backend pins station admins / dc-less roles to their own station.
+        stationId: canChooseStation ? formData.stationId || undefined : undefined,
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -508,6 +526,7 @@ const PersonnelContent = () => {
       lastName: personnelItem.lastName,
       email: personnelItem.email,
       username: personnelItem.username,
+      stationId: personnelItem.stationId || "",
       role: personnelItem.role,
       serviceNumber: personnelItem.serviceNumber || "",
       rank: personnelItem.rank,
@@ -612,6 +631,37 @@ const PersonnelContent = () => {
             }
             required
           />
+        </div>
+
+        {/* Police Station */}
+        <div className="sm:col-span-2">
+          <Label htmlFor="stationId">Police Station *</Label>
+          {canChooseStation ? (
+            <Select
+              value={formData.stationId}
+              onValueChange={(value: string) =>
+                setFormData({ ...formData, stationId: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Assign a police station" />
+              </SelectTrigger>
+              <SelectContent>
+                {ASANKRAGUA_STATIONS.map((station) => (
+                  <SelectItem key={station.id} value={station.id}>
+                    {station.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              id="stationId"
+              value={getStationName(currentUser?.stationId)}
+              disabled
+              readOnly
+            />
+          )}
         </div>
 
         {/* Role & Rank */}

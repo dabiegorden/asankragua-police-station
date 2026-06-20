@@ -64,6 +64,7 @@ import {
   CaseBookPDFButton,
   CaseBookExportCard,
 } from "@/components/Casebookpdfbutton";
+import AutoTextarea from "@/components/AutoTextarea";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared micro-components
@@ -662,7 +663,7 @@ function AddCaseBookEntryModal({
         </select>
       </FormField>
       <FormField label="Entry Content *">
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={5}
           value={content}
@@ -995,7 +996,7 @@ function CaseForm({
         </FormField>
       </div>
       <FormField label="Description *">
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={3}
           value={form.description}
@@ -1069,7 +1070,7 @@ function CaseForm({
       </div>
       {!isEdit && (
         <FormField label="Initial Case Book Remark (optional)">
-          <textarea
+          <AutoTextarea
             className={inputCls}
             rows={3}
             value={form.notes}
@@ -1207,7 +1208,7 @@ function ReferModal({
           Your referral remarks will be permanently recorded in the digital case
           book.
         </p>
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={4}
           value={referNote}
@@ -1218,7 +1219,7 @@ function ReferModal({
         />
       </div>
       <FormField label="Additional Internal Note (optional)">
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={2}
           value={note}
@@ -1501,7 +1502,7 @@ function DetailModal({
             onSubmit={addNote}
             className="border-t border-gray-100 pt-3 space-y-3"
           >
-            <textarea
+            <AutoTextarea
               className={inputCls}
               rows={2}
               value={noteContent}

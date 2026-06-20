@@ -34,10 +34,12 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
+import { getCurrentUser, isSuperAdminUser } from "@/lib/clientUser";
+import { getStationName } from "@/lib/stations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type UserRole = "admin" | "nco" | "cid" | "so";
+type UserRole = "admin" | "nco" | "cid" | "so" | "dc";
 
 interface SystemUser {
   _id: string;
@@ -76,10 +78,16 @@ interface UserFormData {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ROLES: UserRole[] = ["admin", "nco", "cid", "so"];
+const ROLES: UserRole[] = ["admin", "dc", "nco", "cid", "so"];
 
 /** These roles must be assigned to a station */
 const STATION_ROLES: UserRole[] = ["nco", "cid", "so"];
+
+/** Roles only the super admin may create */
+const SUPER_ADMIN_ONLY_ROLES: UserRole[] = ["admin", "dc"];
+
+/** Roles that are never tied to a single station (DC oversees every station) */
+const STATIONLESS_ROLES: UserRole[] = ["dc"];
 
 const EMPTY_FORM: UserFormData = {
   fullName: "",
@@ -92,6 +100,7 @@ const EMPTY_FORM: UserFormData = {
 
 const ROLE_COLORS: Record<UserRole, string> = {
   admin: "bg-red-100 text-red-800 border-red-200",
+  dc: "bg-amber-100 text-amber-800 border-amber-200",
   nco: "bg-blue-100 text-blue-800 border-blue-200",
   cid: "bg-indigo-100 text-indigo-800 border-indigo-200",
   so: "bg-purple-100 text-purple-800 border-purple-200",
@@ -99,6 +108,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Administrator",
+  dc: "District Commander",
   nco: "NCO / Station Orderly",
   cid: "CID Investigator",
   so: "Station Officer",
@@ -213,6 +223,8 @@ interface UserFormProps {
   stationsError: string | null;
   onRetryStations: () => void;
   isEdit: boolean;
+  isSuper: boolean;
+  lockedStationId: string | null;
 }
 
 function UserForm({
@@ -223,10 +235,22 @@ function UserForm({
   stationsError,
   onRetryStations,
   isEdit,
+  isSuper,
+  lockedStationId,
 }: UserFormProps) {
-  const isAdminRole = formData.role === "admin";
+  // A station admin manages only their own station and cannot mint other
+  // administrators / district commanders.
+  const roleOptions = isSuper
+    ? ROLES
+    : ROLES.filter((r) => !SUPER_ADMIN_ONLY_ROLES.includes(r));
   const needsStation =
     formData.role !== "" && STATION_ROLES.includes(formData.role as UserRole);
+  const isStationless =
+    formData.role !== "" &&
+    STATIONLESS_ROLES.includes(formData.role as UserRole);
+  // Station is selectable once a role is chosen; super admin may leave a plain
+  // "admin" stationless (= another super admin). The DC is always stationless.
+  const stationDisabled = formData.role === "" || !isSuper || isStationless;
   const selectedStation = stations.find((s) => s.id === formData.stationId);
 
   return (
@@ -284,7 +308,13 @@ function UserForm({
             onValueChange={(v) =>
               onChange({
                 role: v as UserRole,
-                stationId: v === "admin" ? "" : formData.stationId,
+                // The DC is never tied to a station. Station admins are always
+                // pinned to their own station.
+                stationId: STATIONLESS_ROLES.includes(v as UserRole)
+                  ? ""
+                  : isSuper
+                    ? formData.stationId
+                    : (lockedStationId ?? ""),
               })
             }
           >
@@ -292,7 +322,7 @@ function UserForm({
               <SelectValue placeholder="Select role" />
             </SelectTrigger>
             <SelectContent>
-              {ROLES.map((r) => (
+              {roleOptions.map((r) => (
                 <SelectItem key={r} value={r}>
                   <div className="flex items-center gap-2">
                     <span
@@ -316,16 +346,24 @@ function UserForm({
             {needsStation && <span className="text-red-500 ml-0.5">*</span>}
           </Label>
 
-          <StationPicker
-            value={formData.stationId}
-            onChange={(stationId) => onChange({ stationId })}
-            stations={stations}
-            loadingStations={loadingStations}
-            stationsError={stationsError}
-            onRetryStations={onRetryStations}
-            disabled={isAdminRole || formData.role === ""}
-            required={needsStation}
-          />
+          {isSuper ? (
+            <StationPicker
+              value={formData.stationId}
+              onChange={(stationId) => onChange({ stationId })}
+              stations={stations}
+              loadingStations={loadingStations}
+              stationsError={stationsError}
+              onRetryStations={onRetryStations}
+              disabled={stationDisabled}
+              required={needsStation}
+            />
+          ) : (
+            <Input
+              value={getStationName(lockedStationId)}
+              disabled
+              readOnly
+            />
+          )}
 
           {needsStation &&
             !formData.stationId &&
@@ -380,7 +418,10 @@ function UserForm({
         <p className="text-xs text-blue-600 leading-relaxed">
           Each officer's records (cases, arrests, etc.) are tagged to their
           station. Officers at the same station share the same workflow — NCO
-          logs a case, CID investigates, SO reviews, DC decides.
+          logs a case, CID investigates, SO reviews, DC decides. Assign an{" "}
+          <span className="font-semibold">Administrator</span> to a station to
+          let them manage that station&apos;s personnel and records. An
+          administrator left with no station is a super administrator.
         </p>
       </div>
     </div>
@@ -390,6 +431,12 @@ function UserForm({
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function UsersManagementPage() {
+  // Distinguish the super admin (no station) from a station admin (pinned to one
+  // station). A station admin can only manage accounts within its own station.
+  const [currentUser] = useState(() => getCurrentUser());
+  const isSuper = isSuperAdminUser(currentUser);
+  const lockedStationId = currentUser?.stationId ?? null;
+
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -486,9 +533,13 @@ export default function UsersManagementPage() {
       toast.error("Please select a role");
       return;
     }
+    // Station admins are pinned to their own station; super admins choose.
+    const effectiveStationId = isSuper
+      ? createForm.stationId || null
+      : lockedStationId;
     if (
       STATION_ROLES.includes(createForm.role as UserRole) &&
-      !createForm.stationId
+      !effectiveStationId
     ) {
       toast.error("Please assign a police station for this role");
       return;
@@ -504,7 +555,7 @@ export default function UsersManagementPage() {
           email: createForm.email,
           password: createForm.password,
           role: createForm.role,
-          stationId: createForm.stationId || null,
+          stationId: effectiveStationId,
           isActive: true,
         }),
       });
@@ -604,6 +655,8 @@ export default function UsersManagementPage() {
     loadingStations,
     stationsError,
     onRetryStations: fetchStations,
+    isSuper,
+    lockedStationId,
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────────

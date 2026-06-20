@@ -4,18 +4,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/middleware/auth";
+import { ASANKRAGUA_STATIONS } from "@/lib/stations";
 
-// All stations under the Asankragua District Command.
-// Add or remove entries here as the community grows.
-export const ASANKRAGUA_STATIONS = [
-  { id: "asankragua", name: "Asankragua Police Station" },
-  { id: "asankra-breman", name: "Asankra-Breman Police Station" },
-  { id: "sumpre", name: "Sumpre Police Station" },
-  { id: "samrebio", name: "Samrebio Police Station" },
-];
+// Re-exported for any server modules still importing it from here.
+export { ASANKRAGUA_STATIONS };
 
 export async function GET(req: NextRequest) {
-  const { user, error } = requireRole(req, ["dc", "admin"]);
+  const { error } = requireRole(req, ["dc", "admin", "nco", "so"]);
   if (error) return error;
 
   return NextResponse.json({ stations: ASANKRAGUA_STATIONS });

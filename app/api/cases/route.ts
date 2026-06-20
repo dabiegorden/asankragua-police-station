@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import Case from "@/models/Case";
 import User from "@/models/User";
 import { requireAuth } from "@/middleware/auth";
+import { resolveScopeStation } from "@/lib/stationScope";
 import { parseAttachments } from "@/lib/parseAttachments";
 
 export async function populateCase(id: string) {
@@ -85,9 +86,9 @@ export async function GET(req: NextRequest) {
 
       case "dc":
       case "admin": {
-        // DC defaults to their own station; admin sees all unless filtered
-        const targetStation =
-          stationId || (user.role === "dc" ? (user.stationId ?? null) : null);
+        // DC defaults to their own station; station admin is locked to its own
+        // station; super admin sees all unless ?stationId= filter is supplied.
+        const targetStation = resolveScopeStation(user, stationId) ?? null;
 
         if (targetStation) {
           const ids = await getStationUserIds(targetStation);

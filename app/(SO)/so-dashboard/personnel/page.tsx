@@ -26,6 +26,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
+import { getCurrentUser } from "@/lib/clientUser";
+import { getStationName } from "@/lib/stations";
 
 // ==================== Type Definitions ====================
 
@@ -262,6 +264,11 @@ const PersonnelContent = () => {
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] =
     useState<PersonnelFormData>(INITIAL_FORM_DATA);
+
+  // SO is bound to its own station — every personnel they create is tagged to
+  // that station automatically by the backend.
+  const currentUser = useMemo(() => getCurrentUser(), []);
+  const myStationName = getStationName(currentUser?.stationId);
 
   const searchParams = useSearchParams();
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -565,6 +572,17 @@ const PersonnelContent = () => {
   const renderFormFields = () => (
     <>
       <div className="grid grid-cols-2 gap-4">
+        {/* Station (auto-assigned to the SO's own station) */}
+        <div className="col-span-2">
+          <Label htmlFor="stationId">Police Station</Label>
+          <Input
+            id="stationId"
+            value={myStationName || "Your station"}
+            disabled
+            readOnly
+          />
+        </div>
+
         {/* Basic Info */}
         <div>
           <Label htmlFor="firstName">First Name *</Label>

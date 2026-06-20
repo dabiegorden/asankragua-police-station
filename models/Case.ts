@@ -89,6 +89,7 @@ const AuditLogSchema = new mongoose.Schema({
       "investigation_started",
       "submitted_to_so",
       "returned_to_cid",
+      "returned_to_so",
       "forwarded_to_dc",
       "case_closed",
       "case_suspended",

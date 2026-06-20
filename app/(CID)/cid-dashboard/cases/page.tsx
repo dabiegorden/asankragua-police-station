@@ -62,6 +62,7 @@ import {
   CaseBookPDFButton,
   CaseBookExportCard,
 } from "@/components/Casebookpdfbutton";
+import AutoTextarea from "@/components/AutoTextarea";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared micro-components
@@ -680,7 +681,7 @@ function AddCaseBookEntryModal({
         </select>
       </FormField>
       <FormField label="Entry Content *">
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={6}
           value={content}
@@ -979,7 +980,7 @@ function StartModal({
             Opening Remark (added to Case Book)
           </p>
         </div>
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={3}
           value={note}
@@ -1131,7 +1132,7 @@ function SubmitSOModal({
           Your submission findings will be permanently recorded in the case book
           as 'Investigation Findings'.
         </p>
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={5}
           value={submissionNote}
@@ -1142,7 +1143,7 @@ function SubmitSOModal({
         />
       </div>
       <FormField label="Additional Internal Note (optional)">
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={2}
           value={note}
@@ -1460,7 +1461,7 @@ function DetailModal({
             onSubmit={addNote}
             className="border-t border-gray-100 pt-3 space-y-3"
           >
-            <textarea
+            <AutoTextarea
               className={inputCls}
               rows={2}
               value={noteContent}

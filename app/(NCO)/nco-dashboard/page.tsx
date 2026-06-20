@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { IDashboardStats } from "@/app/api/dashboard/stats/route";
+import DashboardWelcome from "@/components/DashboardWelcome";
 
 // ─── Local types ──────────────────────────────────────────────────────────
 
@@ -221,6 +222,8 @@ const NcoDashboard = () => {
 
   return (
     <div className="space-y-8 pt-12 pb-16 max-w-7xl mx-auto px-4">
+      <DashboardWelcome />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -21,6 +21,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
+import DashboardWelcome from "@/components/DashboardWelcome";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,14 +156,27 @@ const SoDashboardPage = () => {
         ? { Authorization: `Bearer ${token}` }
         : {};
 
-      const casesRes = await fetch("/api/cases?limit=50", {
-        headers: authHeaders,
-        credentials: "include",
-      });
+      // Page through every case at this station so the metrics reflect the
+      // entire workload, not just a sample.
+      let cases: RecentCase[] = [];
+      let page = 1;
+      const limit = 100;
+      while (true) {
+        const res = await fetch(`/api/cases?page=${page}&limit=${limit}`, {
+          headers: authHeaders,
+          credentials: "include",
+        });
+        if (!res.ok) {
+          toast.error("Failed to load case data");
+          return;
+        }
+        const { cases: batch, pagination } = await res.json();
+        cases = cases.concat(batch);
+        if (page >= pagination.pages) break;
+        page++;
+      }
 
-      if (casesRes.ok) {
-        const { cases }: { cases: RecentCase[] } = await casesRes.json();
-
+      {
         const computed: SoStats = {
           totalAssigned: cases.length,
           awaitingReview: cases.filter((c) => c.status === "under_review")
@@ -194,8 +208,6 @@ const SoDashboardPage = () => {
 
         setStats(computed);
         setRecentCases(cases.slice(0, 6));
-      } else {
-        toast.error("Failed to load case data");
       }
     } catch {
       toast.error("Failed to fetch dashboard data. Check your connection.");
@@ -224,6 +236,8 @@ const SoDashboardPage = () => {
 
   return (
     <div className="space-y-8 pt-12 pb-16 max-w-7xl mx-auto px-4">
+      <DashboardWelcome />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

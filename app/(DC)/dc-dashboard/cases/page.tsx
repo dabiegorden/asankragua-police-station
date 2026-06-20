@@ -59,6 +59,7 @@ import {
   CaseBookPDFButton,
   CaseBookExportCard,
 } from "@/components/Casebookpdfbutton";
+import AutoTextarea from "@/components/AutoTextarea";
 
 // Add at the top of imports:
 import { useStation } from "@/context/StationContext";
@@ -578,7 +579,7 @@ function AddCaseBookEntryModal({
         </select>
       </FormField>
       <FormField label="Entry Content *">
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={6}
           value={content}
@@ -932,13 +933,22 @@ function DCDecideModal({
       toast.error("Decision note is required");
       return;
     }
+    // "investigating" is NOT a final decision — it returns the case to the
+    // Station Officer so the NCO/CID/SO loop can continue. Only "closed" or
+    // "suspended" actually close the case.
+    const isReturn = outcome === "investigating";
     setLoading(true);
     try {
       if (files.length > 0) {
         const fd = new FormData();
-        fd.append("action", "dc-decide");
-        fd.append("outcome", outcome);
-        fd.append("dcNote", dcNote.trim());
+        if (isReturn) {
+          fd.append("action", "dc-return");
+          fd.append("dcReturnNote", dcNote.trim());
+        } else {
+          fd.append("action", "dc-decide");
+          fd.append("outcome", outcome);
+          fd.append("dcNote", dcNote.trim());
+        }
         files.forEach((f) => fd.append("attachments", f));
         const res = await fetch(`/api/cases/${caseItem._id}`, {
           method: "PUT",
@@ -949,11 +959,11 @@ function DCDecideModal({
       } else {
         await api(`/api/cases/${caseItem._id}`, {
           method: "PUT",
-          body: JSON.stringify({
-            action: "dc-decide",
-            outcome,
-            dcNote: dcNote.trim(),
-          }),
+          body: JSON.stringify(
+            isReturn
+              ? { action: "dc-return", dcReturnNote: dcNote.trim() }
+              : { action: "dc-decide", outcome, dcNote: dcNote.trim() },
+          ),
         });
       }
       toast.success(
@@ -961,7 +971,7 @@ function DCDecideModal({
           ? "Case closed"
           : outcome === "suspended"
             ? "Case suspended"
-            : "Case returned to investigation",
+            : "Case returned to Station Officer",
       );
       onSuccess();
       onClose();
@@ -1079,7 +1089,7 @@ function DCDecideModal({
           Your decision note will be permanently recorded in the case book as
           'Final Decision'.
         </p>
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={5}
           value={dcNote}
@@ -1095,8 +1105,9 @@ function DCDecideModal({
       <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
         <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
         <p className="text-xs text-red-700">
-          This is a final decision. The case status will change immediately upon
-          submission.
+          {outcome === "investigating"
+            ? "This will send the case back to the Station Officer with your directive. The case stays open and can come back to you again."
+            : "This is a final decision. The case will be closed immediately upon submission."}
         </p>
       </div>
 
@@ -1449,7 +1460,7 @@ function DetailModal({
             onSubmit={addNote}
             className="border-t border-gray-100 pt-3 space-y-3"
           >
-            <textarea
+            <AutoTextarea
               className={inputCls}
               rows={2}
               value={noteContent}

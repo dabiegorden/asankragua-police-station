@@ -8,6 +8,7 @@ import Vehicle from "@/models/Vehicle";
 import RifleBooking from "@/models/RifleBooking";
 import Contact from "@/models/Contact";
 import { requireRole } from "@/middleware/auth";
+import { resolveScopeStation } from "@/lib/stationScope";
 
 export interface IDashboardStats {
   totalUsers: number;
@@ -63,23 +64,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { searchParams } = new URL(req.url);
     const requestedStation = searchParams.get("stationId");
 
-    // Determine effective station scope
-    let targetStation: string | null;
-    switch (user.role) {
-      case "nco":
-      case "so":
-        // These roles are always scoped to their own station — cannot be overridden
-        targetStation = user.stationId ?? null;
-        break;
-      case "dc":
-        targetStation = requestedStation || user.stationId || null;
-        break;
-      case "admin":
-        targetStation = requestedStation || null;
-        break;
-      default:
-        targetStation = user.stationId ?? null;
-    }
+    // Determine effective station scope (super admin → null = all stations)
+    const targetStation: string | null =
+      resolveScopeStation(user, requestedStation) ?? null;
+
+    // Station filter reused for all directly-station-stamped collections.
+    const stationFilter: Record<string, unknown> = targetStation
+      ? { stationId: targetStation }
+      : {};
 
     // Resolve user IDs for the station (used to scope cases)
     let stationUserIds: string[] | null = null;
@@ -164,21 +156,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       Case.countDocuments({ ...caseFilter, priority: "Misdemeanour" }),
       Case.countDocuments({ ...caseFilter, priority: "Summary Offence" }),
 
-      Personnel.countDocuments(),
-      Personnel.countDocuments({ status: "active" }),
-      Personnel.countDocuments({ status: "on-leave" }),
-      Prisoner.countDocuments(),
-      Prisoner.countDocuments({ status: "Jailed" }),
-      Prisoner.countDocuments({ status: "Bailed" }),
-      Prisoner.countDocuments({ status: "Remanded" }),
-      Vehicle.countDocuments(),
-      Vehicle.countDocuments({ status: "available" }),
-      Vehicle.countDocuments({ status: "in-use" }),
-      Vehicle.countDocuments({ status: "maintenance" }),
-      RifleBooking.countDocuments(),
-      RifleBooking.countDocuments({ status: "active" }),
-      RifleBooking.countDocuments({ status: "returned" }),
-      RifleBooking.countDocuments({ status: "overdue" }),
+      Personnel.countDocuments(stationFilter),
+      Personnel.countDocuments({ ...stationFilter, status: "active" }),
+      Personnel.countDocuments({ ...stationFilter, status: "on-leave" }),
+      Prisoner.countDocuments(stationFilter),
+      Prisoner.countDocuments({ ...stationFilter, status: "Jailed" }),
+      Prisoner.countDocuments({ ...stationFilter, status: "Bailed" }),
+      Prisoner.countDocuments({ ...stationFilter, status: "Remanded" }),
+      Vehicle.countDocuments(stationFilter),
+      Vehicle.countDocuments({ ...stationFilter, status: "available" }),
+      Vehicle.countDocuments({ ...stationFilter, status: "in-use" }),
+      Vehicle.countDocuments({ ...stationFilter, status: "maintenance" }),
+      RifleBooking.countDocuments(stationFilter),
+      RifleBooking.countDocuments({ ...stationFilter, status: "active" }),
+      RifleBooking.countDocuments({ ...stationFilter, status: "returned" }),
+      RifleBooking.countDocuments({ ...stationFilter, status: "overdue" }),
       Contact.countDocuments(),
       Contact.countDocuments({ status: "new" }),
       Contact.countDocuments({ status: "in-progress" }),

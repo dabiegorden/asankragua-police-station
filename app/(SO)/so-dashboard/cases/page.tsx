@@ -59,6 +59,7 @@ import {
   CaseBookPDFButton,
   CaseBookExportCard,
 } from "@/components/Casebookpdfbutton";
+import AutoTextarea from "@/components/AutoTextarea";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared micro-components
@@ -596,7 +597,7 @@ function AddCaseBookEntryModal({
         </select>
       </FormField>
       <FormField label="Entry Content *">
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={6}
           value={content}
@@ -997,7 +998,7 @@ function ReturnModal({
             Directive (Added to Case Book) *
           </p>
         </div>
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={5}
           value={directive}
@@ -1162,7 +1163,7 @@ function ForwardDCModal({
           Your review note will be permanently recorded as 'Review Notes' in the
           case book.
         </p>
-        <textarea
+        <AutoTextarea
           className={inputCls}
           rows={5}
           value={forwardNote}
@@ -1454,7 +1455,7 @@ function DetailModal({
             onSubmit={addNote}
             className="border-t border-gray-100 pt-3 space-y-3"
           >
-            <textarea
+            <AutoTextarea
               className={inputCls}
               rows={2}
               value={noteContent}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
+import { isSuperAdmin } from "@/lib/stationScope";
 import Personnel, { IPersonnel } from "@/models/Personnel";
 
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"] as const;
@@ -83,6 +84,29 @@ export async function PUT(
     }
     if (body.dateJoined) {
       (body as Record<string, unknown>).dateJoined = new Date(body.dateJoined);
+    }
+
+    const existing = await Personnel.findById(id);
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Personnel not found" },
+        { status: 404 },
+      );
+    }
+
+    // Station ownership: only the DC and super admin may move a record to a
+    // different station. Station-bound users (nco/so/station-admin) can only
+    // edit records at their own station and never change the station.
+    const canChooseStation = user.role === "dc" || isSuperAdmin(user);
+    if (!canChooseStation) {
+      if (user.stationId && existing.stationId !== user.stationId) {
+        return NextResponse.json(
+          { error: "You can only edit personnel at your own station" },
+          { status: 403 },
+        );
+      }
+      // Prevent station reassignment by station-bound users.
+      delete (body as Record<string, unknown>).stationId;
     }
 
     const personnel = await Personnel.findByIdAndUpdate(

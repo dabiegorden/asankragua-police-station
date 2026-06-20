@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
+import { resolveCreateStation } from "@/lib/stationScope";
 import Prisoner, {
   IPrisoner,
   IArrestDetails,
@@ -56,12 +57,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         (query as Record<string, unknown>).stationId = user.stationId;
         break;
       case "dc": {
-        const target = stationId || user.stationId;
-        if (target) (query as Record<string, unknown>).stationId = target;
+        // DC oversees all stations; only narrows when a station is requested.
+        if (stationId)
+          (query as Record<string, unknown>).stationId = stationId;
         break;
       }
       case "admin":
-        if (stationId) (query as Record<string, unknown>).stationId = stationId;
+        if (user.stationId)
+          (query as Record<string, unknown>).stationId = user.stationId;
+        else if (stationId)
+          (query as Record<string, unknown>).stationId = stationId;
         break;
     }
 
@@ -171,10 +176,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       mugshot,
     } = body;
 
-    const resolvedStationId =
-      (["dc", "admin"].includes(user.role) && body.stationId)
-        ? body.stationId
-        : user.stationId;
+    const resolvedStationId = resolveCreateStation(user, body.stationId);
 
     if (!resolvedStationId) {
       return NextResponse.json({ error: "No station associated with this account" }, { status: 400 });

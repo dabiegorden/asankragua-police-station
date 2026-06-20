@@ -27,6 +27,7 @@ import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
 import { useSearchParams } from "next/navigation";
 import { useStation } from "@/context/StationContext";
+import { ASANKRAGUA_STATIONS } from "@/lib/stations";
 
 // ==================== Type Definitions ====================
 
@@ -101,6 +102,7 @@ interface Assignment {
 // Main Personnel interface matching backend model
 interface Personnel {
   _id: string;
+  stationId?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -152,6 +154,7 @@ interface UploadResponse {
 
 // Form data interface for create/edit
 interface PersonnelFormData {
+  stationId: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -251,6 +254,7 @@ const getRoleColor = (role: PersonnelRole): string => {
 // ==================== Initial Form Data ====================
 
 const INITIAL_FORM_DATA: PersonnelFormData = {
+  stationId: "",
   firstName: "",
   lastName: "",
   email: "",
@@ -457,6 +461,14 @@ const PersonnelContent = () => {
         return;
       }
 
+      // Each personnel must belong to a station. Use the per-personnel choice
+      // first, then fall back to the station currently focused in the switcher.
+      const resolvedStationId = formData.stationId || stationParam || "";
+      if (!resolvedStationId) {
+        toast.error("Please select a police station for this personnel");
+        return;
+      }
+
       const url = selectedPersonnel
         ? `/api/personnel/${selectedPersonnel._id}`
         : "/api/personnel";
@@ -464,7 +476,7 @@ const PersonnelContent = () => {
 
       // Prepare payload matching backend expectations
       const payload = {
-        ...(stationParam && { stationId: stationParam }),
+        stationId: resolvedStationId,
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -555,6 +567,7 @@ const PersonnelContent = () => {
   const openEditModal = (personnelItem: Personnel) => {
     setSelectedPersonnel(personnelItem);
     setFormData({
+      stationId: personnelItem.stationId || "",
       firstName: personnelItem.firstName,
       lastName: personnelItem.lastName,
       email: personnelItem.email,
@@ -623,6 +636,26 @@ const PersonnelContent = () => {
   const renderFormFields = () => (
     <>
       <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <Label htmlFor="stationId">Police Station *</Label>
+          <Select
+            value={formData.stationId || stationParam || ""}
+            onValueChange={(value: string) =>
+              setFormData({ ...formData, stationId: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Assign a police station" />
+            </SelectTrigger>
+            <SelectContent>
+              {ASANKRAGUA_STATIONS.map((station) => (
+                <SelectItem key={station.id} value={station.id}>
+                  {station.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div>
           <Label htmlFor="firstName">First Name *</Label>
           <Input

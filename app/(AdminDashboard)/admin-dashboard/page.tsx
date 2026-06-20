@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import DashboardWelcome from "@/components/DashboardWelcome";
 
 const AdminDashboard = () => {
   const router = useRouter();
@@ -67,6 +68,8 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-6 pt-12">
+      <DashboardWelcome />
+
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Admin Dashboard</h1>
         <Button onClick={fetchDashboardData} variant="outline">
