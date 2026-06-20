@@ -175,13 +175,13 @@ export const StationOfficerLinks = [
 export const NcoLinks = [
   { id: 1, url: "/nco-dashboard", title: "Dashboard", icon: Home },
   { id: 2, url: "/nco-dashboard/cases", title: "Cases", icon: FileText },
-  {
-    id: 3,
-    url: "/nco-dashboard/duty-roster",
-    title: "Duty Roster",
-    icon: FileText,
-  },
-  { id: 4, url: "/nco-dashboard/personnel", title: "Personnel", icon: Users },
+  // {
+  //   id: 3,
+  //   url: "/nco-dashboard/duty-roster",
+  //   title: "Duty Roster",
+  //   icon: FileText,
+  // },
+  // { id: 4, url: "/nco-dashboard/personnel", title: "Personnel", icon: Users },
   {
     id: 5,
     url: "/nco-dashboard/prisoners",
@@ -202,19 +202,19 @@ export const NcoLinks = [
     title: "Rifle Booking",
     icon: Calendar,
   },
-  {
-    id: 10,
-    url: "/nco-dashboard/messages",
-    title: "Messages",
-    icon: MessageSquare,
-  },
-  {
-    id: 11,
-    url: "/nco-dashboard/contact",
-    title: "Contacts",
-    icon: Contact2Icon,
-  },
-  { id: 9, url: "/nco-dashboard/reports", title: "Reports", icon: BarChart3 },
+  // {
+  //   id: 10,
+  //   url: "/nco-dashboard/messages",
+  //   title: "Messages",
+  //   icon: MessageSquare,
+  // },
+  // {
+  //   id: 11,
+  //   url: "/nco-dashboard/contact",
+  //   title: "Contacts",
+  //   icon: Contact2Icon,
+  // },
+  // { id: 9, url: "/nco-dashboard/reports", title: "Reports", icon: BarChart3 },
   { id: 13, url: "/nco-dashboard/profile", title: "Profile", icon: Users },
   { id: 12, url: "/", title: "Home", icon: HomeIcon },
 ];
