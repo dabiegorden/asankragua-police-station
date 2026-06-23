@@ -33,6 +33,7 @@ interface CreateContactBody {
   name: string;
   email: string;
   phone?: string;
+  location?: string;
   subject: string;
   message: string;
   type?: ContactType;
@@ -116,8 +117,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await connectDB();
 
     const body = (await request.json()) as CreateContactBody;
-    const { name, email, phone, subject, message, type, priority, source } =
-      body;
+    const {
+      name,
+      email,
+      phone,
+      location,
+      subject,
+      message,
+      type,
+      priority,
+      source,
+    } = body;
 
     if (
       !name?.trim() ||
@@ -145,6 +155,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       phone: phone?.trim(),
+      location: location?.trim(),
       subject: subject.trim(),
       message: message.trim(),
       type: type ?? "general",

@@ -50,12 +50,12 @@ export const AdminSidebarLinks = [
     title: "Duty Roster",
     icon: FileText,
   },
-  {
-    id: 10,
-    url: "/admin-dashboard/messages",
-    title: "Messages",
-    icon: MessageSquare,
-  },
+  // {
+  //   id: 10,
+  //   url: "/admin-dashboard/messages",
+  //   title: "Messages",
+  //   icon: MessageSquare,
+  // },
   {
     id: 11,
     url: "/admin-dashboard/contact",
@@ -108,12 +108,12 @@ export const DcLinks = [
     title: "Duty Roster",
     icon: FileText,
   },
-  {
-    id: 10,
-    url: "/dc-dashboard/messages",
-    title: "Messages",
-    icon: MessageSquare,
-  },
+  // {
+  //   id: 10,
+  //   url: "/dc-dashboard/messages",
+  //   title: "Messages",
+  //   icon: MessageSquare,
+  // },
   {
     id: 11,
     url: "/dc-dashboard/contact",
@@ -154,12 +154,12 @@ export const StationOfficerLinks = [
     title: "Duty Roster",
     icon: FileText,
   },
-  {
-    id: 8,
-    url: "/so-dashboard/messages",
-    title: "Messages",
-    icon: MessageSquare,
-  },
+  // {
+  //   id: 8,
+  //   url: "/so-dashboard/messages",
+  //   title: "Messages",
+  //   icon: MessageSquare,
+  // },
   {
     id: 9,
     url: "/so-dashboard/contact",

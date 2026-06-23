@@ -38,7 +38,7 @@ export default function DashboardWelcome() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-widest text-blue-100">
-            Welcome to the Asankragua Police Dashboard
+            Welcome to the Asankragua Police District Dashboard
           </p>
           <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">
             Welcome back, {firstName}

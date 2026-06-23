@@ -28,6 +28,7 @@ import {
   MessageSquare,
   User,
   Mail,
+  MapPin,
   Calendar,
   Loader2,
   CheckCircle2,
@@ -70,6 +71,7 @@ interface Contact {
   name: string;
   email: string;
   phone?: string;
+  location?: string;
   subject: string;
   message: string;
   type: ContactType;
@@ -420,6 +422,7 @@ const ContactManagement = () => {
                     <th className="text-left p-2">Read</th>
                     <th className="text-left p-2">Name</th>
                     <th className="text-left p-2">Email</th>
+                    <th className="text-left p-2">Location</th>
                     <th className="text-left p-2">Subject</th>
                     <th className="text-left p-2">Type</th>
                     <th className="text-left p-2">Priority</th>
@@ -431,7 +434,7 @@ const ContactManagement = () => {
                 <tbody>
                   {contacts.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-gray-500">
+                      <td colSpan={10} className="p-8 text-center text-gray-500">
                         No contacts found
                       </td>
                     </tr>
@@ -474,6 +477,19 @@ const ContactManagement = () => {
                               title={contact.email}
                             >
                               {contact.email}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Location */}
+                        <td className="p-2">
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                            <span
+                              className="text-sm truncate max-w-30"
+                              title={contact.location || "Not provided"}
+                            >
+                              {contact.location || "—"}
                             </span>
                           </div>
                         </td>
@@ -627,6 +643,12 @@ const ContactManagement = () => {
                   <Label>Phone</Label>
                   <p className="text-sm mt-1">
                     {selectedContact.phone || "Not provided"}
+                  </p>
+                </div>
+                <div>
+                  <Label>Location</Label>
+                  <p className="text-sm mt-1">
+                    {selectedContact.location || "Not provided"}
                   </p>
                 </div>
                 <div>

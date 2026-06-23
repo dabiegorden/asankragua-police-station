@@ -21,6 +21,7 @@ export default function ContactForm({
     name: "",
     email: "",
     phone: "",
+    location: "",
     subject: "",
     message: "",
     type: "general",
@@ -68,6 +69,7 @@ export default function ContactForm({
           name: "",
           email: "",
           phone: "",
+          location: "",
           subject: "",
           message: "",
           type: "general",
@@ -165,6 +167,24 @@ export default function ContactForm({
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="location"
+          className="block text-sm font-medium text-gray-700 mb-2"
+        >
+          Location
+        </label>
+        <Input
+          type="text"
+          id="location"
+          name="location"
+          value={formData.location}
+          onChange={handleChange}
+          disabled={loading}
+          placeholder="Enter your location (e.g. town, area, or address)"
+        />
       </div>
 
       <div>
