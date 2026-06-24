@@ -103,6 +103,7 @@ interface Personnel {
   serviceNumber: string | null;
   rank: PersonnelRank;
   specialization: PersonnelSpecialization;
+  specializationOther?: string;
   phoneNumber: string;
   emergencyContact: EmergencyContact;
   address: Address;
@@ -141,6 +142,7 @@ interface PersonnelFormData {
   serviceNumber: string;
   rank: PersonnelRank | "";
   specialization: PersonnelSpecialization;
+  specializationOther?: string;
   phoneNumber: string;
   emergencyContact: EmergencyContact;
   address: Address;
@@ -232,6 +234,7 @@ const INITIAL_FORM_DATA: PersonnelFormData = {
   serviceNumber: "",
   rank: "",
   specialization: "General",
+  specializationOther: "",
   phoneNumber: "",
   emergencyContact: { name: "", relationship: "", phone: "" },
   address: { street: "", city: "", state: "", zipCode: "" },
@@ -431,6 +434,10 @@ const PersonnelContent = () => {
         role: formData.role,
         rank: formData.rank,
         specialization: formData.specialization,
+        specializationOther:
+          formData.specialization === "Others"
+            ? formData.specializationOther
+            : "",
         phoneNumber: formData.phoneNumber,
         serviceNumber: formData.serviceNumber || null,
         dateOfBirth: new Date(formData.dateOfBirth).toISOString(),
@@ -517,6 +524,7 @@ const PersonnelContent = () => {
       serviceNumber: personnelItem.serviceNumber || "",
       rank: personnelItem.rank,
       specialization: personnelItem.specialization,
+      specializationOther: personnelItem.specializationOther || "",
       phoneNumber: personnelItem.phoneNumber,
       emergencyContact: personnelItem.emergencyContact || {
         name: "",
@@ -705,6 +713,20 @@ const PersonnelContent = () => {
               ))}
             </SelectContent>
           </Select>
+          {/* Free-text field revealed when "Others" is selected */}
+          {formData.specialization === "Others" && (
+            <Input
+              className="mt-2"
+              value={formData.specializationOther}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  specializationOther: e.target.value,
+                })
+              }
+              placeholder="Please specify specialization"
+            />
+          )}
         </div>
 
         {/* Contact */}

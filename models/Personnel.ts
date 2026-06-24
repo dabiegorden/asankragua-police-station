@@ -60,6 +60,7 @@ export interface IPersonnel extends Document {
     | "Narcotics"
     | "K9 Unit"
     | "Others";
+  specializationOther?: string;
   phoneNumber: string;
   emergencyContact?: IEmergencyContact;
   address?: IAddress;
@@ -127,6 +128,7 @@ const PersonnelSchema = new Schema<IPersonnel>(
       ],
       default: "General",
     },
+    specializationOther: { type: String, default: "" },
     phoneNumber: { type: String, required: true },
     emergencyContact: {
       name: String,

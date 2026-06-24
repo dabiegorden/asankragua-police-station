@@ -102,6 +102,7 @@ interface CreatePersonnelBody extends Pick<
   stationId?: string;
   serviceNumber?: string;
   specialization?: IPersonnel["specialization"];
+  specializationOther?: string;
   emergencyContact?: IPersonnel["emergencyContact"];
   address?: IPersonnel["address"];
   dateOfBirth: string;
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       serviceNumber,
       rank,
       specialization,
+      specializationOther,
       phoneNumber,
       emergencyContact,
       address,
@@ -198,6 +200,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       serviceNumber: serviceNumber ?? null,
       rank,
       specialization: specialization ?? "General",
+      specializationOther:
+        specialization === "Others" ? specializationOther ?? "" : "",
       phoneNumber,
       emergencyContact: emergencyContact ?? {},
       address: address ?? {},

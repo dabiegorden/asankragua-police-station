@@ -83,8 +83,15 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <Shield className="h-12 w-12 text-blue-600" />
+            <div className="relative h-24 w-24 overflow-hidden rounded-full border-4 border-blue-100 shadow-md">
+              <img
+                src="/assets/officer.jpg"
+                alt="Police officer"
+                className="h-full w-full object-cover"
+              />
+            </div>
           </div>
+
           <CardTitle className="text-2xl font-bold">
             Police Management System
           </CardTitle>
