@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { requireAuth } from "@/middleware/auth";
+import { resolveScopeStation } from "@/lib/stationScope";
 
 export async function GET(req: NextRequest) {
   const { user, error } = requireAuth(req);
@@ -27,28 +28,21 @@ export async function GET(req: NextRequest) {
       query.role = { $in: roles };
     }
 
-    // Station scoping
-    switch (user.role) {
-      case "nco":
-      case "cid":
-      case "so":
-        // These roles can only see users within their own station
-        if (!user.stationId) {
-          return NextResponse.json({ users: [] });
-        }
-        query.stationId = user.stationId;
-        break;
+    // Station scoping (centralised rules):
+    //   nco / cid / so / station-admin → hard-locked to their own station
+    //   dc                             → all stations (own by default, ?stationId= to filter)
+    //   super admin                    → all stations
+    const scope = resolveScopeStation(user, requestedStation);
 
-      case "dc":
-        // DC defaults to their station; can override with ?stationId=
-        query.stationId = requestedStation || user.stationId || undefined;
-        break;
-
-      case "admin":
-        // Admin sees all unless a stationId filter is passed
-        if (requestedStation) query.stationId = requestedStation;
-        break;
+    if (scope === undefined) {
+      // A station-bound user with no station attached: see nobody.
+      return NextResponse.json({ users: [] });
     }
+    if (scope) {
+      // A concrete station: restrict to it.
+      query.stationId = scope;
+    }
+    // scope === null → no station filter (DC / super admin see everyone)
 
     const users = await User.find(query)
       .select("_id fullName email role stationId")
