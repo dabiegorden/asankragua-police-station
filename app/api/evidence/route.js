@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
 import Evidence from "@/models/Evidence";
+import { saveWithUniqueNumber } from "@/lib/sequence";
 
 // Roles allowed to manage evidence (same as personnel)
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
@@ -109,13 +110,7 @@ async function createEvidence(request) {
       );
     }
 
-    // Generate evidenceNumber manually
-    const year = new Date().getFullYear();
-    const count = await Evidence.countDocuments();
-    const evidenceNumber = `EVD-${year}-${String(count + 1).padStart(4, "0")}`;
-
     const newEvidence = new Evidence({
-      evidenceNumber,
       caseId,
       type,
       description,
@@ -137,7 +132,7 @@ async function createEvidence(request) {
       ],
     });
 
-    await newEvidence.save();
+    await saveWithUniqueNumber(newEvidence, "evidenceNumber", "EVD");
 
     const populatedEvidence = await Evidence.findById(newEvidence._id)
       .populate("caseId", "caseNumber title status")

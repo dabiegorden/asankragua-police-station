@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
 import { resolveCreateStation } from "@/lib/stationScope";
 import RifleBooking, { IInsurance, IWeaponReturn } from "@/models/RifleBooking";
+import { saveWithUniqueNumber } from "@/lib/sequence";
 
 // ─── Role guard ────────────────────────────────────────────────────────────
 
@@ -176,11 +177,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // ── Auto-generate booking number ───────────────────────────────────────
-    const year = new Date().getFullYear();
-    const count = await RifleBooking.countDocuments();
-    const bookingNumber = `RB-${year}-${String(count + 1).padStart(4, "0")}`;
-
     // ── Derive status from weaponReturn if not explicitly supplied ─────────
     let resolvedStatus: "active" | "returned" | "overdue" = status ?? "active";
     if (!status && weaponReturn?.returnDate) {
@@ -191,7 +187,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const newBooking = new RifleBooking({
       stationId: resolvedStationId,
-      bookingNumber,
       typeOfRifle,
       rifleNumber,
       serialNumber,
@@ -208,7 +203,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       status: resolvedStatus,
     });
 
-    await newBooking.save();
+    await saveWithUniqueNumber(newBooking, "bookingNumber", "RB");
 
     return NextResponse.json(
       { message: "Rifle booking created successfully", booking: newBooking },

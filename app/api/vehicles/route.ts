@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
 import { resolveCreateStation } from "@/lib/stationScope";
 import Vehicle from "@/models/Vehicle";
+import { saveWithUniqueNumber } from "@/lib/sequence";
 
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"];
 
@@ -137,13 +138,8 @@ async function createVehicle(request: NextRequest) {
       );
     }
 
-    const yearNow = new Date().getFullYear();
-    const count = await Vehicle.countDocuments();
-    const vehicleNumber = `VEH-${yearNow}-${String(count + 1).padStart(4, "0")}`;
-
     const newVehicle = new Vehicle({
       stationId: resolvedStationId,
-      vehicleNumber,
       licensePlate,
       make,
       model,
@@ -156,7 +152,7 @@ async function createVehicle(request: NextRequest) {
       notes: notes || "",
     });
 
-    await newVehicle.save();
+    await saveWithUniqueNumber(newVehicle, "vehicleNumber", "VEH");
 
     return NextResponse.json(
       { message: "Vehicle created successfully", vehicle: newVehicle },

@@ -6,6 +6,7 @@ import User from "@/models/User";
 import { requireAuth } from "@/middleware/auth";
 import { resolveScopeStation } from "@/lib/stationScope";
 import { parseAttachments } from "@/lib/parseAttachments";
+import { saveWithUniqueNumber } from "@/lib/sequence";
 
 export async function populateCase(id: string) {
   return Case.findById(id)
@@ -272,7 +273,7 @@ export async function POST(req: NextRequest) {
       details: `Case logged by ${user.role.toUpperCase()}`,
     });
 
-    await newCase.save();
+    await saveWithUniqueNumber(newCase, "caseNumber", "RO");
     const populated = await populateCase(newCase._id.toString());
 
     return NextResponse.json(

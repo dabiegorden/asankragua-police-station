@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAuth } from "@/middleware/auth";
 import { resolveCreateStation } from "@/lib/stationScope";
+import { saveWithUniqueNumber } from "@/lib/sequence";
 import Prisoner, {
   IPrisoner,
   IArrestDetails,
@@ -243,14 +244,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Generate prisoner number
-    const year = new Date().getFullYear();
-    const count = await Prisoner.countDocuments();
-    const prisonerNumber = `PRS-${year}-${String(count + 1).padStart(4, "0")}`;
-
     const newPrisoner = new Prisoner({
       stationId: resolvedStationId,
-      prisonerNumber,
       firstName,
       lastName,
       middleName,
@@ -280,7 +275,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       mugshot: mugshot || null,
     });
 
-    await newPrisoner.save();
+    await saveWithUniqueNumber(newPrisoner, "prisonerNumber", "PRS");
 
     const populatedPrisoner = await Prisoner.findById(newPrisoner._id)
       .populate("caseId", "caseNumber title")

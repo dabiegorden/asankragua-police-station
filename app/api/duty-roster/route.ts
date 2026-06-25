@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireRole } from "@/middleware/auth";
 import DutyRoster from "@/models/Dutyroster";
+import { saveWithUniqueNumber } from "@/lib/sequence";
 
 const ALLOWED_ROLES = ["admin", "nco", "so", "dc"] as const;
 
@@ -194,7 +195,7 @@ export async function POST(req: NextRequest) {
       createdBy: user.userId,
     });
 
-    await newRoster.save();
+    await saveWithUniqueNumber(newRoster, "rosterNumber", "DR");
 
     const populated = await populateRoster(DutyRoster.findById(newRoster._id));
 

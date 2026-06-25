@@ -88,14 +88,24 @@ const DutyRosterSchema = new Schema<IDutyRoster>(
 
 DutyRosterSchema.pre("save", async function () {
   if (this.isNew && !this.rosterNumber) {
+    const year = new Date().getFullYear();
+    const base = `DR-${year}-`;
     try {
-      const year = new Date().getFullYear();
-      const count = await mongoose
+      const last = await mongoose
         .model("DutyRoster")
-        .countDocuments({ rosterNumber: { $regex: `^DR-${year}-` } });
-      this.rosterNumber = `DR-${year}-${String(count + 1).padStart(4, "0")}`;
+        .findOne({ rosterNumber: { $regex: `^${base}` } })
+        .sort({ rosterNumber: -1 })
+        .select("rosterNumber")
+        .lean<{ rosterNumber?: string }>();
+
+      let next = 1;
+      if (last?.rosterNumber) {
+        const match = last.rosterNumber.match(/(\d+)\s*$/);
+        if (match) next = parseInt(match[1], 10) + 1;
+      }
+      this.rosterNumber = `${base}${String(next).padStart(4, "0")}`;
     } catch {
-      this.rosterNumber = `DR-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+      this.rosterNumber = `${base}${Date.now().toString().slice(-6)}`;
     }
   }
 });

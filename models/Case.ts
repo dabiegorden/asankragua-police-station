@@ -131,22 +131,18 @@ const CaseSchema = new mongoose.Schema(
 
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
+    // Category & priority allow custom ("other") values entered manually in the
+    // form, so they are stored as free-form strings rather than fixed enums to
+    // avoid ValidationError crashes on custom input.
     category: {
       type: String,
-      enum: [
-        "theft",
-        "assault",
-        "fraud",
-        "domestic",
-        "traffic",
-        "drug",
-        "other",
-      ],
       required: true,
+      trim: true,
+      default: "other",
     },
     priority: {
       type: String,
-      enum: ["Felony", "Misdemeanour", "Summary Offence"],
+      trim: true,
       default: "Summary Offence",
     },
 
@@ -232,16 +228,29 @@ const CaseSchema = new mongoose.Schema(
 );
 
 // ─── Auto-generate case number (RO-YYYY-NNNN) ────────────────────────────────
+// Derived from the HIGHEST existing suffix (not the document count) so deleting
+// a case never causes a duplicate-key collision. The route additionally wraps
+// the save in `saveWithUniqueNumber` to retry on concurrent inserts.
 CaseSchema.pre("save", async function () {
   if (this.isNew && !this.caseNumber) {
+    const year = new Date().getFullYear();
+    const base = `RO-${year}-`;
     try {
-      const year = new Date().getFullYear();
-      const count = await mongoose.model("Case").countDocuments({
-        caseNumber: { $regex: `^RO-${year}-` },
-      });
-      this.caseNumber = `RO-${year}-${String(count + 1).padStart(4, "0")}`;
+      const last = await mongoose
+        .model("Case")
+        .findOne({ caseNumber: { $regex: `^${base}` } })
+        .sort({ caseNumber: -1 })
+        .select("caseNumber")
+        .lean<{ caseNumber?: string }>();
+
+      let next = 1;
+      if (last?.caseNumber) {
+        const match = last.caseNumber.match(/(\d+)\s*$/);
+        if (match) next = parseInt(match[1], 10) + 1;
+      }
+      this.caseNumber = `${base}${String(next).padStart(4, "0")}`;
     } catch {
-      this.caseNumber = `RO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+      this.caseNumber = `${base}${Date.now().toString().slice(-6)}`;
     }
   }
 });
