@@ -301,16 +301,43 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   stampHeaderFooter();
 
   // ── CASE IDENTITY BOX ───────────────────────────────────────────────────────
+  // Box height auto-adjusts to fit the title + description so text never
+  // overflows the border.
+  const idPadX = 12;
+  const leftW = cW - 180; // left column width (leaves room for status/priority)
+  const titleText = caseData.title || "";
+  const descText = caseData.description || "";
+
+  // Measure rendered heights using the exact fonts/sizes used to draw them.
+  doc.save().font("Helvetica-Bold").fontSize(12);
+  const titleH = titleText
+    ? doc.heightOfString(titleText, { width: leftW })
+    : 0;
+  doc.font("Helvetica").fontSize(8.5);
+  const descH = descText
+    ? doc.heightOfString(descText, { width: leftW, lineGap: 1.5 })
+    : 0;
+  doc.restore();
+
+  const titleYoff = 52; // offset from box top (below the big case number)
+  const descGap = titleText ? 6 : 0;
+  const descYoff = titleYoff + titleH + descGap;
+  const leftContentBottom = descYoff + descH + 12;
+  const rightContentBottom = 54 + 16; // priority value baseline + padding
+  const idH = Math.max(102, leftContentBottom, rightContentBottom);
+
+  need(idH + 8);
   const idY = doc.y;
-  const idH = 102;
   rect(mL, idY, cW, idH, "#f8fafc", 4);
   border(mL, idY, cW, idH, "#cbd5e1", 1);
 
   // Left — case number + title + description
-  fieldLabel("Case Number", mL + 12, idY + 10);
-  bold(caseData.caseNumber, mL + 12, idY + 20, 220, "#1e3a8a", 20);
-  bold(caseData.title || "", mL + 12, idY + 52, cW - 180, "#0f172a", 12);
-  body(caseData.description || "", mL + 12, idY + 68, cW - 180, "#475569", 8.5);
+  fieldLabel("Case Number", mL + idPadX, idY + 10);
+  bold(caseData.caseNumber, mL + idPadX, idY + 20, 220, "#1e3a8a", 20);
+  if (titleText)
+    bold(titleText, mL + idPadX, idY + titleYoff, leftW, "#0f172a", 12);
+  if (descText)
+    body(descText, mL + idPadX, idY + descYoff, leftW, "#475569", 8.5);
 
   // Right — status + priority
   const rX = mL + cW - 158;

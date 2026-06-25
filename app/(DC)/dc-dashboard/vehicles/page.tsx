@@ -155,6 +155,7 @@ interface Vehicle {
   make: string;
   model: string;
   type: "patrol-car" | "motorcycle" | "van" | "truck" | "suv" | "other";
+  typeOther?: string;
   mileage: number;
   fuelLevel: string;
   status: "available" | "in-use" | "maintenance" | "out-of-service";
@@ -175,6 +176,7 @@ interface VehicleFormData {
   make: string;
   model: string;
   type: string;
+  typeOther: string;
   mileage: number;
   fuelLevel: string;
   status: string;
@@ -220,6 +222,7 @@ const EMPTY_VEHICLE_FORM: VehicleFormData = {
   make: "",
   model: "",
   type: "",
+  typeOther: "",
   mileage: 0,
   fuelLevel: "",
   status: "available",
@@ -1013,7 +1016,13 @@ const DetailsModal = ({ vehicle, open, onOpenChange }: DetailsModalProps) => {
                 />
                 <InfoRow
                   label="Type"
-                  value={<Badge variant="outline">{fmt(vehicle.type)}</Badge>}
+                  value={
+                    <Badge variant="outline">
+                      {vehicle.type === "other" && vehicle.typeOther
+                        ? vehicle.typeOther
+                        : fmt(vehicle.type)}
+                    </Badge>
+                  }
                 />
                 <InfoRow
                   icon={Gauge}
@@ -1480,6 +1489,17 @@ const VehicleForm = ({
             ))}
           </SelectContent>
         </Select>
+        {formData.type === "other" && (
+          <Input
+            className="mt-2"
+            placeholder="Specify vehicle type"
+            value={formData.typeOther}
+            onChange={(e) =>
+              setFormData({ ...formData, typeOther: e.target.value })
+            }
+            required
+          />
+        )}
       </div>
     </div>
 
@@ -1699,6 +1719,10 @@ const VehiclesPage = () => {
   // ── CRUD ─────────────────────────────────────────────────────────────
   const handleVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (vehicleForm.type === "other" && !vehicleForm.typeOther.trim()) {
+      toast.error("Please specify the vehicle type");
+      return;
+    }
     setSubmitting(true);
     try {
       const url = selectedVehicle
@@ -1711,6 +1735,8 @@ const VehiclesPage = () => {
         headers: authHeaders(),
         body: JSON.stringify({
           ...vehicleForm,
+          typeOther:
+            vehicleForm.type === "other" ? vehicleForm.typeOther.trim() : "",
           mileage: Number(vehicleForm.mileage),
           ...(stationParam && { stationId: stationParam }),
         }),
@@ -1815,6 +1841,7 @@ const VehiclesPage = () => {
       make: v.make,
       model: v.model,
       type: v.type,
+      typeOther: v.typeOther || "",
       mileage: v.mileage,
       fuelLevel: v.fuelLevel || "",
       status: v.status,
@@ -2031,7 +2058,9 @@ const VehiclesPage = () => {
                           </td>
                           <td className="px-4 py-3">
                             <Badge variant="outline" className="text-xs">
-                              {fmt(v.type)}
+                              {v.type === "other" && v.typeOther
+                                ? v.typeOther
+                                : fmt(v.type)}
                             </Badge>
                           </td>
                           <td className="px-4 py-3">

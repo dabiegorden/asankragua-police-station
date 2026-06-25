@@ -64,9 +64,101 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { searchParams } = new URL(req.url);
     const requestedStation = searchParams.get("stationId");
 
-    // Determine effective station scope (super admin → null = all stations)
-    const targetStation: string | null =
-      resolveScopeStation(user, requestedStation) ?? null;
+    // Determine effective station scope.
+    //   string    → scope to that station
+    //   null      → no station filter (super admin / DC sees all stations)
+    //   undefined → a station-bound user with no station attached: must see
+    //               NOTHING, never fall through to "all stations".
+    const scope = resolveScopeStation(user, requestedStation);
+
+    if (scope === undefined) {
+      // Force every station-scoped query to match nothing.
+      const targetStation = "__no_station__";
+      const stationFilter = { stationId: targetStation };
+      const caseFilter = { loggedBy: { $in: [] as string[] } };
+      const [
+        totalUsers,
+        activeUsers,
+        inactiveUsers,
+        totalCases,
+        closedCases,
+        suspendedCases,
+        totalPersonnel,
+        activePersonnel,
+        personnelOnLeave,
+        totalPrisoners,
+        jailedPrisoners,
+        bailedPrisoners,
+        remandedPrisoners,
+        totalVehicles,
+        availableVehicles,
+        vehiclesInUse,
+        vehiclesInMaintenance,
+        totalRifleBookings,
+        activeRifleBookings,
+        returnedRifleBookings,
+        overdueRifleBookings,
+      ] = await Promise.all([
+        User.countDocuments({ stationId: targetStation }),
+        User.countDocuments({ stationId: targetStation, isActive: true }),
+        User.countDocuments({ stationId: targetStation, isActive: false }),
+        Case.countDocuments(caseFilter),
+        Case.countDocuments({ ...caseFilter, status: "closed" }),
+        Case.countDocuments({ ...caseFilter, status: "suspended" }),
+        Personnel.countDocuments(stationFilter),
+        Personnel.countDocuments({ ...stationFilter, status: "active" }),
+        Personnel.countDocuments({ ...stationFilter, status: "on-leave" }),
+        Prisoner.countDocuments(stationFilter),
+        Prisoner.countDocuments({ ...stationFilter, status: "Jailed" }),
+        Prisoner.countDocuments({ ...stationFilter, status: "Bailed" }),
+        Prisoner.countDocuments({ ...stationFilter, status: "Remanded" }),
+        Vehicle.countDocuments(stationFilter),
+        Vehicle.countDocuments({ ...stationFilter, status: "available" }),
+        Vehicle.countDocuments({ ...stationFilter, status: "in-use" }),
+        Vehicle.countDocuments({ ...stationFilter, status: "maintenance" }),
+        RifleBooking.countDocuments(stationFilter),
+        RifleBooking.countDocuments({ ...stationFilter, status: "active" }),
+        RifleBooking.countDocuments({ ...stationFilter, status: "returned" }),
+        RifleBooking.countDocuments({ ...stationFilter, status: "overdue" }),
+      ]);
+
+      const emptyStats: IDashboardStats = {
+        totalUsers,
+        activeUsers,
+        inactiveUsers,
+        usersByRole: { admin: 0, nco: 0, cid: 0, so: 0, dc: 0 },
+        totalCases,
+        activeCases: totalCases - closedCases - suspendedCases,
+        closedCases,
+        suspendedCases,
+        casesByStage: { nco: 0, cid: 0, so: 0, dc: 0 },
+        casesByPriority: { felony: 0, misdemeanour: 0, summaryOffence: 0 },
+        totalPersonnel,
+        activePersonnel,
+        personnelOnLeave,
+        totalPrisoners,
+        jailedPrisoners,
+        bailedPrisoners,
+        remandedPrisoners,
+        totalVehicles,
+        availableVehicles,
+        vehiclesInUse,
+        vehiclesInMaintenance,
+        totalRifleBookings,
+        activeRifleBookings,
+        returnedRifleBookings,
+        overdueRifleBookings,
+        totalContacts: 0,
+        newContacts: 0,
+        inProgressContacts: 0,
+        resolvedContacts: 0,
+        urgentContacts: 0,
+        scopedToStation: null,
+      };
+      return NextResponse.json({ stats: emptyStats });
+    }
+
+    const targetStation: string | null = scope;
 
     // Station filter reused for all directly-station-stamped collections.
     const stationFilter: Record<string, unknown> = targetStation

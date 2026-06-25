@@ -20,6 +20,7 @@ const VehicleSchema = new mongoose.Schema(
       enum: ["patrol-car", "motorcycle", "van", "truck", "suv", "other"],
       required: true,
     },
+    typeOther: { type: String, default: "" },
     mileage: { type: Number, default: 0 },
     fuelLevel: { type: String, default: "" },
     status: {

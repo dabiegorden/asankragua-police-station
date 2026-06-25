@@ -897,11 +897,24 @@ function CaseForm({
   onClose: () => void;
 }) {
   const isEdit = !!initial?._id;
+  const KNOWN_PRIORITIES = ["Felony", "Misdemeanour", "Summary Offence"];
+  const initialCategoryKnown =
+    !initial?.category || CATEGORIES.includes(initial.category);
+  const initialPriorityKnown =
+    !initial?.priority || KNOWN_PRIORITIES.includes(initial.priority);
+  const [categoryOther, setCategoryOther] = useState(
+    initialCategoryKnown ? "" : initial?.category || ""
+  );
+  const [priorityOther, setPriorityOther] = useState(
+    initialPriorityKnown ? "" : initial?.priority || ""
+  );
   const [form, setForm] = useState({
     title: initial?.title || "",
     description: initial?.description || "",
-    category: initial?.category || "other",
-    priority: initial?.priority || "Summary Offence",
+    category: initialCategoryKnown ? initial?.category || "other" : "other",
+    priority: initialPriorityKnown
+      ? initial?.priority || "Summary Offence"
+      : "Other",
     location: initial?.location || "",
     dateOccurred: initial?.dateOccurred
       ? initial.dateOccurred.slice(0, 10)
@@ -923,11 +936,26 @@ function CaseForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (form.category === "other" && !categoryOther.trim()) {
+      toast.error("Please specify the category");
+      return;
+    }
+    if (form.priority === "Other" && !priorityOther.trim()) {
+      toast.error("Please specify the priority");
+      return;
+    }
     setLoading(true);
+    const resolvedForm = {
+      ...form,
+      category:
+        form.category === "other" ? categoryOther.trim() : form.category,
+      priority:
+        form.priority === "Other" ? priorityOther.trim() : form.priority,
+    };
     try {
       if (files.length > 0) {
         const fd = new FormData();
-        Object.entries(form).forEach(([k, v]) => {
+        Object.entries(resolvedForm).forEach(([k, v]) => {
           if (typeof v === "object") fd.append(k, JSON.stringify(v));
           else fd.append(k, v as string);
         });
@@ -942,7 +970,9 @@ function CaseForm({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed");
       } else {
-        const payload = isEdit ? { action: "update", ...form } : form;
+        const payload = isEdit
+          ? { action: "update", ...resolvedForm }
+          : resolvedForm;
         await api(isEdit ? `/api/cases/${initial!._id}` : "/api/cases", {
           method: isEdit ? "PUT" : "POST",
           body: JSON.stringify(payload),
@@ -982,6 +1012,15 @@ function CaseForm({
               </option>
             ))}
           </select>
+          {form.category === "other" && (
+            <input
+              className={`${inputCls} mt-2`}
+              value={categoryOther}
+              onChange={(e) => setCategoryOther(e.target.value)}
+              placeholder="Specify category"
+              required
+            />
+          )}
         </FormField>
         <FormField label="Priority *">
           <select
@@ -989,10 +1028,19 @@ function CaseForm({
             value={form.priority}
             onChange={(e) => set("priority", e.target.value)}
           >
-            {["Felony", "Misdemeanour", "Summary Offence"].map((p) => (
+            {["Felony", "Misdemeanour", "Summary Offence", "Other"].map((p) => (
               <option key={p}>{p}</option>
             ))}
           </select>
+          {form.priority === "Other" && (
+            <input
+              className={`${inputCls} mt-2`}
+              value={priorityOther}
+              onChange={(e) => setPriorityOther(e.target.value)}
+              placeholder="Specify priority"
+              required
+            />
+          )}
         </FormField>
       </div>
       <FormField label="Description *">
