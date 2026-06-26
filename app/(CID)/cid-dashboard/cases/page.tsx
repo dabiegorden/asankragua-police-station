@@ -1293,7 +1293,7 @@ function DetailModal({
           <h3 className="text-base font-bold text-gray-900">
             {caseItem.title}
           </h3>
-          <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed whitespace-pre-wrap">
             {caseItem.description}
           </p>
         </div>
