@@ -432,16 +432,27 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   // ═══════════════════════════════════════════════════════════════════════════
   // CASE IDENTITY BOX
   // ═══════════════════════════════════════════════════════════════════════════
-  ensureSpace(110);
+  // Left column holds case number / title / description; its width is reduced
+  // so it never overlaps the status block on the right. The box grows to fit
+  // the full (wrapped) description instead of clipping it at a fixed height.
+  const idLeftW = CW - 180;
+  const descH = calcH(
+    caseData.description || "(No description)",
+    F,
+    8.5,
+    idLeftW,
+    1.5,
+  );
+  const ID_H = Math.max(108, 69 + descH + 12);
+  ensureSpace(ID_H + 10);
   const idY = curY;
-  const ID_H = 108;
   fillRect(ML, idY, CW, ID_H, "#f8fafc");
   strokeRect(ML, idY, CW, ID_H, "#cbd5e1", 1);
 
   labelTxt("Case Number", ML + 12, idY + 10);
-  boldTxt(caseData.caseNumber || "N/A", ML + 12, idY + 20, CW - 180, "#1e3a8a", 22);
-  boldTxt(caseData.title || "(No title)", ML + 12, idY + 54, CW - 180, "#0f172a", 11);
-  bodyTxt(caseData.description || "(No description)", ML + 12, idY + 69, CW - 180, "#475569", 8.5);
+  boldTxt(caseData.caseNumber || "N/A", ML + 12, idY + 20, idLeftW, "#1e3a8a", 22);
+  boldTxt(caseData.title || "(No title)", ML + 12, idY + 54, idLeftW, "#0f172a", 11);
+  bodyTxt(caseData.description || "(No description)", ML + 12, idY + 69, idLeftW, "#475569", 8.5);
 
   const rX = ML + CW - 160;
   labelTxt("Status", rX, idY + 10, 155);
