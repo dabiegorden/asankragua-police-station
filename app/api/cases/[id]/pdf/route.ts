@@ -107,8 +107,18 @@ function priorityColor(p: string): string {
       : "#374151";
 }
 
+// ─── Signature input ──────────────────────────────────────────────────────────
+interface SignatureInput {
+  dataUrl: string; // "data:image/png;base64,..."
+  role: string; // role of the signing officer (nco | cid | so | dc | admin)
+  name?: string; // typed/display name of the signer
+}
+
 // ─── PDF builder ──────────────────────────────────────────────────────────────
-async function buildPDF(caseData: any): Promise<Buffer> {
+async function buildPDF(
+  caseData: any,
+  signature?: SignatureInput | null,
+): Promise<Buffer> {
   // ── Page constants ────────────────────────────────────────────────────────
   const PAGE_W = 595.28; // A4 width  (pt)
   const PAGE_H = 841.89; // A4 height (pt)
@@ -954,18 +964,55 @@ async function buildPDF(caseData: any): Promise<Buffer> {
   const sigW = CW / 4;
   const sigY = curY;
   const sigOfficers = [
-    { role: "NCO / Station Orderly", officer: caseData.loggedBy },
-    { role: "CID Investigator", officer: caseData.assignedOfficer },
-    { role: "Station Officer", officer: caseData.assignedSO },
-    { role: "District Commander", officer: caseData.assignedDC },
+    { stage: "nco", role: "NCO / Station Orderly", officer: caseData.loggedBy },
+    { stage: "cid", role: "CID Investigator", officer: caseData.assignedOfficer },
+    { stage: "so", role: "Station Officer", officer: caseData.assignedSO },
+    { stage: "dc", role: "District Commander", officer: caseData.assignedDC },
   ];
 
-  sigOfficers.forEach(({ role, officer }, i) => {
+  // Embed the drawn signature image (if any) so it can be stamped on the
+  // matching officer's signature slot.
+  let sigImage: any = null;
+  if (signature?.dataUrl) {
+    try {
+      const base64 = signature.dataUrl.replace(/^data:image\/\w+;base64,/, "");
+      const sigBytes = Buffer.from(base64, "base64");
+      sigImage = signature.dataUrl.includes("image/jpeg")
+        ? await pdfDoc.embedJpg(sigBytes)
+        : await pdfDoc.embedPng(sigBytes);
+    } catch {
+      sigImage = null;
+    }
+  }
+
+  // Admins sign every slot; otherwise only the slot matching the signer's role.
+  const signMatches = (stage: string) =>
+    !!signature &&
+    (signature.role === stage || signature.role === "admin");
+
+  sigOfficers.forEach(({ stage, role, officer }, i) => {
     const sx = ML + i * sigW;
     const oObj =
       officer && typeof officer === "object" && officer.fullName
         ? officer
         : null;
+
+    // Stamp the drawn signature above the line for the matching slot.
+    if (sigImage && signMatches(stage)) {
+      const maxImgW = sigW - 20;
+      const maxImgH = 26;
+      const dims = sigImage.scale(1);
+      const ratio = Math.min(maxImgW / dims.width, maxImgH / dims.height);
+      const imgW = dims.width * ratio;
+      const imgH = dims.height * ratio;
+      pg.drawImage(sigImage, {
+        x: sx + 4,
+        y: ly(sigY + 21) + 1,
+        width: imgW,
+        height: imgH,
+      });
+    }
+
     pg.drawLine({
       start: { x: sx + 4, y: ly(sigY + 22) },
       end: { x: sx + sigW - 12, y: ly(sigY + 22) },
@@ -976,7 +1023,11 @@ async function buildPDF(caseData: any): Promise<Buffer> {
     bodyTxt(role, sx + 4, sigY + 38, sigW - 16, "#64748b", 7);
     if (oObj?.badgeNumber)
       bodyTxt(`Badge: ${oObj.badgeNumber}`, sx + 4, sigY + 49, sigW - 16, "#94a3b8", 7);
-    bodyTxt("Date: _______________", sx + 4, sigY + 60, sigW - 16, "#94a3b8", 7);
+    const signedDate =
+      sigImage && signMatches(stage)
+        ? `Date: ${new Date().toLocaleDateString("en-GB")}`
+        : "Date: _______________";
+    bodyTxt(signedDate, sx + 4, sigY + 60, sigW - 16, "#94a3b8", 7);
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1041,6 +1092,67 @@ export async function GET(req: NextRequest, { params }: Params) {
     console.error("[PDF] generation error:", err);
     return NextResponse.json(
       { error: "Failed to generate PDF" },
+      { status: 500 },
+    );
+  }
+}
+
+// ─── POST /api/cases/[id]/pdf ─────────────────────────────────────────────────
+// Generate a signed copy of the case book. The signing officer's drawn
+// signature (PNG/JPEG data URL) is embedded on their signature slot.
+export async function POST(req: NextRequest, { params }: Params) {
+  const { user, error } = requireAuth(req);
+  if (error) return error;
+
+  const { id } = await params;
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const signatureDataUrl: string | undefined = body?.signatureDataUrl;
+
+    if (!signatureDataUrl || !/^data:image\/(png|jpeg);base64,/.test(signatureDataUrl)) {
+      return NextResponse.json(
+        { error: "A valid signature image is required" },
+        { status: 400 },
+      );
+    }
+
+    await connectDB();
+
+    const caseData = await Case.findById(id)
+      .populate("loggedBy", "fullName email role badgeNumber")
+      .populate("assignedOfficer", "fullName email role badgeNumber")
+      .populate("assignedSO", "fullName email role badgeNumber")
+      .populate("assignedDC", "fullName email role badgeNumber")
+      .populate("caseBookEntries.addedBy", "fullName role badgeNumber")
+      .populate("auditLog.performedBy", "fullName role badgeNumber")
+      .populate("notes.addedBy", "fullName role badgeNumber")
+      .lean();
+
+    if (!caseData) {
+      return NextResponse.json({ error: "Case not found" }, { status: 404 });
+    }
+
+    const pdfBuffer = await buildPDF(caseData, {
+      dataUrl: signatureDataUrl,
+      role: user.role,
+      name: typeof body?.signedName === "string" ? body.signedName : undefined,
+    });
+    const filename = `CaseBook-${(caseData as any).caseNumber}-signed-${Date.now()}.pdf`;
+
+    return new NextResponse(new Uint8Array(pdfBuffer), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": String(pdfBuffer.length),
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err) {
+    console.error("[PDF] signed generation error:", err);
+    return NextResponse.json(
+      { error: "Failed to generate signed PDF" },
       { status: 500 },
     );
   }

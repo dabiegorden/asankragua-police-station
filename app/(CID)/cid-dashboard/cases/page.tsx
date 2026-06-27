@@ -61,6 +61,7 @@ import {
 import {
   CaseBookPDFButton,
   CaseBookExportCard,
+  SignCaseBookDialog,
 } from "@/components/Casebookpdfbutton";
 import AutoTextarea from "@/components/AutoTextarea";
 
@@ -1914,6 +1915,12 @@ export default function CIDCasesPage() {
                         caseId={c._id}
                         caseNumber={c.caseNumber}
                         size="sm"
+                        iconOnly
+                      />
+                      {/* ── Print & Sign quick action per row ── */}
+                      <SignCaseBookDialog
+                        caseId={c._id}
+                        caseNumber={c.caseNumber}
                         iconOnly
                       />
                     </div>

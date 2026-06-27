@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { FileDown, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { SignCaseBookDialog } from "@/components/SignCaseBookDialog";
+
+export { SignCaseBookDialog };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -129,7 +132,7 @@ export function CaseBookPDFButton({
           ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"
           : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300";
 
-  return (
+  const exportButton = (
     <button
       onClick={handleClick}
       disabled={state === "loading"}
@@ -146,6 +149,18 @@ export function CaseBookPDFButton({
       {icon}
       {!iconOnly && <span>{label}</span>}
     </button>
+  );
+
+  // Compact icon-only row actions stay as a single button; everywhere else we
+  // pair the plain export with the "Print & Sign" flow so officers can add
+  // their signature before printing or downloading.
+  if (iconOnly) return exportButton;
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      {exportButton}
+      <SignCaseBookDialog caseId={caseId} caseNumber={caseNumber} size={size} />
+    </span>
   );
 }
 
@@ -195,7 +210,9 @@ export function CaseBookExportCard({
       </div>
       <p className="text-xs text-gray-400 mt-3 border-t border-gray-100 pt-3">
         Generates a professional, officially formatted PDF with all case book
-        entries, officer remarks, audit trail, and signature blocks.
+        entries, officer remarks, audit trail, and signature blocks. Use{" "}
+        <span className="font-medium text-gray-500">Print &amp; Sign</span> to
+        add your signature before printing or downloading.
       </p>
     </div>
   );

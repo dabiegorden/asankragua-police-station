@@ -10,6 +10,9 @@ export interface IUser extends Document {
   stationId?: string;
   profilePhoto?: string; // Cloudinary URL
   isActive: boolean;
+  loginOtp?: string | null; // hashed one-time login code
+  loginOtpExpires?: Date | null;
+  loginOtpAttempts?: number;
   createdAt: Date;
   updatedAt: Date;
   toSafeObject(): Omit<IUser, "password">;
@@ -50,6 +53,21 @@ const UserSchema = new Schema<IUser>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    loginOtp: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    loginOtpExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+    loginOtpAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
     },
   },
   { timestamps: true },
